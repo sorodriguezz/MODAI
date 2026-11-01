@@ -1,0 +1,14 @@
+schemaVersion: 1
+name: "@profiles/harness-engineer"
+version: 1.0.0
+type: profile
+description: Perfil para diseñar harnesses, skills y patrones de diseño con verificación.
+dependencies:
+  "@skills/harness-authoring": "^1.0.0"
+  "@skills/skill-authoring": "^1.0.0"
+  "@skills/design-patterns": "^1.0.0"
+  "@memory/project": "^1.0.0"
+  "@mcp/modularai": "^1.0.0"
+files:
+  - source: content/PROFILE.md
+    target: .modai/harness-engineer-profile.md

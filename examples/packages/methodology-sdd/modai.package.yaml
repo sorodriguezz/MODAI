@@ -1,0 +1,10 @@
+schemaVersion: 1
+name: "@methodologies/sdd"
+version: 1.0.0
+type: methodology
+description: Flujo ligero de desarrollo guiado por especificaciones.
+files:
+  - source: content/SKILL.md
+    target: .agents/skills/sdd/SKILL.md
+  - source: content/README.md
+    target: docs/specs/README.md

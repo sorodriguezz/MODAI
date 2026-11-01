@@ -1,0 +1,18 @@
+schemaVersion: 1
+name: "@harness/opencode"
+version: 1.1.0
+type: harness
+description: Instrucciones de integración de OpenCode con ModularAI.
+files:
+  - source: content/modai.md
+    target: .opencode/agents/modai.md
+  - source: content/AGENTS.md
+    target: AGENTS.md
+  - source: content/feature_list.json
+    target: .agent/feature_list.json
+  - source: content/progress.md
+    target: .agent/progress.md
+  - source: content/verification.md
+    target: .agent/verification.md
+  - source: content/session-handoff.md
+    target: .agent/session-handoff.md

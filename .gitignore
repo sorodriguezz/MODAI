@@ -1,0 +1,53 @@
+# Dependencias, build y cachés generadas
+node_modules/
+dist/
+coverage/
+.nyc_output/
+.cache/
+.npm/
+*.tsbuildinfo
+
+# Entorno y credenciales locales (conservar las plantillas)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+.modai/keys/
+.modai/client.yaml
+.modai/local-models.yaml
+
+# Datos de desarrollo; Docker usa volúmenes independientes
+var/data/*
+var/artifacts/*
+!var/data/.gitkeep
+!var/artifacts/.gitkeep
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Modelos, backups y resultados locales de diagnóstico
+*.gguf
+*.safetensors
+backups/
+modai-backup-*.json
+modai-backup.json
+*.log
+*.tmp
+*.bak
+
+# Archivos del sistema y editores
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+*.swp
+*.swo
+.vscode/*.local.json

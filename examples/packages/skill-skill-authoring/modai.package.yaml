@@ -1,0 +1,16 @@
+schemaVersion: 1
+name: "@skills/skill-authoring"
+version: 1.0.0
+type: skill
+description: Crea skills pequeñas, descubribles, progresivas y verificables para agentes.
+files:
+  - source: content/SKILL.md
+    target: .agents/skills/skill-authoring/SKILL.md
+  - source: content/references/checklist.md
+    target: .agents/skills/skill-authoring/references/checklist.md
+  - source: content/references/quality.md
+    target: .agents/skills/skill-authoring/references/quality.md
+knowledge:
+  - source: content/references/quality.md
+    title: Calidad de una skill para agentes
+    tags: [skills, progressive-disclosure, instrucciones]

@@ -1,0 +1,48 @@
+name: modularai
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: modularai:local
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${MODAI_BIND_IP:-127.0.0.1}:${MODAI_PORT:-8787}:8787"
+    environment:
+      MODAI_API_TOKEN: "${MODAI_API_TOKEN:-}"
+      MODAI_DATABASE_PATH: /app/data/modularai.db
+      MODAI_ARTIFACT_DIR: /app/artifacts
+    volumes:
+      - modai-data:/app/data
+      - modai-artifacts:/app/artifacts
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  seed-examples:
+    image: modularai:local
+    profiles: ["examples"]
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      MODAI_SERVER: http://server:8787
+      MODAI_API_TOKEN: "${MODAI_API_TOKEN:-}"
+    command: ["node", "--no-warnings", "dist/scripts/seed-examples.js"]
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  modai-data:
+  modai-artifacts:

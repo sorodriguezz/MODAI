@@ -1,0 +1,8 @@
+schemaVersion: 1
+name: "@skills/nestjs"
+version: 1.0.0
+type: skill
+description: Convenciones para implementar servicios mantenibles con NestJS.
+files:
+  - source: content/SKILL.md
+    target: .agents/skills/nestjs/SKILL.md

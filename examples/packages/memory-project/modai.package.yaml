@@ -1,0 +1,8 @@
+schemaVersion: 1
+name: "@memory/project"
+version: 1.0.0
+type: memory
+description: Contrato para memoria persistente aislada por proyecto.
+files:
+  - source: content/project-memory.md
+    target: .modai/adapters/project-memory.md

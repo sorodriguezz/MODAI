@@ -1,0 +1,8 @@
+schemaVersion: 1
+name: "@adapters/ollama"
+version: 1.1.0
+type: adapter
+description: Configuración del runtime Ollama en el equipo cliente; sin inferencia en el servidor MODAI.
+files:
+  - source: content/ollama.yaml
+    target: .modai/adapters/ollama.yaml

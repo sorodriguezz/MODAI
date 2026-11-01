@@ -1,0 +1,36 @@
+schemaVersion: 1
+name: "@skills/design-patterns"
+version: 1.0.0
+type: skill
+description: Diagnostica, selecciona, implementa y verifica patrones de diseño sin sobreingeniería.
+files:
+  - source: content/SKILL.md
+    target: .agents/skills/design-patterns/SKILL.md
+  - source: content/references/decision-guide.md
+    target: .agents/skills/design-patterns/references/decision-guide.md
+  - source: content/references/creational.md
+    target: .agents/skills/design-patterns/references/creational.md
+  - source: content/references/structural.md
+    target: .agents/skills/design-patterns/references/structural.md
+  - source: content/references/behavioral.md
+    target: .agents/skills/design-patterns/references/behavioral.md
+  - source: content/references/verification.md
+    target: .agents/skills/design-patterns/references/verification.md
+  - source: content/references/sources.md
+    target: .agents/skills/design-patterns/references/sources.md
+knowledge:
+  - source: content/SKILL.md
+    title: Selección responsable de patrones de diseño
+    tags: [patrones, diseño, arquitectura, refactoring]
+  - source: content/references/decision-guide.md
+    title: Guía de decisión entre patrones similares
+    tags: [patrones, decisiones, tradeoffs]
+  - source: content/references/creational.md
+    title: Patrones creacionales
+    tags: [factory, builder, prototype, singleton]
+  - source: content/references/structural.md
+    title: Patrones estructurales
+    tags: [adapter, bridge, composite, decorator, facade, flyweight, proxy]
+  - source: content/references/behavioral.md
+    title: Patrones de comportamiento
+    tags: [strategy, state, observer, command, mediator, visitor]

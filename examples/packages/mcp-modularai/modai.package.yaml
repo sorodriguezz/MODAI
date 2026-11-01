@@ -1,0 +1,8 @@
+schemaVersion: 1
+name: "@mcp/modularai"
+version: 1.0.0
+type: mcp
+description: Conecta agentes compatibles con conocimiento, memoria y registro de ModularAI mediante MCP.
+files:
+  - source: content/MCP.md
+    target: .modai/integrations/MCP.md
