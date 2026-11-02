@@ -2,7 +2,7 @@
 
 ## Responsabilidades
 
-La CLI y el servidor MCP se ejecutan en el equipo cliente. Son los únicos componentes de MODAI que consultan Ollama. El servidor Docker no importa el código de `src/client/`, no conoce la URL del runtime y no solicita inferencia.
+La CLI y el servidor MCP se ejecutan en el equipo cliente. El ejecutor de agentes y el worker opcional también consultan su Ollama local. El servidor Docker no importa el código de `packages/cli/src/client/`, no conoce la URL del runtime y no solicita inferencia.
 
 El flujo es: servidor entrega documentos → cliente calcula embeddings con su runtime local → servidor almacena los vectores. Al buscar: cliente convierte la pregunta en un vector → servidor compara vectores y devuelve documentos.
 

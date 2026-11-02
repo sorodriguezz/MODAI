@@ -11,7 +11,10 @@ services:
     ports:
       - "${MODAI_BIND_IP:-127.0.0.1}:${MODAI_PORT:-8787}:8787"
     environment:
-      MODAI_API_TOKEN: "${MODAI_API_TOKEN:-}"
+      MODAI_API_TOKEN: "${MODAI_API_TOKEN:?Define MODAI_API_TOKEN en deploy/.env}"
+      MODAI_PUBLIC_URL: "${MODAI_PUBLIC_URL:-}"
+      MODAI_SIGNATURE_POLICY: "${MODAI_SIGNATURE_POLICY:-optional}"
+      MODAI_ARTIFACT_QUOTA_BYTES: "${MODAI_ARTIFACT_QUOTA_BYTES:-1073741824}"
       MODAI_DATABASE_PATH: /app/data/modularai.db
       MODAI_ARTIFACT_DIR: /app/artifacts
     volumes:
@@ -30,14 +33,18 @@ services:
       start_period: 10s
 
   seed-examples:
-    image: modularai:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: client
+    image: modularai-client:local
     profiles: ["examples"]
     depends_on:
       server:
         condition: service_healthy
     environment:
       MODAI_SERVER: http://server:8787
-      MODAI_API_TOKEN: "${MODAI_API_TOKEN:-}"
+      MODAI_API_TOKEN: "${MODAI_API_TOKEN:?Define MODAI_API_TOKEN en deploy/.env}"
     command: ["node", "--no-warnings", "dist/scripts/seed-examples.js"]
     read_only: true
     security_opt:

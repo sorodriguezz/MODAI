@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ApiClient } from "../src/cli/api.js";
-import { loadPackageSource } from "../src/cli/package-source.js";
+import { ApiClient } from "@modai/sdk";
+import { loadPackageSource } from "@modai/cli/package-source";
 
 const server = process.env.MODAI_SERVER ?? "http://localhost:8787";
 const api = new ApiClient(server, process.env.MODAI_API_TOKEN);

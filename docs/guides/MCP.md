@@ -30,3 +30,13 @@ Herramientas:
 Ejecuta el proceso con el directorio de trabajo del proyecto para que detecte `.modai/manifest.yaml`. Usa token `reader` si no necesita `remember`; este último requiere `publisher`.
 
 Para búsqueda semántica ejecuta primero `modai client setup --download` y `modai embed index` en ese equipo cliente. El servidor MCP utiliza su configuración local de modelos, no la del host Docker. Consulta [modelos del cliente](CLIENT-MODELS.md).
+
+## Agente activo y capacidades dinámicas
+
+En 0.5 se añaden `modai_list_agents` y `modai_list_capabilities`. Usa `modai-mcp --project /ruta/proyecto` para seleccionar explícitamente el proyecto. Sin activación se conservan las herramientas generales de la tabla anterior.
+
+Si existe `.modai/activation.json`, las herramientas de conocimiento y memoria generales se sustituyen por las seleccionadas en el bundle del agente. Una definición sin permiso de escritura no expone una herramienta genérica que permita saltarse esa política. Los procesos MCP stdio declarados por sus paquetes se conectan únicamente si fueron autorizados durante la activación; sus herramientas se descubren y se publican con un prefijo estable.
+
+Los bindings locales requieren `--bindings archivo.yaml`. Las variables adicionales requieren autorización explícita. Reinicia el puente después de activar o cambiar el agente. Consulta [agentes y capacidades](AGENTS-AND-CAPABILITIES.md).
+
+El agente activo también expone el recurso Markdown `modai://agent/active` y el prompt `modai_agent` con argumento `task`. Los clientes que admiten recursos o prompts pueden cargar las instrucciones y skills directamente por MCP, además de usar los adaptadores de archivos.

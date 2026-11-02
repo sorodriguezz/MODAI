@@ -27,6 +27,39 @@ Servidor MODAI (Docker)                   Equipo cliente
 
 Una **skill** contiene instrucciones para una tarea concreta; un **harness** organiza cómo trabaja un agente; un **perfil** agrupa varios paquetes. Los paquetes de ejemplo son opcionales y el servidor puede funcionar con el catálogo vacío.
 
+## Agentes, MCP y cliente independiente · 0.5
+
+El servidor registra proyectos y compone agentes versionados con sus skills, herramientas y política de memoria. El cliente puede activarlos mediante archivos para su entorno, ejecutarlos con Ollama local o enviar tareas a un worker autorizado. El panel incluye agentes, proyectos y ejecuciones, además del selector Claro/Oscuro/Sistema.
+
+```sh
+# Genera los paquetes del cliente, sin publicarlos en npm:
+npm run pack:client
+# En otro equipo: npm install -g ./dist/npm/modai-cli-0.5.0.tgz
+# Después de conectar e inicializar un proyecto con el catálogo de ejemplos:
+modai agent activate @agents/backend-reviewer --adapter agents-md --allow project.instructions
+modai agent run "Revisa las decisiones del proyecto" --model MODELO_LOCAL
+```
+
+Consulta [agentes y capacidades](docs/guides/AGENTS-AND-CAPABILITIES.md) para instalación, contratos, MCP dinámico, permisos y workers; y la [migración a 0.5](docs/guides/MIGRATION-0.5.md) para actualizar un servidor existente. El único paquete destinado a npm es `@modai/cli`; incorpora el SDK y los contratos internos. Todavía debe publicarse en un scope controlado por su propietario para instalarlo por nombre.
+
+## Una instancia central para todos tus proyectos
+
+El administrador despliega el servidor con una dirección accesible, crea el proyecto en el panel y abre **Conectar un cliente → Dar acceso a un usuario**. Cada usuario recibe su propia API key y los comandos del proyecto:
+
+```sh
+# Una vez publicado el CLI en npm:
+npm install -g @modai/cli
+modai connect https://modai.tu-dominio.cl
+# connect pide la API key con entrada oculta.
+cd mi-proyecto
+modai init --project ID_DEL_PROYECTO
+modai agent activate @agents/backend-reviewer --adapter agents-md --allow project.instructions
+```
+
+Si el repositorio ya contiene la configuración `.modai`, se usa `modai sync` en lugar de `init`. Los equipos autorizados comparten el contexto del mismo proyecto. El editor consulta capacidades por `modai-mcp`; la ejecución puede ser local o mediante un worker. Antes de publicar en npm puedes distribuir el único `.tgz` que genera `npm run pack:client`.
+
+La [guía del servidor central](docs/guides/CENTRAL-SERVER.md) cubre red local, dominio y HTTPS, usuarios, memoria, MCP y workers. La [guía de publicación](docs/guides/PUBLISH-CLI.md) explica cómo subir únicamente el CLI a npm.
+
 ## Levantar el servidor con Docker
 
 Necesitas Docker Engine con **Compose v2**, o Docker Desktop, en ejecución. Para levantar solamente el servidor no necesitas instalar Node, Ollama ni modelos en el host. La imagen compila y ejecuta la aplicación con **Node 26.13.0**.
@@ -38,7 +71,7 @@ Todos los comandos siguientes se ejecutan desde la raíz de este repositorio, sa
 En PowerShell:
 
 ```powershell
-cd C:\Users\sebas\Desktop\MODAI
+cd C:\ruta\MODAI
 if (-not (Test-Path deploy/.env)) { Copy-Item deploy/.env.example deploy/.env }
 notepad deploy/.env
 ```
@@ -67,12 +100,12 @@ La primera construcción instala dependencias, compila TypeScript y ejecuta las 
 
 Abre [el panel de MODAI](http://127.0.0.1:8787/admin). Pulsa **Conexión**, pega el valor de `MODAI_API_TOKEN` y conecta. El endpoint [de salud](http://127.0.0.1:8787/health) permite comprobar versión y runtime sin autenticación.
 
-Por defecto el puerto solo es accesible desde este PC. Si arrancas sin token y sin API keys activas, MODAI habilita administración local inicial; al configurar credenciales, las operaciones de la API requieren autenticación.
+Por defecto el puerto solo es accesible desde este PC. MODAI exige credenciales desde el arranque: no existe administración anónima y revocar la última clave no abre el servidor.
 
 ### 3. Cargar los ejemplos
 
 ```sh
-docker compose -f deploy/compose.yaml --profile examples run --rm seed-examples
+docker compose -f deploy/compose.yaml --profile examples run --build --rm seed-examples
 ```
 
 El proceso publica el catálogo mediante la API utilizando el token de `deploy/.env`. Omite las versiones que ya existen. Después pulsa **Actualizar** en el panel.
@@ -81,13 +114,14 @@ Incluye skills de patrones de diseño, creación de skills, harness engineering 
 
 ## Conectar un proyecto y usar sus capacidades
 
-El **equipo cliente** necesita Node 26.13.0 y acceso al servidor. Instala la CLI desde una copia de este repositorio:
+El **equipo cliente** necesita Node 26.13.0 y acceso al servidor. El cliente se distribuye como paquete independiente. Para construir y enlazar la versión de desarrollo desde este repositorio:
 
 ```sh
 npm ci
 npm run build
-npm link
-modai connect http://127.0.0.1:8787 --token TU_TOKEN
+npm link --workspace @modai/cli
+modai connect http://127.0.0.1:8787
+# Introduce tu API key cuando se solicite.
 ```
 
 Si el servidor está en otro equipo, sustituye `127.0.0.1` por su dirección. Usa una API key propia para cada cliente; el panel permite crearlas con permisos de lectura, publicación o administración.
@@ -213,22 +247,20 @@ MODAI/
 │   └── guides/             # API, MCP, administración y harness engineering
 ├── examples/packages/      # Catálogo opcional de paquetes publicables
 ├── scripts/                # Automatización de despliegue y carga de ejemplos
-├── src/
-│   ├── client/             # Detección de hardware y embeddings locales
-│   ├── cli/                # Comando modai, instalación y autoría
-│   ├── core/               # Registro, resolución, contexto y persistencia
-│   ├── http/               # API y panel web
-│   ├── mcp.ts              # Servidor MCP stdio para clientes
-│   └── server.ts           # Entrada del servidor HTTP
+├── apps/
+│   ├── server/             # API, autorización, catálogo, contexto y cola
+│   │   └── var/            # Datos locales generados al arrancar sin Docker
+│   └── admin/              # Web: HTML, CSS, tema y vistas por sección
+├── packages/
+│   ├── contracts/          # Contratos internos compartidos
+│   ├── sdk/                # Cliente HTTP interno, incorporado al CLI
+│   └── cli/                # Único paquete npm: modai, MCP y worker
 ├── tests/                  # Pruebas de integración y comportamiento
-├── var/                    # Datos de desarrollo local, fuera de Git
-│   ├── data/
-│   └── artifacts/
 ├── dist/                   # Salida de compilación, generada
 └── node_modules/           # Dependencias instaladas, generadas
 ```
 
-`package.json`, el lockfile y la configuración de TypeScript y Node permanecen en la raíz porque son puntos de entrada de sus herramientas. `dist/` y `node_modules/` no se editan a mano. En Docker se usan volúmenes; `var/` solo corresponde a la ejecución local fuera del contenedor.
+`package.json`, el lockfile y la configuración de TypeScript y Node permanecen en la raíz porque son puntos de entrada de sus herramientas. `dist/` y `node_modules/` no se editan a mano. En Docker se usan volúmenes; `apps/server/var/` corresponde a la ejecución local. La [guía de estructura](docs/architecture/PROJECT-LAYOUT.md) detalla los límites y el desarrollo de cada aplicación.
 
 ## Desarrollo y documentación
 
@@ -241,12 +273,12 @@ npm test
 npm run dev
 ```
 
-El servidor de desarrollo guarda datos en `var/data/` y `var/artifacts/`. Si Docker ya ocupa el puerto 8787, detenlo o asigna otro `MODAI_PORT` al proceso local. Puedes configurar `MODAI_API_TOKEN`, `MODAI_DATABASE_PATH` y `MODAI_ARTIFACT_DIR` como variables de entorno; `npm run dev` no carga `deploy/.env` automáticamente.
+El servidor de desarrollo crea `apps/server/var/data/` y `apps/server/var/artifacts/` al necesitarlos. Si Docker ya ocupa el puerto 8787, detenlo o asigna otro `MODAI_PORT` al proceso local. Puedes configurar `MODAI_API_TOKEN`, `MODAI_DATABASE_PATH` y `MODAI_ARTIFACT_DIR` como variables de entorno; `npm run dev` no carga `deploy/.env` automáticamente.
 
 Consulta el [índice de documentación](docs/README.md), la [API](docs/guides/API.md), la [administración](docs/guides/MANAGEMENT.md), [modelos del cliente](docs/guides/CLIENT-MODELS.md), [MCP](docs/guides/MCP.md), [harness engineering](docs/guides/HARNESS-ENGINEERING.md) y el [historial de cambios](CHANGELOG.md).
 
 ## Alcance actual
 
-MODAI tiene roles por API key, pero aún no ofrece cuentas, OIDC, organizaciones ni replicación entre servidores. El panel permite administrar el registro y su contexto; la ejecución de agentes pertenece a las herramientas cliente. La confianza en publicadores firmados la concede un administrador.
+MODAI tiene roles por API key, y organizaciones registradas, pero aún no ofrece cuentas de usuario, OIDC ni replicación entre servidores. El panel permite administrar el registro y su contexto; la ejecución de agentes pertenece a las herramientas cliente. La confianza del servidor en publicadores firmados la concede un administrador; los clientes pueden exigir también fingerprints autorizados localmente. Las API keys tienen proyectos, organizaciones y namespaces explícitos. El worker es un proceso opcional separado de la API HTTP.
 
 La búsqueda semántica es opcional: el cliente calcula los embeddings y los envía a la API; MODAI solo los almacena y compara. Las rutas y variables de inferencia con Ollama se retiraron en 0.3.0.

@@ -1,6 +1,6 @@
 schemaVersion: 1
 name: "@harness/opencode"
-version: 1.1.0
+version: 1.1.1
 type: harness
 description: Instrucciones de integración de OpenCode con ModularAI.
 files:
@@ -16,3 +16,6 @@ files:
     target: .agent/verification.md
   - source: content/session-handoff.md
     target: .agent/session-handoff.md
+
+permissions:
+  - project.instructions

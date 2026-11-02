@@ -1,0 +1,37 @@
+schemaVersion: 1
+name: '@tools/context'
+version: 1.0.0
+type: tool
+description: Herramientas de conocimiento y memoria del servidor MODAI, limitadas al proyecto del agente.
+capabilities:
+  - kind: tool
+    name: modai_search_knowledge
+    description: Busca conocimiento entre las dependencias fijadas del agente.
+    binding: knowledge.search
+    inputSchema:
+      type: object
+      properties:
+        query: { type: string, minLength: 1, maxLength: 2000 }
+      required: [query]
+      additionalProperties: false
+  - kind: tool
+    name: modai_recall
+    description: Recupera decisiones y aprendizajes del proyecto según la política del agente.
+    binding: memory.recall
+    inputSchema:
+      type: object
+      properties:
+        query: { type: string, minLength: 1, maxLength: 2000 }
+      required: [query]
+      additionalProperties: false
+  - kind: tool
+    name: modai_remember
+    description: Guarda una decisión durable del proyecto; nunca secretos.
+    binding: memory.remember
+    inputSchema:
+      type: object
+      properties:
+        content: { type: string, minLength: 1, maxLength: 100000 }
+        kind: { type: string, enum: [decision, constraint, lesson, note] }
+      required: [content]
+      additionalProperties: false

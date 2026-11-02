@@ -7,23 +7,26 @@ import { after, before, test } from "node:test";
 import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { createApp } from "../src/http/app.js";
-import { ApiClient } from "../src/cli/api.js";
-import { synchronize } from "../src/cli/installer.js";
-import type { ProjectLock, ProjectManifest } from "../src/cli/config.js";
-import type { PackageManifest, PublishPackageInput } from "../src/core/types.js";
-import { signaturePayload } from "../src/core/security.js";
-import { auditHarness, createHarness } from "../src/cli/harness-tools.js";
+import { createApp } from "../apps/server/src/http/app.js";
+import { ApiClient } from "@modai/sdk";
+import { synchronize } from "../packages/cli/src/cli/installer.js";
+import type { ProjectLock, ProjectManifest } from "../packages/cli/src/cli/config.js";
+import type { PackageManifest, PublishPackageInput } from "@modai/contracts/types";
+import { signaturePayload } from "@modai/contracts/security";
+import { auditHarness, createHarness } from "../packages/cli/src/cli/harness-tools.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-test-"));
+process.env.MODAI_CONFIG_DIR=join(root,"config");
 const app = await createApp({
   databasePath: join(root, "modularai.db"),
   artifactDirectory: join(root, "artifacts"),
   logger: false,
+  apiToken: "test-secret",
 });
 
 before(async () => {
   await app.listen({ host: "127.0.0.1", port: 0 });
+  for (const id of ["project-a", "project-b", "memory-crud", "mcp-test"]) await app.inject({ method: "POST", url: "/api/v1/projects", headers: { authorization: "Bearer test-secret" }, payload: { id, name: id } });
 });
 
 after(async () => {
@@ -52,11 +55,11 @@ test("publica, resuelve con backtracking y ordena dependencias primero", async (
     manifest("@test/a", "1.0.0", { "@test/core": "*" }),
     manifest("@test/b", "1.0.0", { "@test/core": "<2" }),
   ]) {
-    const response = await app.inject({ method: "POST", url: "/api/v1/packages", payload: payload(item) });
+    const response = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/packages", payload: payload(item) });
     assert.equal(response.statusCode, 201, response.body);
   }
 
-  const response = await app.inject({
+  const response = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/resolve",
     payload: { packages: [{ name: "@test/a" }, { name: "@test/b" }] },
@@ -79,14 +82,14 @@ test("indexa conocimiento de paquetes y aísla memorias por proyecto", async () 
     description: "Conocimiento de prueba",
     knowledge: [{ source: "guide.md", title: "Puertos y adaptadores", tags: ["hexagonal"] }],
   };
-  const published = await app.inject({
+  const published = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/packages",
     payload: payload(knowledge, { "guide.md": "El dominio depende de puertos, nunca de la base de datos." }),
   });
   assert.equal(published.statusCode, 201, published.body);
 
-  const search = await app.inject({
+  const search = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/knowledge/search",
     payload: { query: "dominio puertos" },
@@ -94,19 +97,19 @@ test("indexa conocimiento de paquetes y aísla memorias por proyecto", async () 
   assert.equal(search.statusCode, 200, search.body);
   assert.equal(search.json().results[0].packageName, "@test/knowledge");
 
-  const remembered = await app.inject({
+  const remembered = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/memories",
     payload: { projectId: "project-a", kind: "decision", content: "Usamos UUID para las órdenes" },
   });
   assert.equal(remembered.statusCode, 201, remembered.body);
-  const found = await app.inject({
+  const found = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/memories/search",
     payload: { projectId: "project-a", query: "UUID" },
   });
   assert.equal(found.json().results.length, 1);
-  const isolated = await app.inject({
+  const isolated = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/memories/search",
     payload: { projectId: "project-b", query: "UUID" },
@@ -117,9 +120,9 @@ test("indexa conocimiento de paquetes y aísla memorias por proyecto", async () 
 test("la CLI conserva al retirar un archivo modificado por el usuario", async () => {
   const packageManifest: PackageManifest = {
     ...manifest("@test/installable", "1.0.0"),
-    files: [{ source: "content.txt", target: ".agents/content.txt" }],
+    files: [{ source: "content.txt", target: ".modai/packages/content.txt" }],
   };
-  const published = await app.inject({
+  const published = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/packages",
     payload: payload(packageManifest, { "content.txt": "original" }),
@@ -127,7 +130,7 @@ test("la CLI conserva al retirar un archivo modificado por el usuario", async ()
   assert.equal(published.statusCode, 201, published.body);
 
   const address = app.server.address() as AddressInfo;
-  const api = new ApiClient(`http://127.0.0.1:${address.port}`);
+  const api = new ApiClient(`http://127.0.0.1:${address.port}`, "test-secret");
   const projectRoot = mkdtempSync(join(root, "project-"));
   const project: ProjectManifest = {
     schemaVersion: 1,
@@ -136,7 +139,7 @@ test("la CLI conserva al retirar un archivo modificado por el usuario", async ()
   };
   const empty: ProjectLock = { schemaVersion: 1, generatedAt: new Date(0).toISOString(), packages: [] };
   const installed = await synchronize(api, projectRoot, project, empty);
-  const target = join(projectRoot, ".agents", "content.txt");
+  const target = join(projectRoot, ".modai", "packages", "content.txt");
   assert.equal(readFileSync(target, "utf8"), "original");
 
   writeFileSync(target, "cambio del usuario", "utf8");
@@ -150,7 +153,7 @@ test("rechaza rutas que intentan salir del proyecto", async () => {
     ...manifest("@test/unsafe", "1.0.0"),
     files: [{ source: "file.txt", target: "../escape.txt" }],
   };
-  const response = await app.inject({
+  const response = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/packages",
     payload: payload(unsafe, { "file.txt": "no" }),
@@ -161,14 +164,14 @@ test("rechaza rutas que intentan salir del proyecto", async () => {
 
 test("permite deprecar y retirar versiones sin resolver una versión yanked", async () => {
   for (const version of ["1.0.0", "2.0.0"]) {
-    const response = await app.inject({ method: "POST", url: "/api/v1/packages", payload: payload(manifest("@test/status", version)) });
+    const response = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/packages", payload: payload(manifest("@test/status", version)) });
     assert.equal(response.statusCode, 201, response.body);
   }
-  const deprecated = await app.inject({ method: "POST", url: "/api/v1/admin/packages/deprecate", payload: { name: "@test/status", version: "1.0.0", message: "usa v2" } });
+  const deprecated = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/admin/packages/deprecate", payload: { name: "@test/status", version: "1.0.0", message: "usa v2" } });
   assert.equal(deprecated.statusCode, 200, deprecated.body);
-  const yanked = await app.inject({ method: "POST", url: "/api/v1/admin/packages/yank", payload: { name: "@test/status", version: "2.0.0", reason: "regresión" } });
+  const yanked = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/admin/packages/yank", payload: { name: "@test/status", version: "2.0.0", reason: "regresión" } });
   assert.equal(yanked.statusCode, 200, yanked.body);
-  const resolved = await app.inject({ method: "POST", url: "/api/v1/resolve", payload: { packages: [{ name: "@test/status" }] } });
+  const resolved = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/resolve", payload: { packages: [{ name: "@test/status" }] } });
   assert.equal(resolved.json().packages[0].version, "1.0.0");
 });
 
@@ -178,10 +181,10 @@ test("los overrides controlan dependencias transitivas", async () => {
     manifest("@override/core", "2.0.0"),
     manifest("@override/app", "1.0.0", { "@override/core": "*" }),
   ]) {
-    const response = await app.inject({ method: "POST", url: "/api/v1/packages", payload: payload(item) });
+    const response = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/packages", payload: payload(item) });
     assert.equal(response.statusCode, 201, response.body);
   }
-  const resolved = await app.inject({ method: "POST", url: "/api/v1/resolve", payload: { packages: [{ name: "@override/app" }], overrides: { "@override/core": "1.0.0" } } });
+  const resolved = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/resolve", payload: { packages: [{ name: "@override/app" }], overrides: { "@override/core": "1.0.0" } } });
   assert.deepEqual(resolved.json().packages.map((item: { version: string }) => item.version), ["1.0.0", "1.0.0"]);
 });
 
@@ -194,17 +197,17 @@ test("verifica firmas Ed25519 y registra al publicador", async () => {
     publicKey,
     signature: sign(null, signaturePayload(input.manifest, input.files), pair.privateKey).toString("base64"),
   };
-  const response = await app.inject({ method: "POST", url: "/api/v1/packages", payload: input });
+  const response = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/packages", payload: input });
   assert.equal(response.statusCode, 201, response.body);
   assert.equal(typeof response.json().package.signerFingerprint, "string");
 });
 
 test("actualiza y elimina memoria mediante API", async () => {
-  const created = await app.inject({ method: "POST", url: "/api/v1/memories", payload: { projectId: "memory-crud", content: "valor inicial" } });
+  const created = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/memories", payload: { projectId: "memory-crud", content: "valor inicial" } });
   const id = created.json().memory.id as string;
-  const updated = await app.inject({ method: "PATCH", url: `/api/v1/memories/${id}`, payload: { content: "valor corregido", kind: "decision" } });
+  const updated = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "PATCH", url: `/api/v1/memories/${id}`, payload: { content: "valor corregido", kind: "decision" } });
   assert.equal(updated.json().memory.content, "valor corregido");
-  const removed = await app.inject({ method: "DELETE", url: `/api/v1/memories/${id}` });
+  const removed = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "DELETE", url: `/api/v1/memories/${id}` });
   assert.equal(removed.statusCode, 204);
 });
 
@@ -213,7 +216,7 @@ test("protege la administración y emite API keys con roles", async () => {
   const secured = await createApp({ databasePath: join(authRoot, "db.sqlite"), artifactDirectory: join(authRoot, "artifacts"), apiToken: "bootstrap-secret", logger: false });
   const denied = await secured.inject({ method: "GET", url: "/api/v1/packages" });
   assert.equal(denied.statusCode, 401);
-  const created = await secured.inject({ method: "POST", url: "/api/v1/admin/api-keys", headers: { authorization: "Bearer bootstrap-secret" }, payload: { label: "publisher-test", role: "publisher" } });
+  const created = await secured.inject({ method: "POST", url: "/api/v1/admin/api-keys", headers: { authorization: "Bearer bootstrap-secret" }, payload: { label: "publisher-test", role: "publisher", packageScopes: ["@auth"] } });
   assert.equal(created.statusCode, 201, created.body);
   const token = created.json().key.token as string;
   const forbidden = await secured.inject({ method: "GET", url: "/api/v1/admin/api-keys", headers: { authorization: `Bearer ${token}` } });
@@ -234,7 +237,7 @@ test("crea y audita un harness reproducible", () => {
 });
 
 test("exporta un snapshot administrable", async () => {
-  const response = await app.inject({ method: "GET", url: "/api/v1/admin/export" });
+  const response = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "GET", url: "/api/v1/admin/export" });
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(response.json().schemaVersion, 1);
   assert.ok(response.json().packages.length > 0);
@@ -242,21 +245,21 @@ test("exporta un snapshot administrable", async () => {
 
 test("el servidor no expone inferencia y recibe vectores calculados en clientes", async () => {
   for (const [method, url] of [["GET", "/api/v1/inference/status"], ["POST", "/api/v1/inference/chat"], ["POST", "/api/v1/knowledge/vectors/reindex"]] as const) {
-    const response = await app.inject({ method, url });
+    const response = await app.inject({ headers: { authorization: "Bearer test-secret" }, method, url });
     assert.equal(response.statusCode, 404, response.body);
   }
-  const created = await app.inject({ method: "POST", url: "/api/v1/knowledge/documents", payload: { title: "Client embeddings", content: "El cliente ejecuta el modelo" } });
+  const created = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/knowledge/documents", payload: { title: "Client embeddings", content: "El cliente ejecuta el modelo" } });
   const id = created.json().document.id;
-  const saved = await app.inject({ method: "PUT", url: `/api/v1/knowledge/documents/${id}/vector`, payload: { model: "client-model", embedding: [1, 0, 0] } });
+  const saved = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "PUT", url: `/api/v1/knowledge/documents/${id}/vector`, payload: { model: "client-model", embedding: [1, 0, 0] } });
   assert.equal(saved.statusCode, 200, saved.body);
-  const search = await app.inject({ method: "POST", url: "/api/v1/knowledge/vector-search", payload: { model: "client-model", embedding: [1, 0, 0] } });
+  const search = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/knowledge/vector-search", payload: { model: "client-model", embedding: [1, 0, 0] } });
   assert.equal(search.json().results[0].id, id);
   assert.equal(search.json().results[0].score, 1);
-  const wrongModel = await app.inject({ method: "POST", url: "/api/v1/knowledge/vector-search", payload: { model: "other-model", embedding: [1, 0, 0] } });
+  const wrongModel = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/knowledge/vector-search", payload: { model: "other-model", embedding: [1, 0, 0] } });
   assert.deepEqual(wrongModel.json().results, []);
-  const invalid = await app.inject({ method: "POST", url: "/api/v1/knowledge/vector-search", payload: { model: "client-model", embedding: [] } });
+  const invalid = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/knowledge/vector-search", payload: { model: "client-model", embedding: [] } });
   assert.equal(invalid.statusCode, 400);
-  const identity = await app.inject({ method: "GET", url: "/api/v1/session" });
+  const identity = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "GET", url: "/api/v1/session" });
   assert.equal(identity.json().role, "admin");
 });
 
@@ -269,9 +272,9 @@ test("expone conocimiento y estado mediante un servidor MCP stdio real", async (
   writeFileSync(join(modaiDir, "lock.yaml"), `schemaVersion: 1\ngeneratedAt: 2026-01-01T00:00:00.000Z\npackages: []\n`);
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"), join(process.cwd(), "src", "mcp.ts")],
+    args: [join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"), join(process.cwd(), "packages", "cli", "src", "mcp.ts")],
     cwd: projectRoot,
-    env: { ...getDefaultEnvironment(), MODAI_SERVER: `http://127.0.0.1:${address.port}` },
+    env: { ...getDefaultEnvironment(), MODAI_SERVER: `http://127.0.0.1:${address.port}`, MODAI_API_TOKEN: "test-secret" },
     stderr: "pipe",
   });
   const client = new Client({ name: "modai-test-client", version: "1.0.0" });

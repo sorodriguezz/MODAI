@@ -3,6 +3,7 @@ dist
 .git
 .env
 var
+**/var
 deploy/.env
 deploy/.env.*
 *.log
@@ -16,3 +17,10 @@ coverage
 **/*.db
 **/*.sqlite*
 .modai
+
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+
+**/client.yaml
+**/local-models.yaml

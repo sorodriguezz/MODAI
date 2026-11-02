@@ -17,11 +17,11 @@ Las versiones son inmutables. `deprecated` sigue resolviendo; `yanked` queda fue
 `MODAI_API_TOKEN` es el token bootstrap de administrador. Desde él crea tokens acotados:
 
 ```sh
-modai admin create-key --label desarrollador --role publisher
-modai admin create-key --label agente-lectura --role reader
+modai admin create-key --label desarrollador --role publisher --projects ID --scopes @skills,@agents
+modai admin create-key --label agente-lectura --role reader --projects ID
 ```
 
-Un token se muestra una sola vez y solo se almacena su SHA-256. Los roles son jerárquicos: reader < publisher < admin.
+Un token se muestra una sola vez y solo se almacena su SHA-256. Los roles son reader, publisher, worker y admin. Worker y publisher tienen funciones distintas; ambos leen contexto autorizado, pero worker no publica paquetes. Asigna proyectos, organizaciones y namespaces explícitos con `--projects`, `--organizations` y `--scopes`.
 
 ## Backup y retención
 
@@ -31,7 +31,7 @@ modai admin import ./modai-backup.json
 modai admin prune --memory-days 365 --audit-days 90
 ```
 
-El snapshot incluye paquetes, artefactos, conocimiento manual, memorias y confianza de publicadores; excluye API keys y secretos. Conserva además backups de los volúmenes `modularai_modai-data` y `modularai_modai-artifacts` antes de actualizaciones mayores.
+El snapshot incluye paquetes, artefactos, conocimiento manual, memorias, confianza de publicadores, proyectos, organizaciones y ejecuciones; excluye API keys y secretos. Conserva además backups de los volúmenes `modularai_modai-data` y `modularai_modai-artifacts` antes de actualizaciones mayores.
 
 ## Observabilidad
 

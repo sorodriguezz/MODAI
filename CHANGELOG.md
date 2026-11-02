@@ -1,5 +1,24 @@
 # Cambios
 
+## 0.5.0
+
+- Web independiente en `apps/admin`, con vistas por sección y assets servidos desde el backend.
+- Un único paquete npm del CLI con SDK y contratos incorporados; workspaces internos privados.
+- Flujo del panel para seleccionar proyecto, crear credencial individual y entregar comandos CLI/MCP.
+- Conexión con entrada oculta o stdin, `whoami`, URL pública anunciada y overlay de dominio/HTTPS.
+- Estado local bajo `apps/server/var`, creado al iniciar; eliminadas las carpetas vacías de la raíz.
+
+- Node 26.13.0 unificado en servidor, CLI, MCP, SDK, contratos, workers y Docker.
+
+- Monorepo con servidor, panel y librerías internas separados del cliente distribuible.
+- Agentes versionados, activación por adaptadores, herramientas y descubrimiento MCP stdio.
+- Ejecución con Ollama local y workers opcionales con leases, cancelación y versiones fijadas.
+- Permisos de proyecto, organización y namespace por API key; eliminación del acceso anónimo.
+- Instalación con permisos explícitos, protección frente a symlinks y verificación de firmas en el cliente.
+- Cuotas, límites de frecuencia, cabeceras de seguridad y búsqueda vectorial acotada fuera del event loop.
+- Panel con agentes, proyectos, ejecuciones y modo oscuro seleccionable.
+- Backups con proyectos, organizaciones y ejecuciones; guía de migración.
+
 ## 0.4.0
 
 - Repositorio organizado: deploy/, scripts/, tests/, docs/architecture/, docs/guides/, src/client/ y var/ para datos de desarrollo.

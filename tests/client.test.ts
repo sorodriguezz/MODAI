@@ -5,13 +5,13 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
-import { Database } from "../src/core/database.js";
-import { ContextService } from "../src/core/context-service.js";
-import { createApp } from "../src/http/app.js";
-import { ApiClient } from "../src/cli/api.js";
-import { recommendModels, type Hardware } from "../src/client/hardware.js";
-import { LocalOllama, localRuntimeUrl } from "../src/client/ollama.js";
-import { chunkText, indexKnowledge, semanticSearch, sourceHash, vectorSpace, type LocalModelsConfig } from "../src/client/embeddings.js";
+import { Database } from "../apps/server/src/core/database.js";
+import { ContextService } from "../apps/server/src/core/context-service.js";
+import { createApp } from "../apps/server/src/http/app.js";
+import { ApiClient } from "@modai/sdk";
+import { recommendModels, type Hardware } from "../packages/cli/src/client/hardware.js";
+import { LocalOllama, localRuntimeUrl } from "../packages/cli/src/client/ollama.js";
+import { chunkText, indexKnowledge, semanticSearch, sourceHash, vectorSpace, type LocalModelsConfig } from "../packages/cli/src/client/embeddings.js";
 
 function hardware(patch: Partial<Hardware> = {}): Hardware {
   return { platform: "win32", architecture: "x64", processArchitecture: "x64", cpu: "test", threads: 4, ramGiB: 8, availableRamGiB: 5, gpus: [], appleSilicon: false, notes: [], ...patch };
@@ -61,7 +61,7 @@ test("migra vectores anteriores y conserva espacios de varios modelos", () => {
 
 test("cliente calcula embeddings con runtime local y servidor solo almacena vectores", async () => {
   const root = mkdtempSync(join(tmpdir(), "modai-client-"));
-  const app = await createApp({ databasePath: join(root, "db.sqlite"), artifactDirectory: join(root, "artifacts"), logger: false });
+  const app = await createApp({ databasePath: join(root, "db.sqlite"), artifactDirectory: join(root, "artifacts"), apiToken: "test-secret", logger: false });
   const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
   let digest = "digest-one", failBatch = true;
   const runtime = createServer(async (req, res) => {
@@ -81,11 +81,11 @@ test("cliente calcula embeddings con runtime local y servidor solo almacena vect
   try {
     await app.listen({ host: "127.0.0.1", port: 0 });
     await new Promise<void>((resolve) => runtime.listen(0, "127.0.0.1", resolve));
-    const api = new ApiClient(`http://127.0.0.1:${(app.server.address() as AddressInfo).port}`);
+    const api = new ApiClient(`http://127.0.0.1:${(app.server.address() as AddressInfo).port}`, "test-secret");
     const config: LocalModelsConfig = { schemaVersion: 1, url: `http://127.0.0.1:${(runtime.address() as AddressInfo).port}`, embeddingModel: "embeddinggemma-2:270m", digest, batchSize: 4, chatModel: "qwen3.5:0.8b" };
     await new LocalOllama(config.url).pull(config.embeddingModel);
     await assert.rejects(() => new LocalOllama(config.url).model("example:cloud"), /no un modelo cloud/);
-    const created = await app.inject({ method: "POST", url: "/api/v1/knowledge/documents", payload: { title: "Documento largo", content: "decisiones de arquitectura ".repeat(180) } });
+    const created = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "POST", url: "/api/v1/knowledge/documents", payload: { title: "Documento largo", content: "decisiones de arquitectura ".repeat(180) } });
     const id = created.json().document.id;
     const report = await indexKnowledge(api, config);
     assert.equal(report.indexed, 1);
@@ -93,15 +93,15 @@ test("cliente calcula embeddings con runtime local y servidor solo almacena vect
     assert.equal(results[0].id, id);
     assert.ok(requests.filter((r) => r.path === "/api/embed").length > 4);
     assert.ok(requests.every((r) => !JSON.stringify(r.body).includes("hardware")));
-    const stale = await app.inject({ method: "PUT", url: `/api/v1/knowledge/documents/${id}/vector`, payload: { model: vectorSpace(config), embedding: [1, 0, 0], sourceHash: sourceHash({ title: "old", content: "changed" }) } });
+    const stale = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "PUT", url: `/api/v1/knowledge/documents/${id}/vector`, payload: { model: vectorSpace(config), embedding: [1, 0, 0], sourceHash: sourceHash({ title: "old", content: "changed" }) } });
     assert.equal(stale.statusCode, 409);
-    const zero = await app.inject({ method: "PUT", url: `/api/v1/knowledge/documents/${id}/vector`, payload: { model: vectorSpace(config), embedding: [0, 0, 0] } });
+    const zero = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "PUT", url: `/api/v1/knowledge/documents/${id}/vector`, payload: { model: vectorSpace(config), embedding: [0, 0, 0] } });
     assert.equal(zero.statusCode, 400);
     digest = "digest-two";
     await assert.rejects(() => semanticSearch(api, config, "arquitectura"), /pesos del modelo cambiaron/);
-    const page = await app.inject({ method: "GET", url: "/api/v1/knowledge/documents?limit=1" });
+    const page = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "GET", url: "/api/v1/knowledge/documents?limit=1" });
     assert.equal(page.json().nextOffset, 1);
-    const next = await app.inject({ method: "GET", url: "/api/v1/knowledge/documents?limit=1&offset=1" });
+    const next = await app.inject({ headers: { authorization: "Bearer test-secret" }, method: "GET", url: "/api/v1/knowledge/documents?limit=1&offset=1" });
     assert.equal(next.json().documents.length, 0);
   } finally {
     runtime.closeAllConnections();

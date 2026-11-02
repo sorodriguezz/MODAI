@@ -1,0 +1,25 @@
+# Internet-facing HTTPS. DNS for MODAI_PUBLIC_HOST must point to this host, with ports 80/443 reachable.
+services:
+  server:
+    environment:
+      MODAI_PUBLIC_URL: "https://${MODAI_PUBLIC_HOST:?Define MODAI_PUBLIC_HOST con tu dominio}"
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      MODAI_PUBLIC_HOST: "${MODAI_PUBLIC_HOST:?Define MODAI_PUBLIC_HOST con tu dominio}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.public:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  caddy-data:
+  caddy-config:

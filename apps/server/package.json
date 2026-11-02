@@ -1,0 +1,27 @@
+{
+  "version": "0.5.0",
+  "type": "module",
+  "engines": {
+    "node": ">=26.13.0 <27"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "name": "@modai/server",
+  "description": "Servidor central de capacidades MODAI",
+  "dependencies": {
+    "@fastify/cors": "^11.3.1",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/rate-limit": "^11.2.1",
+    "@modai/contracts": "0.5.0",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.7",
+    "semver": "^7.8.5"
+  },
+  "private": true
+}

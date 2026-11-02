@@ -19,10 +19,8 @@ coverage/
 .modai/local-models.yaml
 
 # Datos de desarrollo; Docker usa volúmenes independientes
-var/data/*
-var/artifacts/*
-!var/data/.gitkeep
-!var/artifacts/.gitkeep
+apps/server/var/*
+!apps/server/var/README.md
 *.db
 *.db-shm
 *.db-wal
