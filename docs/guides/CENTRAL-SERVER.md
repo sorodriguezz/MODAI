@@ -70,7 +70,7 @@ Las identidades actuales son API keys con etiqueta; no existen todavía cuentas 
 Usa Node 26.13.0 o posterior dentro de la rama 26. Una vez [publicado el CLI](PUBLISH-CLI.md):
 
 ```sh
-npm install -g @modai/cli
+npm install -g @sorodriguez/modai
 modai connect https://modai.tu-dominio.cl
 ```
 
@@ -79,7 +79,7 @@ modai connect https://modai.tu-dominio.cl
 Antes de publicar en npm, distribuye el único archivo generado con `npm run pack:client`:
 
 ```sh
-npm install -g ./modai-cli-0.5.0.tgz
+npm install -g ./sorodriguez-modai-0.5.0.tgz
 ```
 
 Desde la carpeta del proyecto:

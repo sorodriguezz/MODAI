@@ -5,9 +5,9 @@ import { spawnSync } from 'node:child_process';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = resolve(root, 'dist/npm');
 mkdirSync(output, { recursive: true });
-// Retire artifacts from the former three-package distribution.
-for (const file of readdirSync(output)) if (/^modai-(contracts|sdk)-.*\.tgz$/.test(file)) rmSync(resolve(output, file));
-const result = spawnSync('npm', ['pack', '--workspace', '@modai/cli', '--pack-destination', output, '--ignore-scripts', '--json'], { cwd: root, encoding: 'utf8', shell: false });
+// Retire artifacts from the former scoped distribution.
+for (const file of readdirSync(output)) if (/^(modai-(contracts|sdk|cli)|moduleai)-.*\.tgz$/.test(file)) rmSync(resolve(output, file));
+const result = spawnSync('npm', ['pack', '--workspace', '@sorodriguez/modai', '--pack-destination', output, '--ignore-scripts', '--json'], { cwd: root, encoding: 'utf8', shell: false });
 if (result.status !== 0) {
   process.stderr.write(result.stderr || result.error?.message || 'No se pudo empaquetar el CLI');
   process.exit(result.status ?? 1);

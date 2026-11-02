@@ -5,7 +5,7 @@
   "type": "module",
   "description": "ModularAI: registro local, contexto, memoria y CLI para capacidades de IA componibles.",
   "scripts": {
-    "build": "npm run build -w @modai/contracts && npm run build -w @modai/sdk && npm run build -w @modai/cli && npm run build -w @modai/admin && npm run build -w @modai/server && tsc -p scripts/tsconfig.json",
+    "build": "npm run build -w @modai/contracts && npm run build -w @modai/sdk && npm run build -w @sorodriguez/modai && npm run build -w @modai/admin && npm run build -w @modai/server && tsc -p scripts/tsconfig.json",
     "dev": "npm run build -w @modai/admin && tsx watch apps/server/src/server.ts",
     "start": "node --no-warnings apps/server/dist/server.js",
     "mcp": "node --no-warnings packages/cli/dist/mcp.js",
@@ -21,7 +21,7 @@
     "pack:client": "npm run build:cli && node scripts/pack-client.mjs",
     "test:client-package": "npm run build && node scripts/pack-client.mjs && node scripts/smoke-client.mjs",
     "dev:admin": "npm run dev -w @modai/admin",
-    "build:cli": "npm run build -w @modai/contracts && npm run build -w @modai/sdk && npm run build -w @modai/cli",
+    "build:cli": "npm run build -w @modai/contracts && npm run build -w @modai/sdk && npm run build -w @sorodriguez/modai",
     "docker:public": "node scripts/deploy.mjs --public up -d --build"
   },
   "engines": {

@@ -4,7 +4,7 @@ MODAI mantiene un catálogo central de paquetes, resuelve composiciones inmutabl
 
 ## Instalación del cliente
 
-El monorepo separa `apps/server`, `apps/admin` y los workspaces internos `@modai/contracts` y `@modai/sdk`. El único paquete público es `@modai/cli`; su build incorpora los contratos y el SDK. Fastify y SQLite no son dependencias del cliente.
+El monorepo separa `apps/server`, `apps/admin` y los workspaces internos `@modai/contracts` y `@modai/sdk`. El único paquete público es `@sorodriguez/modai`; su build incorpora los contratos y el SDK. Fastify y SQLite no son dependencias del cliente.
 
 ```sh
 npm ci
@@ -14,12 +14,12 @@ npm run pack:client
 Se genera un único archivo en `dist/npm/`. Puedes distribuirlo e instalarlo sin clonar el repositorio en el equipo cliente:
 
 ```sh
-npm install -g ./modai-cli-0.5.0.tgz
+npm install -g ./sorodriguez-modai-0.5.0.tgz
 modai --help
 modai-mcp --help
 ```
 
-El CLI está preparado para publicarse en npm, pero generar el archivo no lo publica. Cuando lo publiques en un scope que controles, bastará `npm install -g @modai/cli`. Servidor, CLI, MCP, SDK, contratos y workers usan Node 26.13.0, la última versión estable de la rama 26 verificada para esta entrega. Todos los paquetes declaran `>=26.13.0 <27`; `.nvmrc`, `.node-version` y Docker fijan 26.13.0.
+El CLI está preparado para publicarse en npm, pero generar el archivo no lo publica. Cuando lo publiques con el nombre `@sorodriguez/modai`, bastará `npm install -g @sorodriguez/modai`. Servidor, CLI, MCP, SDK, contratos y workers usan Node 26.13.0, la última versión estable de la rama 26 verificada para esta entrega. Todos los paquetes declaran `>=26.13.0 <27`; `.nvmrc`, `.node-version` y Docker fijan 26.13.0.
 
 Consulta el [flujo completo del servidor central](CENTRAL-SERVER.md) y la [publicación del CLI](PUBLISH-CLI.md).
 

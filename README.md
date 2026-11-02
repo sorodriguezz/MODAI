@@ -34,13 +34,13 @@ El servidor registra proyectos y compone agentes versionados con sus skills, her
 ```sh
 # Genera los paquetes del cliente, sin publicarlos en npm:
 npm run pack:client
-# En otro equipo: npm install -g ./dist/npm/modai-cli-0.5.0.tgz
+# En otro equipo: npm install -g ./dist/npm/sorodriguez-modai-0.5.0.tgz
 # Después de conectar e inicializar un proyecto con el catálogo de ejemplos:
 modai agent activate @agents/backend-reviewer --adapter agents-md --allow project.instructions
 modai agent run "Revisa las decisiones del proyecto" --model MODELO_LOCAL
 ```
 
-Consulta [agentes y capacidades](docs/guides/AGENTS-AND-CAPABILITIES.md) para instalación, contratos, MCP dinámico, permisos y workers; y la [migración a 0.5](docs/guides/MIGRATION-0.5.md) para actualizar un servidor existente. El único paquete destinado a npm es `@modai/cli`; incorpora el SDK y los contratos internos. Todavía debe publicarse en un scope controlado por su propietario para instalarlo por nombre.
+Consulta [agentes y capacidades](docs/guides/AGENTS-AND-CAPABILITIES.md) para instalación, contratos, MCP dinámico, permisos y workers; y la [migración a 0.5](docs/guides/MIGRATION-0.5.md) para actualizar un servidor existente. El único paquete destinado a npm es `@sorodriguez/modai`; incorpora el SDK y los contratos internos. Todavía debe publicarse en npm para instalarlo por nombre.
 
 ## Una instancia central para todos tus proyectos
 
@@ -48,7 +48,7 @@ El administrador despliega el servidor con una dirección accesible, crea el pro
 
 ```sh
 # Una vez publicado el CLI en npm:
-npm install -g @modai/cli
+npm install -g @sorodriguez/modai
 modai connect https://modai.tu-dominio.cl
 # connect pide la API key con entrada oculta.
 cd mi-proyecto
@@ -119,7 +119,7 @@ El **equipo cliente** necesita Node 26.13.0 y acceso al servidor. El cliente se 
 ```sh
 npm ci
 npm run build
-npm link --workspace @modai/cli
+npm link --workspace @sorodriguez/modai
 modai connect http://127.0.0.1:8787
 # Introduce tu API key cuando se solicite.
 ```

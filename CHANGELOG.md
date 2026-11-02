@@ -2,6 +2,8 @@
 
 ## 0.5.0
 
+- Nombre público del CLI en npm: `@sorodriguez/modai`; comandos `modai` y `modai-mcp`.
+
 - Web independiente en `apps/admin`, con vistas por sección y assets servidos desde el backend.
 - Un único paquete npm del CLI con SDK y contratos incorporados; workspaces internos privados.
 - Flujo del panel para seleccionar proyecto, crear credencial individual y entregar comandos CLI/MCP.

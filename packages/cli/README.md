@@ -1,9 +1,9 @@
-# @modai/cli
+# @sorodriguez/modai
 
 Cliente independiente de MODAI. Un único paquete instala `modai`, `modai-mcp`, activación de agentes, ejecución con Ollama local y worker opcional. El SDK y los contratos están incorporados; no necesitas clonar el servidor ni instalar otros paquetes MODAI. Requiere Node `>=26.13.0 <27`.
 
 ```sh
-npm install -g @modai/cli
+npm install -g @sorodriguez/modai
 modai connect https://modai.equipo.cl
 # Introduce tu API key con entrada oculta.
 cd mi-proyecto

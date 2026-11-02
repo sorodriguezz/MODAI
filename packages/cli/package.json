@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
     "prepack": "npm run build -w @modai/contracts && npm run build -w @modai/sdk && npm run build"
   },
-  "name": "@modai/cli",
+  "name": "@sorodriguez/modai",
   "description": "CLI, agentes y puente MCP de MODAI",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

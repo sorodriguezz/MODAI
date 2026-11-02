@@ -14,8 +14,8 @@ import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotoc
 const exec = promisify(execFile), root = mkdtempSync(join(tmpdir(), 'modai-standalone-'));
 let app, runtime, mcp;
 try {
-  const { version } = JSON.parse((await import('node:fs')).readFileSync(resolve('packages/cli/package.json'), 'utf8'));
-  const tarballs=[resolve(`dist/npm/modai-cli-${version}.tgz`)];
+  const { name: packageName, version } = JSON.parse((await import('node:fs')).readFileSync(resolve('packages/cli/package.json'), 'utf8'));
+  const tarballs=[resolve(`dist/npm/${packageName.replace(/^@/, "").replaceAll("/", "-")}-${version}.tgz`)];
   await exec('npm',['install','--prefix',root,'--ignore-scripts','--no-audit','--no-fund',...tarballs],{timeout:120000});
   const require=createRequire(join(root,'package.json'));
   for(const dependency of ['fastify','better-sqlite3','@modai/contracts','@modai/sdk'])assert.throws(()=>require.resolve(dependency),{code:'MODULE_NOT_FOUND'});
@@ -41,7 +41,7 @@ try {
   const clientToken = clientKey.key.token;
   const project=join(root,'project');mkdirSync(project);
   const env={...process.env,MODAI_API_TOKEN:clientToken,MODAI_CONFIG_DIR:join(root,'config')};
-  const cli=join(root,'node_modules/@modai/cli/dist/cli/index.js');
+  const cli=join(root,'node_modules',packageName,'dist/cli/index.js');
   const call=async(args,token=clientToken)=>(await exec(process.execPath,[cli,...args],{cwd:project,env:{...env,MODAI_API_TOKEN:token},timeout:30000})).stdout;
   assert.match(await call(['--help']),/agent/);
   const login = exec(process.execPath, [cli,'connect',server,'--token-stdin'], {cwd:project,env:{...env,MODAI_API_TOKEN:undefined},timeout:30000});
@@ -71,7 +71,7 @@ try {
   const key=await api.createApiKey('standalone-worker','worker',{projectIds:[status.projectId]});
   assert.match(await call(['worker','--project',status.projectId,'--model','fixture-model','--url',runtimeUrl,'--signature-policy','optional','--once'],key.key.token),/true/);
   assert.equal((await api.run(submitted.id)).status,'completed');
-  const transport=new StdioClientTransport({command:process.execPath,args:[join(root,'node_modules/@modai/cli/dist/mcp.js'),'--project',project],cwd:project,env:{...getDefaultEnvironment(),MODAI_API_TOKEN:clientToken,MODAI_SERVER:server,MODAI_CONFIG_DIR:join(root,'config')},stderr:'pipe'});
+  const transport=new StdioClientTransport({command:process.execPath,args:[join(root,'node_modules',packageName,'dist/mcp.js'),'--project',project],cwd:project,env:{...getDefaultEnvironment(),MODAI_API_TOKEN:clientToken,MODAI_SERVER:server,MODAI_CONFIG_DIR:join(root,'config')},stderr:'pipe'});
   mcp=new Client({name:'standalone-smoke',version:'1'});await mcp.connect(transport);
   assert.ok((await mcp.listTools()).tools.some(tool=>tool.name==='modai_recall'));
   assert.ok((await mcp.listResources()).resources.some(resource=>resource.uri==='modai://agent/active'));

@@ -27,7 +27,7 @@ export function connectionCommands(projectId = $("connectProject").value) {
       "Usa la URL HTTP(S) del servidor, sin ruta ni credenciales.",
     );
   const lines = [
-    "npm install -g @modai/cli",
+    "npm install -g @sorodriguez/modai",
     "modai connect " + quote(url.origin),
   ];
   if (projectId) {

@@ -18,7 +18,7 @@ Todos los componentes requieren Node `>=26.13.0 <27`. Los archivos de selección
 
 La CLI vive en `packages/cli`, el SDK en `packages/sdk`, los contratos en `packages/contracts` y el servidor en `apps/server`. Compila con `npm run build`. Los comandos raíz `npm start`, `npm run cli` y `npm run mcp` siguen disponibles.
 
-Distribuye el cliente con `npm run pack:client`; instala el único archivo `dist/npm/modai-cli-0.5.0.tgz`. No requiere Fastify, SQLite ni clonar el servidor. El CLI todavía necesita publicación para instalarlos por nombre desde el registro público.
+Distribuye el cliente con `npm run pack:client`; instala el único archivo `dist/npm/sorodriguez-modai-0.5.0.tgz`. No requiere Fastify, SQLite ni clonar el servidor. El CLI todavía necesita publicación para instalarlos por nombre desde el registro público.
 
 Los paquetes que instalan `AGENTS.md`, `CLAUDE.md`, `.agent/` o `.opencode/agents/` deben declarar `project.instructions`. Los destinos `docs/` necesitan `project.files`. Los ejecutables necesitan `process.execute`. Concede los permisos al instalar, por ejemplo:
 
