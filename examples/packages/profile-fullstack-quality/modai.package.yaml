@@ -1,0 +1,15 @@
+apiVersion: modai.dev/v1
+kind: Profile
+metadata:
+  name: "@profiles/fullstack-quality"
+  version: 1.0.0
+  description: Perfil fullstack con arquitectura frontend, decisiones de arquitectura, patrones de diseño y regresión E2E con Playwright.
+  license: MIT
+spec:
+  category: profile
+  dependencies:
+    "@patterns/frontend-architecture": ^1.0.0
+    "@architecture/decision-records": ^1.0.0
+    "@skills/design-patterns": ^1.0.0
+    "@testing/regression": ^1.0.0
+    "@testing/playwright": ^1.0.0

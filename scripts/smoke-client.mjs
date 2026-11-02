@@ -47,7 +47,7 @@ try {
   const login = exec(process.execPath, [cli,'connect',server,'--token-stdin'], {cwd:project,env:{...env,MODAI_API_TOKEN:undefined},timeout:30000});
   login.child.stdin.end(clientToken+'\n');
   assert.match((await login).stdout,/Laptop A/);
-  await call(['init','--project',shared.id]);
+  await call(['init','--legacy','--project',shared.id]);
   assert.equal(JSON.parse(await call(['whoami'])).label,'Laptop A');
   const status=JSON.parse(await call(['status']));
   await call(['remember','Use UUID for orders','--kind','decision']);

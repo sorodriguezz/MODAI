@@ -14,15 +14,21 @@ import { loadActivation, verifyBundle, agentInstructions } from "./agent/activat
 import { CapabilityHost, type ToolDescription } from "./agent/capabilities.js";
 import { installationPolicy } from "./cli/installer.js";
 import { runtimeOptions } from "./cli/agent-commands.js";
+import { isV1Project } from "@modai/core/project";
+import { startV1Gateway } from "./v1/gateway.js";
 
 const options = new Command().option("--project <path>", "Directorio del proyecto", process.cwd()).option("--bindings <file>", "Bindings de herramientas locales").parse().opts();
 const root = resolve(options.project);
+if (isV1Project(root)) {
+  // v1 projects work offline: the gateway reads the local store, index and grants.
+  await startV1Gateway(root);
+} else {
 let project: ReturnType<typeof loadProject> | undefined;
 try { project = loadProject(root); } catch (error) { if (existsSync(resolve(root,".modai"))) throw error; }
 const connection = effectiveConnection(project?.manifest.server);
 const api = new ApiClient(connection.server, connection.token);
 await api.assertCompatible();
-const mcp = new Server({ name: "modai", version: "0.5.0" }, { capabilities: { tools: {}, resources: {}, prompts: {} } });
+const mcp = new Server({ name: "modai", version: "0.6.0" }, { capabilities: { tools: {}, resources: {}, prompts: {} } });
 const result = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] });
 const querySchema = { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 2000 } }, required: ["query"], additionalProperties: false };
 const noArguments = { type: "object", properties: {}, additionalProperties: false };
@@ -81,3 +87,4 @@ const close=async()=>{if(closing)return;closing=true;await host?.close();await m
 mcp.onclose=()=>{void host?.close()};
 process.once("SIGTERM",()=>void close());process.once("SIGINT",()=>void close());
 await mcp.connect(new StdioServerTransport());
+}

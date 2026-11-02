@@ -2,6 +2,14 @@
 
 Empieza por el [README del proyecto](../README.md) para entender el producto y levantar el servidor.
 
+## Plataforma de paquetes (0.6)
+
+- [ADR-004: MODAI como plataforma de paquetes y capacidades](architecture/ADR-004-package-platform.md).
+- [Especificación de paquetes v1](spec/PACKAGE-SPEC-v1.md): manifiesto, capacidades, contribuciones, permisos, adaptadores, `modai.yaml` y `modai.lock`.
+- [Crear, publicar e instalar paquetes](guides/AUTHORING-PACKAGES.md).
+- [Migración a 0.6](guides/MIGRATION-0.6.md).
+- [Panel web: inicio de sesión, usuarios y roles](guides/ADMIN-PANEL.md).
+
 ## Guías
 
 - [Servidor central y conexión de usuarios](guides/CENTRAL-SERVER.md).

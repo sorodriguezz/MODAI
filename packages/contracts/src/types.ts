@@ -1,3 +1,4 @@
+import type { PackageManifestV1Input } from "./spec-v1.js";
 export const PACKAGE_TYPES = [
   "methodology",
   "harness",
@@ -41,6 +42,12 @@ export interface PackageManifest {
   agent?: AgentDefinition;
 }
 
+/** Legacy (schemaVersion: 1) or v1 (apiVersion: modai.dev/v1) manifest, exactly as published. */
+export type AnyPackageManifest = PackageManifest | PackageManifestV1Input;
+export function isV1Manifest(manifest: unknown): manifest is PackageManifestV1Input {
+  return typeof manifest === "object" && manifest !== null && (manifest as { apiVersion?: unknown }).apiVersion === "modai.dev/v1";
+}
+
 export type PackageStatus = "active" | "deprecated" | "yanked";
 
 export interface PackageSignature {
@@ -68,7 +75,7 @@ export interface ArtifactFile {
 }
 
 export interface PublishPackageInput {
-  manifest: PackageManifest;
+  manifest: AnyPackageManifest;
   files: ArtifactFile[];
   signature?: PackageSignature;
 }
@@ -76,10 +83,11 @@ export interface PublishPackageInput {
 export interface PackageRecord {
   name: string;
   version: string;
-  type: PackageType;
+  /** Legacy type or v1 category; informative only. */
+  type: string;
   description: string;
   artifactId: string;
-  manifest: PackageManifest;
+  manifest: AnyPackageManifest;
   publishedAt: string;
   status: PackageStatus;
   deprecatedMessage?: string;

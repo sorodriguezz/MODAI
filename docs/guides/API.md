@@ -63,3 +63,11 @@ Las rutas de contexto y tareas verifican el proyecto tanto al consultar como al 
 `GET /health` incluye `apiVersion: 1` y la política de firmas. La búsqueda vectorial puede responder `413 VECTOR_CANDIDATE_LIMIT` o `429 VECTOR_BUSY`; limita los paquetes de la consulta. Las entradas generales se limitan a 1 MiB; publicación usa un límite específico y cada artefacto tiene un máximo decodificado de 25 MiB.
 
 `/health` incluye `publicUrl` cuando se configura `MODAI_PUBLIC_URL`. Esa dirección debe ser un origen HTTP(S), sin credenciales ni prefijo de ruta.
+
+## Cambios en 0.6
+
+- `POST /api/v1/packages` acepta manifiestos `apiVersion: modai.dev/v1` además de `schemaVersion: 1`. Los v1 se validan con el validador del Core (`PERMISSION_UNDECLARED`, `MISSING_SOURCE`, `SKILL_ENTRYPOINT_MISSING`, `UNSAFE_TARGET`…). La columna `type` de los registros contiene la `category`.
+- `GET /api/v1/packages?name=@scope/nombre` filtra por nombre exacto (lo usa `HttpRegistry`).
+- `POST /api/v1/resolve` resuelve también capacidades y puede responder `409 CAPABILITY_UNSATISFIED`, `PACKAGE_CONFLICT`, `CAPABILITY_CONFLICT` o `422 INCOMPATIBLE_PLATFORM`/`INCOMPATIBLE_CORE`.
+- `GET /api/v1/capabilities[?capability=browser.automation]` devuelve `capabilities` (formato 0.5) y `contracts`: `provides`, `requires`, `optional` y herramientas por paquete.
+- Sesión del panel (cookie `HttpOnly` + cabecera `x-modai-csrf: 1` en escrituras): `GET /api/v1/auth/status`, `POST /api/v1/auth/setup`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`, `POST /api/v1/auth/password`; usuarios: `GET/POST /api/v1/admin/users`, `PATCH/DELETE /api/v1/admin/users/:id`. Detalle en la [guía del panel](ADMIN-PANEL.md). Las API keys Bearer no cambian.

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import type { Activation, AgentBundle, Permission } from "@modai/contracts/types";
 import type { ApiClient } from "@modai/sdk";
 import { sha256 } from "@modai/contracts/security";
+import { agentDefinitionOf, legacyCapabilities, normalizeManifest } from "@modai/core/normalize";
 import { loadProject, writeYaml } from "../cli/config.js";
 import { installationPolicy, synchronize, verifyPackage } from "../cli/installer.js";
 import { localApproval, saveLocalApproval } from "../cli/approvals.js";
@@ -14,33 +15,36 @@ export async function verifyBundle(api: ApiClient, bundle: AgentBundle, policy: 
   if (sha256(JSON.stringify(payload)) !== digest) throw new Error("El bundle del agente está corrupto");
   const sources = new Map<string, string>();
   const names = new Set<string>();
+  const normalized = new Map(bundle.packages.map(item => [item.name, normalizeManifest(item.manifest)]));
   for (const item of bundle.packages) {
-    if (item.name !== item.manifest.name || item.version !== item.manifest.version || item.type !== item.manifest.type || names.has(item.name)) throw new Error("Identidad de paquete inválida");
+    const manifest = normalized.get(item.name)!;
+    if (item.name !== manifest.metadata.name || item.version !== manifest.metadata.version || item.type !== manifest.spec.category || names.has(item.name)) throw new Error("Identidad de paquete inválida");
     names.add(item.name);
     const artifact = await api.artifact(item.artifactId);
     verifyPackage(item, artifact, policy.policy, policy.trustedPublishers);
     for (const file of artifact.files) sources.set(`${item.name}:${file.path}`, Buffer.from(file.content, "base64").toString("utf8"));
   }
   const root = bundle.packages.find(item => item.name === bundle.agent.name && item.version === bundle.agent.version);
-  if (!root?.manifest.agent || root.type !== "agent") throw new Error("El bundle no contiene la definición del agente");
+  const rootDefinition = root ? agentDefinitionOf(root.manifest) : undefined;
+  if (!root || !rootDefinition) throw new Error("El bundle no contiene la definición del agente");
   // Definitions are normalized through the shared schema; instructions must match signed artifacts.
-  const { agentDefinitionSchema, capabilitySchema, manifestSchema } = await import("@modai/contracts/schemas");
-  for (const item of bundle.packages) manifestSchema.parse(item.manifest);
+  const { agentDefinitionSchema, capabilitySchema, anyManifestSchema } = await import("@modai/contracts/schemas");
+  for (const item of bundle.packages) anyManifestSchema.parse(item.manifest);
   const visited = new Set<string>();
   const visit = (name: string) => {
     if (visited.has(name)) return;
     visited.add(name);
     const item = bundle.packages.find(item => item.name === name);
     if (!item) throw new Error("Falta una dependencia en el bundle");
-    for (const dependency of Object.keys(item.manifest.dependencies ?? {})) visit(dependency);
+    for (const dependency of Object.keys(normalized.get(item.name)!.spec.dependencies)) visit(dependency);
   };
   visit(root.name);
   if (visited.size !== bundle.packages.length) throw new Error("El bundle contiene paquetes ajenos al agente");
-  const expectedPermissions = [...new Set(bundle.packages.flatMap(item => item.manifest.permissions ?? []))].sort();
+  const expectedPermissions = [...new Set(bundle.packages.flatMap(item => normalized.get(item.name)!.spec.permissions))].sort();
   if (JSON.stringify(expectedPermissions) !== JSON.stringify([...bundle.permissions].sort())) throw new Error("Los permisos no corresponden a los paquetes");
-  if (JSON.stringify(agentDefinitionSchema.parse(root.manifest.agent)) !== JSON.stringify(bundle.agent.definition)) throw new Error("La definición no corresponde al paquete");
+  if (JSON.stringify(agentDefinitionSchema.parse(rootDefinition)) !== JSON.stringify(bundle.agent.definition)) throw new Error("La definición no corresponde al paquete");
   for (const instruction of bundle.instructions) if (sources.get(`${instruction.packageName}:${instruction.path}`) !== instruction.content) throw new Error("Las instrucciones no corresponden al artefacto");
-  const available = bundle.packages.flatMap(item => (item.manifest.capabilities ?? []).map(c => capabilitySchema.parse(c)));
+  const available = bundle.packages.flatMap(item => legacyCapabilities(item.manifest).map(c => capabilitySchema.parse(c)));
   const expected = bundle.agent.definition.capabilities.map(name => available.find(c => c.name === name));
   if (JSON.stringify(expected) !== JSON.stringify(bundle.capabilities)) throw new Error("Las capacidades no corresponden a los paquetes");
 }
@@ -95,7 +99,7 @@ export async function activateAgent(api: ApiClient, root: string, server: string
   let hostContent = "";
   if (hostFile) {
     if (!grants.includes("project.instructions")) throw new Error("El adaptador requiere --allow project.instructions");
-    if (bundle.packages.some(item => item.manifest.files?.some(file => file.target === hostFile)) || project.lock.packages.some(item => item.files.some(file => file.target === hostFile))) throw new Error(`Un paquete administra ${hostFile}; usa --adapter files y carga el contexto mediante MCP`);
+    if (bundle.packages.some(item => normalizeManifest(item.manifest).spec.contributes.files.some(file => file.target === hostFile)) || project.lock.packages.some(item => item.files.some(file => file.target === hostFile))) throw new Error(`Un paquete administra ${hostFile}; usa --adapter files y carga el contexto mediante MCP`);
     const path = safeProjectPath(root, hostFile);
     const content = existsSync(path) ? readFileSync(path, "utf8") : "";
     const block = AGENT_ROUTER_BLOCK;

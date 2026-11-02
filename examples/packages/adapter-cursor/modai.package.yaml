@@ -1,0 +1,22 @@
+apiVersion: modai.dev/v1
+kind: Adapter
+metadata:
+  name: "@adapters/cursor"
+  version: 1.0.0
+  description: Conecta las capacidades MODAI con Cursor (reglas .mdc por paquete y gateway MCP). Ejemplo de que soportar un agente nuevo es un paquete de datos, no un cambio del Core.
+  license: MIT
+spec:
+  category: adapter
+  permissions:
+    - project.instructions
+  adapter:
+    id: cursor
+    description: Reglas en .cursor/rules/*.mdc y servidor MCP modai en .cursor/mcp.json.
+    targets:
+      rules:
+        mode: file
+        path: .cursor/rules/{package}-{rule}.mdc
+        header: "---\ndescription: {description}\nalwaysApply: false\n---"
+      mcp:
+        file: .cursor/mcp.json
+        pointer: mcpServers.modai

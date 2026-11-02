@@ -18,6 +18,7 @@ export function registerAdminAssets(
     "styles.css": "text/css; charset=utf-8",
     "main.js": "text/javascript; charset=utf-8",
     "theme.js": "text/javascript; charset=utf-8",
+    "favicon.svg": "image/svg+xml",
   })) {
     try {
       readFileSync(join(directory, name));

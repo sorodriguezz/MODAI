@@ -1,3 +1,4 @@
+import { manifestIdentity } from "@modai/core";
 import { Database } from "./database.js";
 import { AppError, invariant } from "@modai/contracts/errors";
 import { ContextService } from "./context-service.js";
@@ -75,8 +76,8 @@ export class BackupService {
     for (const item of snapshot.packages) {
       try {
         this.packages.publish({ manifest: item.manifest, files: item.files, signature: item.signature });
-        if (item.status === "deprecated") this.packages.deprecate(item.manifest.name, item.manifest.version, item.deprecatedMessage ?? "Versión deprecada");
-        if (item.status === "yanked") this.packages.yank(item.manifest.name, item.manifest.version, item.deprecatedMessage ?? "Versión retirada");
+        if (item.status === "deprecated") this.packages.deprecate(manifestIdentity(item.manifest).name, manifestIdentity(item.manifest).version, item.deprecatedMessage ?? "Versión deprecada");
+        if (item.status === "yanked") this.packages.yank(manifestIdentity(item.manifest).name, manifestIdentity(item.manifest).version, item.deprecatedMessage ?? "Versión retirada");
         importedPackages++;
       } catch (error) {
         if (error instanceof AppError && error.code === "PACKAGE_EXISTS") skipped++;

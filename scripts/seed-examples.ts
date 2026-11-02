@@ -2,6 +2,7 @@ import { readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ApiClient } from "@modai/sdk";
 import { loadPackageSource } from "@sorodriguez/modai/package-source";
+import { manifestIdentity } from "@modai/core";
 
 const server = process.env.MODAI_SERVER ?? "http://localhost:8787";
 const api = new ApiClient(server, process.env.MODAI_API_TOKEN);
@@ -14,7 +15,7 @@ for (const entry of readdirSync(root, { withFileTypes: true }).filter((item) => 
     process.stdout.write(`Publicado ${item.name}@${item.version}\n`);
   } catch (error) {
     const message = (error as Error).message;
-    if (message.includes("PACKAGE_EXISTS")) process.stdout.write(`Ya existe ${input.manifest.name}@${input.manifest.version}\n`);
+    if (message.includes("PACKAGE_EXISTS")) process.stdout.write(`Ya existe ${manifestIdentity(input.manifest).name}@${manifestIdentity(input.manifest).version}\n`);
     else throw error;
   }
 }

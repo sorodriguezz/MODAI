@@ -21,11 +21,21 @@ import { loadPackageSource } from "./package-source.js";
 import { auditHarness, createHarness } from "./harness-tools.js";
 import { generateSigningKey, scaffoldPackage, signPackage } from "./package-authoring.js";
 import { permissionSchema, signaturePolicySchema, publishSchema, parseInput } from "@modai/contracts/schemas";
-import { publicKeyFingerprint, requiredTargetPermission } from "@modai/contracts/security";
+import { publicKeyFingerprint } from "@modai/contracts/security";
 import { readAccessToken } from "./credentials.js";
 import { effectiveConnection } from "./connection.js";
 import { registerAgentCommands, commaList } from "./agent-commands.js";
 import { registerClientCommands } from "./client-commands.js";
+import { isV1Project, loadV1Project, normalizeManifest as normalizeManifestSafe, validatePackage } from "@modai/core";
+import {
+  addV1, initV1, memoryV1, outdatedV1, publishV1, registerV1Commands, removeV1, scaffoldV1, searchV1, statusV1, syncV1, updateV1,
+} from "../v1/commands.js";
+import { registryFromArgument, registrySource, runSync, summarize, defaultLocalRegistry } from "../v1/runtime.js";
+import { CompositeRegistry } from "@modai/core/registry";
+import { createRegistries } from "@modai/core/workspace";
+import { tokenFor } from "../v1/runtime.js";
+
+const v1 = () => isV1Project(process.cwd());
 
 function splitPackageSpec(spec: string): { name: string; range: string } {
   const separator = spec.lastIndexOf("@");
@@ -44,7 +54,7 @@ function print(value: unknown): void {
 }
 
 const program = new Command();
-program.name("modai").description("CLI de ModularAI").version("0.5.0");
+program.name("modai").description("MODAI: gestor de paquetes y capacidades extensibles para agentes de IA").version("0.6.0");
 
 program
   .command("connect")
@@ -72,16 +82,7 @@ program.command("whoami").description("Muestra la identidad y los proyectos auto
   print({ server: connection.server, ...await api.session(), projects: await api.projects() });
 });
 
-program
-  .command("init")
-  .description("Inicializa ModularAI en el proyecto actual")
-  .option("--profile <package>", "Perfil instalable, por ejemplo @profiles/backend-architect")
-  .option("--server <url>", "Servidor específico para este proyecto")
-  .option("--project <id>", "Conecta un proyecto existente autorizado")
-  .option("--name <name>", "Nombre del proyecto")
-  .option("--organization <id>", "Organización del proyecto nuevo")
-  .option("--allow <permissions>", "Permisos de instalación", commaList)
-  .action(async (options: { profile?: string; server?: string; project?: string; name?: string; organization?: string; allow?: string[] }) => {
+async function initLegacy(options: { profile?: string; server?: string; project?: string; name?: string; organization?: string; allow?: string[] }): Promise<void> {
     const paths = projectPaths();
     if (existsSync(paths.manifest)) throw new Error("El proyecto ya está inicializado.");
     const connection = effectiveConnection(options.server);
@@ -106,14 +107,36 @@ program
     writeYaml(paths.lock, result.lock);
     writeYaml(paths.config, { schemaVersion: 1, server: connection.server, projectId: manifest.projectId });
     print(`Proyecto ${manifest.projectId} inicializado${options.profile ? ` con ${options.profile}` : ""}.`);
+  }
+
+program
+  .command("init")
+  .description("Inicializa MODAI en el proyecto actual (modai.yaml); no requiere servidor")
+  .option("--name <name>", "Nombre del proyecto")
+  .option("--registry <url|path>", "Registry de paquetes: URL de un servidor MODAI o carpeta local (repetible)", commaList)
+  .option("--adapter <ids>", "Adaptadores activos, por ejemplo agent-skills,agents-md,claude-code,mcp", commaList)
+  .option("--profile <package>", "Perfil o paquete inicial, por ejemplo @profiles/fullstack-quality")
+  .option("--allow <permissions>", "Permisos de instalación concedidos en este equipo", commaList)
+  .option("--memory <mode>", "Memoria: local, remote u off")
+  .option("--project <id>", "Proyecto del servidor central cuya memoria se comparte (memoria remota)")
+  .option("--server <url>", "Servidor MODAI específico para este proyecto")
+  .option("--organization <id>", "Organización del proyecto nuevo (solo --legacy)")
+  .option("--legacy", "Crea un proyecto con el formato 0.5 ligado al servidor (necesario para modai agent)")
+  .action(async (options: { profile?: string; server?: string; project?: string; name?: string; organization?: string; allow?: string[]; registry?: string[]; adapter?: string[]; memory?: string; legacy?: boolean }) => {
+    if (!options.legacy) return initV1(process.cwd(), options, print);
+    await initLegacy(options);
   });
 
 program
   .command("add")
-  .description("Añade una capacidad y sus dependencias")
-  .argument("<package>", "@scope/nombre[@rango]")
-  .option("--allow <permissions>", "Permisos de instalación", commaList)
-  .action(async (spec: string, options: { allow?: string[] }) => {
+  .description("Añade paquetes (y sus dependencias) al proyecto")
+  .argument("<packages...>", "@scope/nombre[@rango] o file:../ruta")
+  .option("--allow <permissions>", "Permisos de instalación concedidos en este equipo", commaList)
+  .option("--force", "Sobrescribe archivos administrados que fueron modificados")
+  .action(async (specs: string[], options: { allow?: string[]; force?: boolean }) => {
+    if (v1()) return addV1(process.cwd(), specs, options, print);
+    if (specs.length !== 1) throw new Error("Los proyectos 0.5 añaden un paquete por vez");
+    const spec = specs[0];
     const project = loadProject();
     const item = splitPackageSpec(spec);
     const next = structuredClone(project.manifest);
@@ -130,6 +153,7 @@ program
   .description("Retira una capacidad directa conservando archivos modificados")
   .argument("<package>", "@scope/nombre")
   .action(async (name: string) => {
+    if (v1()) return removeV1(process.cwd(), name, print);
     const project = loadProject();
     if (!(name in project.manifest.packages)) throw new Error(`${name} no es una dependencia directa del proyecto.`);
     const next = structuredClone(project.manifest);
@@ -142,9 +166,12 @@ program
 
 program
   .command("sync")
-  .description("Sincroniza el proyecto con manifest.yaml")
+  .description("Reconstruye el entorno exacto desde modai.yaml y modai.lock")
   .option("--allow <permissions>", "Permisos de instalación aprobados en este equipo", commaList)
-  .action(async (options: { allow?: string[] }) => {
+  .option("--frozen", "Falla si modai.lock no corresponde a modai.yaml (CI)")
+  .option("--force", "Sobrescribe archivos administrados que fueron modificados")
+  .action(async (options: { allow?: string[]; frozen?: boolean; force?: boolean }) => {
+    if (v1()) return syncV1(process.cwd(), options, print);
     const project = loadProject();
     const result = await synchronize(projectApi(project.manifest), project.paths.root, project.manifest, project.lock, (options.allow ?? []).map(value => permissionSchema.parse(value)));
     writeYaml(project.paths.lock, result.lock);
@@ -155,6 +182,7 @@ program
   .command("status")
   .description("Muestra el estado del proyecto")
   .action(() => {
+    if (v1()) return statusV1(process.cwd(), print);
     const project = loadProject();
     print({
       projectId: project.manifest.projectId,
@@ -165,12 +193,29 @@ program
     });
   });
 
-program
-  .command("registry")
-  .description("Lista paquetes del registro")
+const registryCommand = program.command("registry").description("Registries del proyecto y búsqueda de paquetes");
+registryCommand.command("list").description("Registries configurados en modai.yaml").action(() => print(loadV1Project().file.registries));
+registryCommand.command("add").argument("<name>").argument("<url-or-path>").description("Añade un registry (URL de servidor MODAI o carpeta local)").action(async (name: string, value: string) => {
+  const { report } = await runSync(process.cwd(), file => { if (file.registries.some(item => item.name === name)) throw new Error(`Ya existe el registry ${name}`); file.registries.push(registrySource(name, value, process.cwd())); });
+  print(`Registry ${name} añadido.\n${summarize(report)}`);
+});
+registryCommand.command("remove").argument("<name>").action(async (name: string) => {
+  const { report } = await runSync(process.cwd(), file => { file.registries = file.registries.filter(item => item.name !== name); });
+  print(`Registry ${name} retirado.\n${summarize(report)}`);
+});
+registryCommand
+  .command("packages")
+  .description("Lista paquetes disponibles")
   .option("--query <text>", "Filtro de texto")
-  .option("--all", "Incluye versiones retiradas")
-  .action(async (options: { query?: string; all?: boolean }) => {
+  .option("--all", "Incluye versiones retiradas (servidor)")
+  .option("--registry <url|path>", "Registry concreto")
+  .action(async (options: { query?: string; all?: boolean; registry?: string }) => {
+    if (options.registry || v1()) {
+      const project = v1() ? loadV1Project() : undefined;
+      const registry = options.registry ? registryFromArgument(options.registry, project) : new CompositeRegistry(createRegistries(project!.root, project!.file.registries, tokenFor));
+      print((await registry.list(options.query)).map(item => { const m = (() => { try { return normalizeManifestSafe(item.manifest); } catch { return undefined; } })(); return { name: item.name, version: item.version, kind: m?.kind, category: m?.spec.category, provides: m?.spec.provides.map(c => `${c.capability}@${c.version}`), description: m?.metadata.description, registry: item.registry }; }));
+      return;
+    }
     const connection = effectiveConnection();
     const packages = await new ApiClient(connection.server, connection.token).listPackages(options.query, options.all);
     print(packages.map(({ name, version, type, status, description, quality, signerFingerprint }) => ({ name, version, type, status, quality: quality?.score, signedBy: signerFingerprint, description })));
@@ -178,22 +223,28 @@ program
 
 program
   .command("publish")
-  .description("Publica un paquete desde una carpeta")
+  .description("Publica un paquete inmutable en un registry (servidor MODAI o carpeta local)")
   .argument("[directory]", "Carpeta del paquete", ".")
   .option("--key <private-key>", "Firma el paquete con una clave privada Ed25519")
-  .action(async (directory: string, options: { key?: string }) => {
-    const connection = effectiveConnection();
+  .option("--registry <name|url|path>", "Registry destino; por defecto el servidor conectado")
+  .action(async (directory: string, options: { key?: string; registry?: string }) => {
     let input = loadPackageSource(resolve(directory));
+    validatePackage(input.manifest, input.files);
     if (options.key) input = signPackage(input, readFileSync(resolve(options.key), "utf8"));
+    if (options.registry) return publishV1(resolve(directory), registryFromArgument(options.registry, v1() ? loadV1Project() : undefined), input, print);
+    const connection = effectiveConnection();
     const published = await new ApiClient(connection.server, connection.token).publish(input);
     print(`Publicado ${published.name}@${published.version} (${published.artifactId}), calidad ${published.quality?.score ?? "legacy"}/100${published.signerFingerprint ? ", firmado" : ""}.`);
   });
 
 program
   .command("search")
-  .description("Busca conocimiento relevante")
+  .description("Busca conocimiento relevante (Context Gateway)")
   .argument("<query>", "Consulta")
-  .action(async (query: string) => {
+  .option("--package <names>", "Limita a paquetes", commaList)
+  .option("--limit <n>", "Máximo de resultados")
+  .action(async (query: string, options: { package?: string[]; limit?: string }) => {
+    if (v1()) return searchV1(process.cwd(), query, options, print);
     const project = loadProject();
     const packageNames = project.lock.packages.map((item) => item.name);
     print(await projectApi(project.manifest).searchKnowledge(query, packageNames));
@@ -204,9 +255,10 @@ program
   .description("Guarda una memoria del proyecto")
   .argument("<content>", "Contenido")
   .option("--kind <kind>", "Tipo de memoria", "note")
-  .option("--scope <scope>", "project, organization o session", "project")
+  .option("--scope <scope>", "project, user (v1), organization o session (servidor)", "project")
   .option("--session <id>", "Identificador de sesión")
   .action(async (content: string, options: { kind: string; scope: string; session?: string }) => {
+    if (v1()) return memoryV1(process.cwd(), "remember", content, options, print);
     const project = loadProject();
     const memory = await projectApi(project.manifest).remember({
       projectId: project.manifest.projectId,
@@ -223,6 +275,7 @@ program
   .description("Recupera memorias del proyecto")
   .argument("<query>", "Consulta")
   .action(async (query: string) => {
+    if (v1()) return memoryV1(process.cwd(), "recall", query, {}, print);
     const project = loadProject();
     print(await projectApi(project.manifest).recall(project.manifest.projectId, query));
   });
@@ -231,6 +284,7 @@ program
   .command("memories")
   .description("Lista las memorias del proyecto")
   .action(async () => {
+    if (v1()) return memoryV1(process.cwd(), "list", undefined, {}, print);
     const project = loadProject();
     print(await projectApi(project.manifest).listMemories(project.manifest.projectId));
   });
@@ -243,6 +297,7 @@ program
   .option("--kind <kind>")
   .option("--scope <scope>")
   .action(async (id: string, content: string, options: { kind?: string; scope?: string }) => {
+    if (v1()) throw new Error("En proyectos v1 con memoria local, elimina la memoria con 'modai forget' y crea una nueva con 'modai remember'");
     const project = loadProject();
     print(await projectApi(project.manifest).updateMemory(id, { content, kind: options.kind, scope: options.scope }));
   });
@@ -252,6 +307,7 @@ program
   .description("Elimina una memoria por ID")
   .argument("<id>")
   .action(async (id: string) => {
+    if (v1()) return memoryV1(process.cwd(), "forget", id, {}, print);
     const project = loadProject();
     await projectApi(project.manifest).deleteMemory(id);
     print(`Memoria eliminada: ${id}`);
@@ -259,8 +315,10 @@ program
 
 program
   .command("update")
-  .description("Actualiza dependencias dentro de los rangos del manifiesto")
-  .action(async () => {
+  .description("Actualiza dependencias dentro de los rangos de modai.yaml")
+  .argument("[packages...]", "Paquetes a actualizar; por defecto todos")
+  .action(async (names: string[] = []) => {
+    if (v1()) return updateV1(process.cwd(), names, print);
     const project = loadProject();
     const before = new Map(project.lock.packages.map((item) => [item.name, item.version]));
     const result = await synchronize(projectApi(project.manifest), project.paths.root, project.manifest, project.lock);
@@ -271,8 +329,9 @@ program
 
 program
   .command("outdated")
-  .description("Compara el lock con las versiones activas del registro")
+  .description("Compara el lock con las versiones disponibles en los registries")
   .action(async () => {
+    if (v1()) return outdatedV1(process.cwd(), print);
     const project = loadProject();
     const available = await projectApi(project.manifest).listPackages();
     const rows = project.lock.packages.map((locked) => {
@@ -290,6 +349,7 @@ program
   .argument("<range>")
   .action(async (name: string, range: string) => {
     if (!semver.validRange(range)) throw new Error(`Rango SemVer inválido: ${range}`);
+    if (v1()) { const { report } = await runSync(process.cwd(), file => { file.overrides[name] = range; }); print(`Override aplicado: ${name}@${range}\n${summarize(report)}`); return; }
     const project = loadProject();
     const next = structuredClone(project.manifest);
     next.overrides = { ...(next.overrides ?? {}), [name]: range };
@@ -339,20 +399,27 @@ program
 
 const packageCommand = program.command("package").description("Herramientas de autoría de paquetes");
 packageCommand.command("scaffold")
+  .description("Crea un paquete con la especificación v1")
   .argument("<directory>")
   .requiredOption("--name <name>", "@scope/name")
-  .option("--type <type>", `Tipo: ${PACKAGE_TYPES.join(", ")}`, "skill")
-  .action((directory: string, options: { name: string; type: string }) => {
-    if (!PACKAGE_TYPES.includes(options.type as PackageType)) throw new Error(`Tipo inválido: ${options.type}`);
-    print(`Paquete creado en ${scaffoldPackage(directory, options.name, options.type as PackageType)}`);
+  .option("--kind <kind>", "package, profile o adapter", "package")
+  .option("--category <category>", "Categoría informativa: frontend, testing, iot... (el Core no la interpreta)")
+  .option("--with-tool", "Incluye una herramienta ejecutable de ejemplo")
+  .option("--type <type>", `Formato 0.5 (obsoleto): ${PACKAGE_TYPES.join(", ")}`)
+  .action((directory: string, options: { name: string; kind?: string; category?: string; withTool?: boolean; type?: string }) => {
+    if (options.type) {
+      if (!PACKAGE_TYPES.includes(options.type as PackageType)) throw new Error(`Tipo inválido: ${options.type}`);
+      print(`Paquete 0.5 creado en ${scaffoldPackage(directory, options.name, options.type as PackageType)}`);
+      return;
+    }
+    print(`Paquete creado en ${scaffoldV1(directory, options)}\nValida con: modai package validate ${directory}`);
   });
 packageCommand.command("validate")
   .argument("[directory]", "Carpeta del paquete", ".")
   .action((directory: string) => {
     const input = loadPackageSource(resolve(directory));
     parseInput(publishSchema, input);
-    if (!semver.valid(input.manifest.version)) throw new Error("Versión SemVer inválida");
-    for (const rule of input.manifest.files ?? []) { const permission = requiredTargetPermission(rule.target); if (permission && !input.manifest.permissions?.includes(permission)) throw new Error(`Declara el permiso ${permission}`); }
+    validatePackage(input.manifest, input.files);
     const quality = analyzePackageQuality(input.manifest, input.files);
     print(quality);
     if (quality.findings.some((item) => item.severity === "error")) process.exitCode = 1;
@@ -413,6 +480,7 @@ adminCommand.command("create-organization").argument("<name>").action(async name
 adminCommand.command("trust-publisher").argument("<public-key>").option("--label <label>","Nombre del publicador","publisher").action(async (path,options)=>{const c=effectiveConnection();print(await new ApiClient(c.server,c.token).registerPublisher(readFileSync(resolve(path),"utf8"),options.label,true));});
 program.command("trust").argument("<public-key>","Clave pública Ed25519 que se autoriza en este equipo").action(path=>{const config=loadClientConfig();if(!config)throw new Error("Conecta primero la CLI");const fingerprint=publicKeyFingerprint(readFileSync(resolve(path),"utf8"));config.trustedPublishers=[...new Set([...(config.trustedPublishers??[]),fingerprint])];saveClientConfig(config);print({trustedPublisher:fingerprint});});
 program.command("signatures").argument("<policy>","optional, signed o trusted").action(value=>{const config=loadClientConfig();if(!config)throw new Error("Conecta primero la CLI");config.signaturePolicy=signaturePolicySchema.parse(value);saveClientConfig(config);print({signaturePolicy:config.signaturePolicy});});
+registerV1Commands(program, print);
 registerAgentCommands(program, () => {let project:ReturnType<typeof loadProject>|undefined;try{project=loadProject()}catch{}return effectiveConnection(project?.manifest.server)}, print);
 
 registerClientCommands(program, () => {

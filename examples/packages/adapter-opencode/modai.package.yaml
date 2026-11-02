@@ -1,0 +1,24 @@
+apiVersion: modai.dev/v1
+kind: Adapter
+metadata:
+  name: "@adapters/opencode"
+  version: 1.0.0
+  description: Conecta las capacidades MODAI con OpenCode (reglas e índice en AGENTS.md y gateway MCP en opencode.json). Las skills quedan disponibles en .agents/skills con el adaptador agent-skills y como recursos MCP.
+  license: MIT
+spec:
+  category: adapter
+  permissions:
+    - project.instructions
+  adapter:
+    id: opencode
+    description: AGENTS.md con bloques administrados y servidor MCP local en opencode.json.
+    targets:
+      rules: { mode: block, file: AGENTS.md }
+      index: { mode: block, file: AGENTS.md }
+      mcp:
+        file: opencode.json
+        pointer: mcp.modai
+        value:
+          type: local
+          command: [modai-mcp, --project, .]
+          enabled: true

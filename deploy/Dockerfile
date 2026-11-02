@@ -30,10 +30,14 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/contracts/package.json ./packages/contracts/package.json
+COPY packages/sdk/package.json ./packages/sdk/package.json
+COPY packages/core/package.json ./packages/core/package.json
 COPY apps/server/package.json ./apps/server/package.json
-RUN npm ci --omit=dev --ignore-scripts --workspace @modai/server --workspace @modai/contracts
+RUN npm ci --omit=dev --ignore-scripts --workspace @modai/server --workspace @modai/contracts --workspace @modai/sdk --workspace @modai/core
 COPY --from=build --chown=node:node /app/node_modules/better-sqlite3/build ./node_modules/better-sqlite3/build
 COPY --from=build --chown=node:node /app/packages/contracts/dist ./packages/contracts/dist
+COPY --from=build --chown=node:node /app/packages/sdk/dist ./packages/sdk/dist
+COPY --from=build --chown=node:node /app/packages/core/dist ./packages/core/dist
 COPY --from=build --chown=node:node /app/apps/server/dist ./apps/server/dist
 COPY --from=build --chown=node:node /app/apps/admin/dist ./apps/admin/dist
 RUN mkdir -p /app/data /app/artifacts && chown -R node:node /app/data /app/artifacts

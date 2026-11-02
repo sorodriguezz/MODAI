@@ -1,5 +1,22 @@
 # Cambios
 
+## 0.6.0
+
+Implementa [ADR-004](docs/architecture/ADR-004-package-platform.md): MODAI como plataforma de paquetes y capacidades extensibles.
+
+- **Especificación de paquetes v1** (`apiVersion: modai.dev/v1`): `kind` (Package, Profile, Adapter), `category` libre, `provides`/`requires`/`optional`/`conflicts` versionados, permisos ampliados, `contributes` (skills, rules, knowledge, tools, mcpServers, agents, files), `entrypoints`, `include` y `compatibility`. Los manifiestos 0.5 se normalizan al leerse.
+- **Nuevo `@modai/core`** independiente del servidor: resolvedor de dependencias y capacidades, registries (`LocalRegistry` de carpeta, `HttpRegistry`, dependencias `file:`), adaptadores declarativos, installer reversible con bloques y entradas JSON administrados, store verificable, Context Gateway BM25 con procedencia y memoria local por ámbito.
+- **Proyecto `modai.yaml` + `modai.lock`** con integridad SHA-256 por paquete, lock determinista y `modai sync --frozen`.
+- **Instalar no es autorizar**: `modai grant/revoke/permissions`; herramientas de paquetes ejecutadas sin shell, con validación de entrada, límites y entorno mínimo, ligadas a la integridad.
+- **Adaptadores** integrados como datos (`agent-skills`, `agents-md`, `claude-code`, `mcp`) y como paquetes (`@adapters/cursor`, `@adapters/opencode`).
+- **Gateway MCP v1**: conocimiento por fragmentos, memoria, capacidades, skills como recursos y herramientas/servidores MCP autorizados.
+- CLI: `init` sin servidor, `add` múltiple y `file:`, `capabilities`, `providers`, `provider`, `tools`, `context`, `adapter`, `registry add/list/remove/packages`, `publish --registry`, `package scaffold --kind/--category/--with-tool`, `migrate`. `init --legacy` conserva el formato 0.5.
+- Servidor: usa el resolvedor y validador del Core, acepta manifiestos v1, `/api/v1/capabilities` expone contratos y filtra por `?capability=`, `/api/v1/packages?name=`; composición de agentes basada en contribuciones, no en tipos.
+- Panel web con inicio de sesión por usuario y contraseña, primer administrador protegido por el secreto de arranque, gestión de usuarios y rediseño de la interfaz.
+- Paquetes de referencia: `@patterns/frontend-architecture`, `@architecture/decision-records`, `@testing/playwright`, `@testing/regression`, `@profiles/fullstack-quality`.
+- Pruebas de aceptación: un paquete externo de regresión se crea, publica, instala, conecta por MCP y ejecuta sin modificar el Core.
+- Cambios incompatibles: `modai registry --query` pasa a `modai registry packages --query`; `modai init` crea proyectos v1; `POST /api/v1/resolve` puede responder `409 CAPABILITY_UNSATISFIED`.
+
 ## 0.5.0
 
 - Nombre público del CLI en npm: `@sorodriguez/modai`; comandos `modai` y `modai-mcp`.

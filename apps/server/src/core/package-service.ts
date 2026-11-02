@@ -8,8 +8,10 @@ import { assertSafeRelativePath, requiredTargetPermission, sha256 } from "@modai
 import { publicKeyFingerprint, signaturePayload, verifyEd25519 } from "@modai/contracts/security";
 import { parseInput, publishSchema } from "@modai/contracts/schemas";
 import { analyzePackageQuality } from "@modai/contracts/package-quality";
+import { manifestIdentity, normalizeManifest, resolve as resolveGraph, validatePackage, type Candidate } from "@modai/core";
 import {
   PACKAGE_TYPES,
+  isV1Manifest,
   type ArtifactFile,
   type PackageManifest,
   type PackageRecord,
@@ -116,7 +118,11 @@ export class PackageService {
 
   publish(input: PublishPackageInput): PackageRecord {
     parseInput(publishSchema, input);
-    this.validateManifest(input.manifest, input.files);
+    // Legacy manifests keep their historical checks; v1 manifests use the shared Core validator.
+    if (isV1Manifest(input.manifest)) validatePackage(input.manifest, input.files);
+    else this.validateManifest(input.manifest as PackageManifest, input.files);
+    const normalized = normalizeManifest(input.manifest);
+    const identity = manifestIdentity(input.manifest);
     invariant(this.signaturePolicy === "optional" || Boolean(input.signature), 400, "SIGNATURE_REQUIRED", "El servidor exige paquetes firmados");
     const { manifest, files } = input;
     const quality = analyzePackageQuality(manifest, files);
@@ -135,8 +141,8 @@ export class PackageService {
     }
     const exists = this.db.connection
       .prepare("SELECT 1 AS found FROM packages WHERE name = ? AND version = ?")
-      .get(manifest.name, manifest.version);
-    invariant(!exists, 409, "PACKAGE_EXISTS", `${manifest.name}@${manifest.version} ya existe y es inmutable`);
+      .get(identity.name, identity.version);
+    invariant(!exists, 409, "PACKAGE_EXISTS", `${identity.name}@${identity.version} ya existe y es inmutable`);
 
     const packageCount = this.db.connection.prepare("SELECT COUNT(*) AS n FROM packages").get() as { n: number };
     invariant(packageCount.n < 20000, 429, "PACKAGE_QUOTA", "Cuota de versiones publicadas alcanzada");
@@ -163,10 +169,10 @@ export class PackageService {
           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
         `)
         .run(
-          manifest.name,
-          manifest.version,
-          manifest.type,
-          manifest.description,
+          identity.name,
+          identity.version,
+          normalized.spec.category,
+          normalized.metadata.description,
           JSON.stringify(manifest),
           artifactId,
           now,
@@ -181,8 +187,8 @@ export class PackageService {
       }
 
       const byPath = new Map(files.map((file) => [file.path, file]));
-      for (const rule of manifest.knowledge ?? []) {
-        const file = byPath.get(rule.source)!;
+      for (const rule of normalized.spec.contributes.knowledge) {
+        const file = byPath.get(rule.path)!;
         const content = Buffer.from(file.content, "base64").toString("utf8");
         const id = randomUUID();
         const tags = rule.tags ?? [];
@@ -192,10 +198,10 @@ export class PackageService {
               (id, package_name, package_version, title, content, tags_json, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           `)
-          .run(id, manifest.name, manifest.version, rule.title, content, JSON.stringify(tags), now, now);
+          .run(id, identity.name, identity.version, rule.title, content, JSON.stringify(tags), now, now);
         connection
           .prepare("INSERT INTO knowledge_fts (id, package_name, title, content, tags) VALUES (?, ?, ?, ?, ?)")
-          .run(id, manifest.name, rule.title, content, tags.join(" "));
+          .run(id, identity.name, rule.title, content, tags.join(" "));
       }
       connection.exec("COMMIT");
     } catch (error) {
@@ -205,79 +211,21 @@ export class PackageService {
       rmSync(artifactPath, { force: true });
       throw error;
     }
-    return this.get(manifest.name, manifest.version);
+    return this.get(identity.name, identity.version);
   }
 
-  resolve(request: ResolveRequest): ResolvedPackage[] {
+  /** Dependency and capability resolution, shared with the CLI through @modai/core. */
+  async resolve(request: ResolveRequest): Promise<ResolvedPackage[]> {
     invariant(Array.isArray(request.packages) && request.packages.length > 0, 400, "INVALID_RESOLVE_REQUEST", "packages es obligatorio");
-    type Requirement = { name: string; range: string; chain: string[] };
-    let attempts = 0;
-    const initial: Requirement[] = request.packages.map((item) => ({ name: item.name, range: item.range ?? "*", chain: [] }));
-
-    const solve = (
-      pending: Requirement[],
-      selected: Map<string, PackageRecord>,
-      constraints: Map<string, string[]>,
-    ): Map<string, PackageRecord> => {
-      invariant(++attempts <= 5000 && pending.length <= 1000 && selected.size <= 200, 422, "RESOLUTION_LIMIT", "La resolución excede el presupuesto; reduce dependencias o fija versiones");
-      if (!pending.length) return selected;
-      const [requirement, ...rest] = pending;
-      invariant(requirement.chain.length <= 64, 422, "RESOLUTION_LIMIT", "La cadena de dependencias es demasiado profunda");
-      invariant(PACKAGE_NAME.test(requirement.name), 400, "INVALID_PACKAGE_NAME", `Nombre de paquete inválido: ${requirement.name}`);
-      if (requirement.chain.includes(requirement.name)) {
-        throw new AppError(409, "DEPENDENCY_CYCLE", `Ciclo de dependencias: ${[...requirement.chain, requirement.name].join(" -> ")}`);
-      }
-
-      const nextConstraints = new Map(constraints);
-      const overridden = request.overrides?.[requirement.name];
-      if (overridden) invariant(Boolean(semver.validRange(overridden)), 400, "INVALID_OVERRIDE", `Override inválido: ${requirement.name}@${overridden}`);
-      const ranges = [...(constraints.get(requirement.name) ?? []), overridden ?? (requirement.range || "*")];
-      nextConstraints.set(requirement.name, ranges);
-      const current = selected.get(requirement.name);
-      if (current) {
-        if (!ranges.every((range) => semver.satisfies(current.version, range))) {
-          throw new AppError(409, "DEPENDENCY_CONFLICT", `Conflicto para ${requirement.name}: ${ranges.join(", ")}`, { chain: requirement.chain });
-        }
-        return solve(rest, selected, nextConstraints);
-      }
-
-      const candidates = (this.db.connection
-        .prepare("SELECT * FROM packages WHERE name = ? AND status <> 'yanked'")
-        .all(requirement.name) as unknown as PackageRow[])
-        .filter((row) => ranges.every((range) => semver.satisfies(row.version, range)))
-        .sort((a, b) => semver.rcompare(a.version, b.version));
-      if (!candidates.length) {
-        throw new AppError(404, "DEPENDENCY_NOT_FOUND", `No hay versión de ${requirement.name} compatible con ${ranges.join(", ")}`, { chain: requirement.chain });
-      }
-
-      let lastError: unknown;
-      for (const candidate of candidates) {
-        const record = this.decorate(candidate);
-        const nextSelected = new Map(selected);
-        nextSelected.set(requirement.name, record);
-        const chain = [...requirement.chain, requirement.name];
-        const dependencies = Object.entries(record.manifest.dependencies ?? {}).map(([name, range]) => ({ name, range, chain }));
-        try {
-          return solve([...dependencies, ...rest], nextSelected, nextConstraints);
-        } catch (error) {
-          lastError = error;
-        }
-      }
-      throw lastError;
+    const source = {
+      versions: async (name: string): Promise<Array<Candidate<PackageRow>>> => {
+        if (!PACKAGE_NAME.test(name)) return [];
+        const rows = this.db.connection.prepare("SELECT * FROM packages WHERE name = ?").all(name) as unknown as PackageRow[];
+        return rows.map(row => ({ version: row.version, status: row.status as PackageRecord["status"], manifest: normalizeManifest(JSON.parse(row.manifest_json)), ref: row }));
+      },
     };
-
-    const selected = solve(initial, new Map(), new Map());
-    const ordered: PackageRecord[] = [];
-    const added = new Set<string>();
-    const append = (name: string): void => {
-      if (added.has(name)) return;
-      const item = selected.get(name)!;
-      for (const dependency of Object.keys(item.manifest.dependencies ?? {})) append(dependency);
-      added.add(name);
-      ordered.push(item);
-    };
-    for (const item of request.packages) append(item.name);
-    return ordered;
+    const resolution = await resolveGraph(source, { roots: request.packages, overrides: request.overrides });
+    return resolution.packages.map(node => this.decorate(node.ref));
   }
 
   getArtifact(id: string): { files: ArtifactFile[]; sha256: string } {
@@ -336,6 +284,7 @@ export class PackageService {
   }
 
   private validateManifest(manifest: PackageManifest, files: ArtifactFile[]): void {
+    invariant(!isV1Manifest(manifest), 400, "INVALID_MANIFEST", "Manifiesto v1 en validación legacy");
     invariant(manifest?.schemaVersion === 1, 400, "INVALID_MANIFEST", "schemaVersion debe ser 1");
     invariant(PACKAGE_NAME.test(manifest.name), 400, "INVALID_PACKAGE_NAME", "El nombre debe usar el formato @scope/nombre");
     invariant(Boolean(semver.valid(manifest.version)), 400, "INVALID_VERSION", "version debe ser SemVer");

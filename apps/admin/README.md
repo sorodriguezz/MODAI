@@ -1,7 +1,14 @@
 # Panel web MODAI
 
-Aplicación privada del monorepo. `src/index.html` define las secciones; `styles.css` y `theme.js` controlan la apariencia; `views/` separa paquetes, agentes, proyectos, memoria, accesos y conexión. `lib/` contiene API, iconos y funciones compartidas.
+Aplicación privada del monorepo, en JavaScript sin dependencias de runtime. El servidor la sirve en `/admin`, en el mismo origen que la API; la sesión usa una cookie `HttpOnly` (ver [docs/guides/ADMIN-PANEL.md](../../docs/guides/ADMIN-PANEL.md)).
 
-`npm run build -w @modai/admin` genera los assets en `dist/`. El servidor los sirve bajo `/admin` en el mismo origen que la API. Docker copia únicamente esos assets al runtime, sin dependencias del build web.
+- `src/index.html`: estructura base (pantalla de acceso, barra lateral, barra superior, diálogo y notificaciones).
+- `src/main.js`: arranque, inicio de sesión/instalación, navegación por hash (`#/paquetes…`) y menú del usuario.
+- `src/views/`: una sección por archivo (`dashboard`, `packages`, `agents`, `knowledge`, `projects`, `memories`, `runs`, `connect`, `users`, `access`, `audit`) más `auth` y `account`.
+- `src/lib/`: `api.js` (fetch con cabecera CSRF), `html.js` (plantillas que escapan todo por defecto), `ui.js` (diálogos, confirmaciones, toasts, formularios, esqueletos) e `icons.js`.
+- `src/state.js`: identidad actual, caché de datos, permisos por rol y normalización de manifiestos legados y `modai.dev/v1`.
+- `styles.css` y `theme.js`: tokens de color, tema claro/oscuro/sistema y diseño responsive.
 
-Ejecuta `npm run dev:admin` junto a `npm run dev` para reconstruir los cambios al guardar y recarga el navegador. Todo usa Node `>=26.13.0 <27`.
+La CSP es estricta (`script-src 'self'`): no uses scripts ni manejadores en línea; enlaza eventos con `addEventListener` o `delegate()` y construye HTML solo con la plantilla `html\`\``.
+
+`npm run build -w @modai/admin` genera los assets minificados en `dist/`. Ejecuta `npm run dev:admin` junto a `npm run dev` para reconstruir al guardar y recarga el navegador. Todo usa Node `>=26.13.0 <27`.

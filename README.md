@@ -1,46 +1,77 @@
-# MODAI · Capacidades compartidas para agentes de IA
+# MODAI · Paquetes y capacidades extensibles para agentes de IA
 
-MODAI (ModularAI) es un servidor ligero para **publicar, organizar y distribuir skills, harnesses, conocimiento y memoria** entre tus proyectos y agentes. En lugar de copiar instrucciones a mano en cada repositorio, las empaquetas, las versionas y las instalas con la CLI `modai`.
+MODAI (ModularAI) es un **gestor de paquetes para capacidades de IA**. Instala en tus proyectos conocimiento, skills, reglas, herramientas ejecutables, adaptadores y perfiles; resuelve sus dependencias **por contrato de capacidades**; los conecta con el agente que uses y los retira sin destruir tus cambios.
 
-Por ejemplo: publicas una skill de patrones de diseño una vez, la instalas en varios proyectos y permites que sus agentes consulten las mismas guías. Cada proyecto conserva sus propias decisiones en una memoria independiente.
+> MODAI no crece agregando funcionalidades a su Core. Crece con paquetes que el Core descubre, instala, configura y conecta. — [ADR-004](docs/architecture/ADR-004-package-platform.md)
 
-**El servidor no ejecuta modelos.** Docker aloja el registro, la API y el panel web. Ollama u otro runtime, el modelo y el agente se ejecutan en el equipo cliente. La búsqueda de texto funciona sin modelos ni GPU.
+```text
+                    Proyecto del desarrollador
+                 modai.yaml · modai.lock · agente
+                              │
+          MODAI CLI  ─────────┼──────────  modai-mcp (gateway)
+                              │
+ ┌─────────────────────────── MODAI Core ───────────────────────────┐
+ │ Package Manager · Dependency & Capability Resolver ·             │
+ │ Context Gateway (conocimiento + memoria) · Adapter System        │
+ └──────────────────────────────────────────────────────────────────┘
+        │ paquetes instalables (nunca código del Core)
+  Frontend · Backend · Testing · Arquitectura · Agentes · Harnesses
+  Memorias · Integraciones · Adaptadores (Claude Code, Cursor, …)
+        │
+  Registries: carpeta local/compartida · servidor MODAI (opcional)
+```
+
+El Core conoce contratos, no frameworks: no sabe qué es React, NestJS, SDD o Playwright. `@testing/regression` declara `requires: browser.automation@^1`; `@testing/playwright` la `provides`. Mañana otro paquete puede proporcionarla sin cambiar ni el Core ni el paquete de regresión.
+
+## Empezar en 1 minuto (sin servidor)
+
+```sh
+npm install -g @sorodriguez/modai
+cd mi-proyecto
+modai init --registry ~/modai-registry --adapter agent-skills,claude-code,mcp --allow project.instructions
+modai add @profiles/fullstack-quality       # o paquetes sueltos: @testing/regression, @patterns/frontend-architecture…
+modai capabilities
+modai grant @testing/playwright              # instalar no equivale a autorizar ejecución
+modai search "cómo ubicar el estado compartido"
+```
+
+Para tener el catálogo de ejemplo en tu registry local: `for d in examples/packages/*/; do modai publish "$d" --registry ~/modai-registry; done`.
+
+Qué obtienes:
+
+- **Reproducibilidad**: `modai.yaml` (lo pedido) + `modai.lock` (versiones, `integrity` SHA-256, proveedores y cada archivo administrado). `modai sync --frozen` reconstruye exactamente lo mismo en otro equipo o en CI.
+- **Reversibilidad**: `modai remove` retira solo lo que sigue intacto; tus ediciones se conservan y se informan.
+- **Seguridad**: herramientas y servidores MCP de paquetes se habilitan con `modai grant`, por equipo y ligados al contenido exacto. MODAI no es un sandbox y lo declara.
+- **Portabilidad**: cambiar de agente es cambiar `adapters` en `modai.yaml`. Integrados: `agent-skills`, `agents-md`, `claude-code`, `mcp`; nuevos agentes llegan como paquetes `kind: Adapter` (ver `@adapters/cursor`, `@adapters/opencode`).
+- **Contexto bajo demanda**: el gateway MCP entrega fragmentos de conocimiento con procedencia, memoria del proyecto y skills como recursos, sin cargar todo el catálogo en el prompt.
+
+Crear tu propio paquete — por ejemplo de pruebas de regresión — y publicarlo sin tocar MODAI: [guía de autoría](docs/guides/AUTHORING-PACKAGES.md) · [especificación v1](docs/spec/PACKAGE-SPEC-v1.md) · [migración desde 0.5](docs/guides/MIGRATION-0.6.md).
+
+## Servidor central (opcional)
+
+El servidor MODAI aporta un **registry privado**, memoria compartida por equipo, panel web con usuarios y roles, auditoría, backups, composición de agentes y workers. **El servidor no ejecuta modelos.** Docker aloja el registro, la API y el panel; Ollama u otro runtime, el modelo y el agente se ejecutan en el equipo cliente.
 
 ```text
 Servidor MODAI (Docker)                   Equipo cliente
 ┌───────────────────────────┐           ┌─────────────────────────────┐
-│ Catálogo y archivos       │  CLI      │ Proyecto y archivos locales │
-│ Skills y harnesses        │ ◄───────► │ Editor / agente             │
-│ Conocimiento y memoria    │  MCP/API  │ Ollama u otro runtime       │
-│ Panel de administración   │ ◄───────► │ Modelo local                │
+│ Registry y artefactos     │  CLI      │ Proyecto: modai.yaml / lock │
+│ Memoria compartida        │ ◄───────► │ Editor / agente             │
+│ Panel, usuarios, auditoría│  MCP/API  │ Ollama u otro runtime       │
+│ Agentes y cola de tareas  │ ◄───────► │ Modelo local                │
 └───────────────────────────┘           └─────────────────────────────┘
 ```
 
-## Qué puedes hacer
+## Agentes, MCP y cliente independiente
 
-- Componer perfiles con skills, metodologías, harnesses, adaptadores y conocimiento.
-- Publicar paquetes inmutables con versiones SemVer, dependencias y verificación SHA-256; firmarlos opcionalmente con Ed25519.
-- Instalar y actualizar capacidades en un proyecto, con un lockfile y protección de archivos modificados por el usuario.
-- Consultar conocimiento y guardar decisiones por proyecto desde la CLI o un cliente MCP.
-- Administrar documentos, API keys, auditoría y backups desde la web y la API.
-- Generar y auditar un harness con instrucciones, estado, alcance, verificación y continuidad entre sesiones.
-
-Una **skill** contiene instrucciones para una tarea concreta; un **harness** organiza cómo trabaja un agente; un **perfil** agrupa varios paquetes. Los paquetes de ejemplo son opcionales y el servidor puede funcionar con el catálogo vacío.
-
-## Agentes, MCP y cliente independiente · 0.5
-
-El servidor registra proyectos y compone agentes versionados con sus skills, herramientas y política de memoria. El cliente puede activarlos mediante archivos para su entorno, ejecutarlos con Ollama local o enviar tareas a un worker autorizado. El panel incluye agentes, proyectos y ejecuciones, además del selector Claro/Oscuro/Sistema.
+El servidor registra proyectos y compone agentes versionados con sus skills, herramientas y política de memoria. Este flujo usa proyectos en formato 0.5 (`modai init --legacy`):
 
 ```sh
-# Genera los paquetes del cliente, sin publicarlos en npm:
-npm run pack:client
-# En otro equipo: npm install -g ./dist/npm/sorodriguez-modai-0.5.0.tgz
-# Después de conectar e inicializar un proyecto con el catálogo de ejemplos:
+modai init --legacy --project ID_DEL_PROYECTO
 modai agent activate @agents/backend-reviewer --adapter agents-md --allow project.instructions
 modai agent run "Revisa las decisiones del proyecto" --model MODELO_LOCAL
 ```
 
-Consulta [agentes y capacidades](docs/guides/AGENTS-AND-CAPABILITIES.md) para instalación, contratos, MCP dinámico, permisos y workers; y la [migración a 0.5](docs/guides/MIGRATION-0.5.md) para actualizar un servidor existente. El único paquete destinado a npm es `@sorodriguez/modai`; incorpora el SDK y los contratos internos. Todavía debe publicarse en npm para instalarlo por nombre.
+Consulta [agentes y capacidades](docs/guides/AGENTS-AND-CAPABILITIES.md). El único paquete destinado a npm es `@sorodriguez/modai`; incorpora el Core, el SDK y los contratos internos.
 
 ## Una instancia central para todos tus proyectos
 
@@ -52,11 +83,11 @@ npm install -g @sorodriguez/modai
 modai connect https://modai.tu-dominio.cl
 # connect pide la API key con entrada oculta.
 cd mi-proyecto
-modai init --project ID_DEL_PROYECTO
-modai agent activate @agents/backend-reviewer --adapter agents-md --allow project.instructions
+modai init --project ID_DEL_PROYECTO   # el servidor queda como registry y la memoria se comparte con el equipo
+modai add @skills/design-patterns
 ```
 
-Si el repositorio ya contiene la configuración `.modai`, se usa `modai sync` en lugar de `init`. Los equipos autorizados comparten el contexto del mismo proyecto. El editor consulta capacidades por `modai-mcp`; la ejecución puede ser local o mediante un worker. Antes de publicar en npm puedes distribuir el único `.tgz` que genera `npm run pack:client`.
+Si el repositorio ya contiene `modai.yaml`, se usa `modai sync` en lugar de `init`. Los equipos autorizados comparten el contexto del mismo proyecto. El editor consulta capacidades por `modai-mcp`; la ejecución puede ser local o mediante un worker. Antes de publicar en npm puedes distribuir el único `.tgz` que genera `npm run pack:client`.
 
 La [guía del servidor central](docs/guides/CENTRAL-SERVER.md) cubre red local, dominio y HTTPS, usuarios, memoria, MCP y workers. La [guía de publicación](docs/guides/PUBLISH-CLI.md) explica cómo subir únicamente el CLI a npm.
 
@@ -98,7 +129,7 @@ docker compose -f deploy/compose.yaml ps
 
 La primera construcción instala dependencias, compila TypeScript y ejecuta las pruebas. El servicio aparecerá como `healthy` cuando termine el arranque.
 
-Abre [el panel de MODAI](http://127.0.0.1:8787/admin). Pulsa **Conexión**, pega el valor de `MODAI_API_TOKEN` y conecta. El endpoint [de salud](http://127.0.0.1:8787/health) permite comprobar versión y runtime sin autenticación.
+Abre [el panel de MODAI](http://127.0.0.1:8787/admin). La primera vez crea la cuenta de administrador (se pide `MODAI_API_TOKEN` como secreto de arranque, o defínela con `MODAI_ADMIN_USERNAME`/`MODAI_ADMIN_PASSWORD`); después inicia sesión con usuario y contraseña. Consulta la [guía del panel](docs/guides/ADMIN-PANEL.md). El endpoint [de salud](http://127.0.0.1:8787/health) permite comprobar versión y runtime sin autenticación.
 
 Por defecto el puerto solo es accesible desde este PC. MODAI exige credenciales desde el arranque: no existe administración anónima y revocar la última clave no abre el servidor.
 
@@ -153,7 +184,7 @@ modai update
 
 Ejecuta `modai init` una sola vez por proyecto. Para un proyecto ya inicializado usa `modai add`, incluso para añadir un perfil.
 
-La carpeta `.modai/` conserva el identificador del proyecto, sus dependencias directas y el lockfile con las versiones resueltas. La conexión global de la CLI se guarda en `~/.modai/client.yaml`; el token no se copia al repositorio del proyecto.
+`modai.yaml` conserva registries, dependencias directas, adaptadores y memoria; `modai.lock`, las versiones resueltas con su integridad. Versiona ambos. `.modai/store/` y `.modai/context-index.json` son caché reconstruible (ya excluida por `.modai/.gitignore`). La conexión global de la CLI se guarda en `~/.modai/client.yaml`; el token no se copia al repositorio del proyecto.
 
 Para que un agente consulte contexto y memoria durante sus sesiones, configura el servidor MCP `modai-mcp` en tu cliente. Consulta la [guía MCP](docs/guides/MCP.md). MCP y el runtime de modelos se ejecutan del lado del cliente.
 
@@ -189,13 +220,13 @@ Consulta [la guía de modelos y embeddings del cliente](docs/guides/CLIENT-MODEL
 ## Publicar tus propias skills o paquetes
 
 ```sh
-modai package scaffold ./mi-skill --name @skills/mi-skill --type skill
-# Edita modai.package.yaml y los archivos de contenido generados.
-modai package validate ./mi-skill
-modai publish ./mi-skill
+modai package scaffold ./mi-paquete --name @acme/mi-paquete --category testing --with-tool
+# Edita modai.package.yaml, skills/, knowledge/, rules/ y tools/.
+modai package validate ./mi-paquete
+modai publish ./mi-paquete --registry ~/modai-registry   # o la URL de tu servidor MODAI
 ```
 
-Cada paquete tiene un manifiesto `modai.package.yaml` que declara nombre, versión, tipo, dependencias, archivos a instalar y documentos a indexar. Puedes tomar como referencia [la skill de patrones de diseño](examples/packages/skill-design-patterns/modai.package.yaml).
+Cada paquete tiene un manifiesto `modai.package.yaml` (`apiVersion: modai.dev/v1`) que declara capacidades provistas y requeridas, dependencias, permisos y contribuciones. Referencias: [`@testing/regression`](examples/packages/testing-regression/modai.package.yaml), [`@testing/playwright`](examples/packages/testing-playwright/modai.package.yaml), [`@patterns/frontend-architecture`](examples/packages/patterns-frontend-architecture/modai.package.yaml) y [`@adapters/cursor`](examples/packages/adapter-cursor/modai.package.yaml). Los manifiestos 0.5 (`schemaVersion: 1`) siguen siendo válidos.
 
 Una versión publicada es inmutable: para cambiar su contenido incrementa su versión. Publicar y escribir conocimiento o memoria requiere un token `publisher` o `admin`; un token `reader` permite consultar e instalar paquetes.
 
@@ -243,7 +274,8 @@ Accede a `https://HOST:8443`, sustituyendo `HOST` por `MODAI_HOSTNAME`. Los clie
 MODAI/
 ├── deploy/                 # Dockerfile, Compose, Caddy y ejemplo de entorno
 ├── docs/
-│   ├── architecture/       # Decisiones y límites del sistema
+│   ├── architecture/       # Decisiones (ADR-004: plataforma de paquetes)
+│   ├── spec/               # Especificación de paquetes v1
 │   └── guides/             # API, MCP, administración y harness engineering
 ├── examples/packages/      # Catálogo opcional de paquetes publicables
 ├── scripts/                # Automatización de despliegue y carga de ejemplos
@@ -252,7 +284,8 @@ MODAI/
 │   │   └── var/            # Datos locales generados al arrancar sin Docker
 │   └── admin/              # Web: HTML, CSS, tema y vistas por sección
 ├── packages/
-│   ├── contracts/          # Contratos internos compartidos
+│   ├── core/               # Núcleo: resolvedor, capacidades, registries, adaptadores, gateway
+│   ├── contracts/          # Contratos internos y especificación v1
 │   ├── sdk/                # Cliente HTTP interno, incorporado al CLI
 │   └── cli/                # Único paquete npm: modai, MCP y worker
 ├── tests/                  # Pruebas de integración y comportamiento
@@ -279,6 +312,6 @@ Consulta el [índice de documentación](docs/README.md), la [API](docs/guides/AP
 
 ## Alcance actual
 
-MODAI tiene roles por API key, y organizaciones registradas, pero aún no ofrece cuentas de usuario, OIDC ni replicación entre servidores. El panel permite administrar el registro y su contexto; la ejecución de agentes pertenece a las herramientas cliente. La confianza del servidor en publicadores firmados la concede un administrador; los clientes pueden exigir también fingerprints autorizados localmente. Las API keys tienen proyectos, organizaciones y namespaces explícitos. El worker es un proceso opcional separado de la API HTTP.
+El Core funciona sin servidor; los registries de carpeta y el servidor central son intercambiables. El panel web usa cuentas de usuario con sesión; la CLI, MCP y workers usan API keys con roles, proyectos y namespaces. Aún no hay OIDC ni replicación entre servidores, y la composición local de agentes v1 (sin servidor) está planificada en la fase 06 de ADR-004. El panel permite administrar el registro y su contexto; la ejecución de agentes pertenece a las herramientas cliente. La confianza del servidor en publicadores firmados la concede un administrador; los clientes pueden exigir también fingerprints autorizados localmente. Las API keys tienen proyectos, organizaciones y namespaces explícitos. El worker es un proceso opcional separado de la API HTTP.
 
 La búsqueda semántica es opcional: el cliente calcula los embeddings y los envía a la API; MODAI solo los almacena y compara. Las rutas y variables de inferencia con Ollama se retiraron en 0.3.0.

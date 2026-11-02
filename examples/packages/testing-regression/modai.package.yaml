@@ -1,0 +1,59 @@
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@testing/regression"
+  version: 1.0.0
+  description: Procedimiento y herramientas de pruebas de regresión que dependen del contrato browser.automation, no de una herramienta concreta.
+  license: MIT
+  keywords: [testing, regression, baseline, quality]
+spec:
+  category: testing
+  provides:
+    - testing.regression.plan@1.0.0
+    - testing.regression.baseline@1.0.0
+    - testing.regression.report@1.0.0
+  requires:
+    - capability: browser.automation
+      version: ^1.0.0
+  optional:
+    - capability: ai.code-review
+  permissions:
+    - process.execute
+    - filesystem.read
+    - filesystem.write
+  contributes:
+    tools:
+      - name: regression_baseline
+        implements: testing.regression.baseline
+        description: Guarda una línea base aprobada o compara resultados de browser.automation contra ella y devuelve regresiones, nuevas fallas conocidas y correcciones.
+        command: node
+        args: ["${packageDir}/tools/baseline.mjs"]
+        inputSchema:
+          type: object
+          required: [mode, results]
+          properties:
+            mode: { type: string, enum: [save, compare] }
+            results:
+              type: object
+              description: Salida de la herramienta que implementa browser.automation
+              required: [tests]
+              properties:
+                tests:
+                  type: array
+                  maxItems: 5000
+                  items:
+                    type: object
+                    required: [title, status]
+                    properties:
+                      title: { type: string, maxLength: 1000 }
+                      status: { type: string, maxLength: 20 }
+                      file: { type: string, maxLength: 1000 }
+            baselinePath: { type: string, maxLength: 500, description: "Ruta relativa; por defecto .regression/baseline.json" }
+          additionalProperties: false
+  entrypoints:
+    skills: skills
+    knowledge: knowledge
+  include:
+    - tools
+  compatibility:
+    modai: ">=0.6.0"

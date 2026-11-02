@@ -1,0 +1,21 @@
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@patterns/frontend-architecture"
+  version: 1.0.0
+  description: Criterios para decidir arquitectura frontend (límites de componentes, estado, renderizado, rendimiento y accesibilidad) con verificación observable.
+  license: MIT
+  keywords: [frontend, react, angular, arquitectura, estado, accesibilidad]
+spec:
+  category: frontend
+  provides:
+    - frontend.architecture.guidance@1.0.0
+  optional:
+    - capability: browser.automation
+      version: ^1.0.0
+  entrypoints:
+    skills: skills
+    knowledge: knowledge
+    rules: rules
+  compatibility:
+    modai: ">=0.6.0"

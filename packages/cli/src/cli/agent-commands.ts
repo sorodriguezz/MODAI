@@ -9,6 +9,8 @@ import { executeAgent, type RuntimeOptions } from "../agent/runtime.js";
 import { workOnce } from "../agent/worker.js";
 import { installationPolicy } from "./installer.js";
 import { loadClientConfig, loadProject, readYaml } from "./config.js";
+import { isV1Project } from "@modai/core/project";
+import { capabilitiesV1 } from "../v1/commands.js";
 
 export const commaList = (value: string, previous: string[] = []) => [...previous, ...value.split(",").map(item => item.trim()).filter(Boolean)];
 function packageSpec(spec: string) { const i = spec.lastIndexOf("@"); return i > spec.indexOf("/") ? { name: spec.slice(0,i), range: spec.slice(i+1) } : { name: spec, range: "*" }; }
@@ -60,7 +62,10 @@ export function registerAgentCommands(program: Command, connect: () => { server:
   runs.command("list").action(async()=>print(await client().runs(loadProject().manifest.projectId)));
   runs.command("show").argument("<id>").action(async id=>print(await client().run(id)));
   runs.command("cancel").argument("<id>").action(async id=>print(await client().cancelRun(id)));
-  program.command("capabilities").action(async()=>print(await client().capabilities()));
+  program.command("capabilities").description("Capacidades: contratos provistos/requeridos, herramientas y skills del proyecto").action(async()=>{
+    if (isV1Project(process.cwd())) return capabilitiesV1(process.cwd(), print);
+    print(await client().capabilities());
+  });
   executionOptions(program.command("worker").description("Ejecutor opcional de tareas de un proyecto"))
     .requiredOption("--project <id>").option("--once", "Procesa una tarea y termina").option("--signature-policy <policy>","optional, signed o trusted", "trusted")
     .action(async options => {

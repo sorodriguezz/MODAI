@@ -1,23 +1,9 @@
 import { z } from "zod";
 import { AppError } from "./errors.js";
 
-export const packageNameSchema = z.string().regex(/^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/);
-export const permissionSchema = z.enum(["project.instructions", "project.files", "process.execute", "mcp.connect"]);
-export const signaturePolicySchema = z.enum(["optional", "signed", "trusted"]);
-const inputSchema = z.record(z.string(), z.unknown()).refine(value => value.type === "object" && JSON.stringify(value).length <= 32000, "inputSchema debe ser un objeto JSON Schema de hasta 32 kB").default({ type: "object", properties: {}, additionalProperties: false });
-export const capabilitySchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("tool"), name: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/), description: z.string().min(1).max(1000), inputSchema,
-    binding: z.enum(["knowledge.search", "memory.recall", "memory.remember", "packages.list"]).or(z.string().regex(/^local:[a-z][a-z0-9_-]{0,63}$/)) }).strict(),
-  z.object({ kind: z.literal("mcp"), name: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), description: z.string().min(1).max(1000),
-    command: z.string().min(1).max(1000), args: z.array(z.string().max(4000)).max(100).default([]), envKeys: z.array(z.string().regex(/^[A-Z_][A-Z0-9_]*$/)).max(30).default([]) }).strict(),
-]);
-export const agentDefinitionSchema = z.object({
-  instructions: z.string().min(1).max(50_000),
-  skills: z.array(packageNameSchema).max(100).default([]),
-  capabilities: z.array(z.string()).max(100).default([]),
-  memory: z.object({ read: z.array(z.enum(["project", "organization", "session"])).default(["project"]), write: z.boolean().default(false) }).strict().default({ read: ["project"], write: false }),
-  runtime: z.object({ provider: z.literal("ollama"), model: z.string().min(1).max(200).optional() }).strict().optional(),
-}).strict();
+export * from "./base-schemas.js";
+import { packageNameSchema, permissionSchema, capabilitySchema, agentDefinitionSchema } from "./base-schemas.js";
+import { packageManifestV1Schema } from "./spec-v1.js";
 export const manifestSchema = z.object({
   schemaVersion: z.literal(1), name: packageNameSchema, version: z.string().min(1).max(100),
   type: z.enum(["methodology", "harness", "knowledge", "skill", "memory", "tool", "adapter", "template", "mcp", "profile", "agent"]),
@@ -27,7 +13,9 @@ export const manifestSchema = z.object({
   permissions: z.array(permissionSchema).max(4).optional(), capabilities: z.array(capabilitySchema).max(100).optional(),
   agent: agentDefinitionSchema.optional(), configuration: z.record(z.string(), z.unknown()).optional(),
 }).strict();
-export const publishSchema = z.object({ manifest: manifestSchema, files: z.array(z.object({ path: z.string().min(1), content: z.string().max(36_000_000), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).max(2000),
+/** Publishing accepts legacy (schemaVersion: 1) and v1 (apiVersion: modai.dev/v1) manifests. */
+export const anyManifestSchema = z.union([manifestSchema, packageManifestV1Schema]);
+export const publishSchema = z.object({ manifest: anyManifestSchema, files: z.array(z.object({ path: z.string().min(1), content: z.string().max(36_000_000), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).max(2000),
   signature: z.object({ algorithm: z.literal("ed25519"), publicKey: z.string().max(4096), signature: z.string().max(256) }).strict().optional() }).strict();
 export const projectSchema = z.object({ id: z.string().min(1).max(200).optional(), name: z.string().min(1).max(200), organizationId: z.string().min(1).max(200).optional() }).strict();
 export const keySchema = z.object({ label: z.string().min(1).max(200), role: z.enum(["reader", "publisher", "worker", "admin"]), projectIds: z.array(z.string().min(1).max(200)).max(200).default([]), organizationIds: z.array(z.string().min(1).max(200)).max(100).default([]), packageScopes: z.array(z.string().regex(/^(\*|@[a-z0-9][a-z0-9._-]*)$/)).max(100).default([]) }).strict();

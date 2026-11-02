@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 const root = fileURLToPath(new URL("../", import.meta.url));
 mkdirSync(resolve(root, "dist"), { recursive: true });
 const copy = () => {
-  for (const file of ["index.html", "styles.css", "theme.js"])
+  for (const file of ["index.html", "styles.css", "theme.js", "favicon.svg"])
     copyFileSync(resolve(root, "src", file), resolve(root, "dist", file));
 };
 copy();
@@ -16,13 +16,15 @@ const options = {
   format: "esm",
   platform: "browser",
   target: "es2022",
+  minify: !process.argv.includes("--watch"),
+  legalComments: "none",
   logLevel: "info",
 };
 if (process.argv.includes("--watch")) {
   const bundler = await context(options);
   await bundler.watch();
   watch(resolve(root, "src"), { recursive: true }, (_event, name) => {
-    if (name && /\.(html|css)$|^theme\.js$/.test(name)) copy();
+    if (name && /\.(html|css|svg)$|^theme\.js$/.test(name)) copy();
   });
   console.log(
     "Panel: observando apps/admin/src; recarga /admin para ver cambios.",

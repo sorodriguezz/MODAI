@@ -47,7 +47,7 @@ Los volúmenes Docker conservan SQLite y los artefactos. Mantén una sola instan
 
 ## 2. El administrador registra el proyecto y sus accesos
 
-1. Abre `https://TU_DOMINIO/admin` e identifícate mediante **Conexión**.
+1. Abre `https://TU_DOMINIO/admin` e inicia sesión con tu usuario administrador (la primera vez, crea la cuenta con el secreto de arranque `MODAI_API_TOKEN`; ver [guía del panel](ADMIN-PANEL.md)).
 2. En **Proyectos**, crea el proyecto compartido.
 3. En **Conectar un cliente**, selecciona el proyecto y, opcionalmente, su agente.
 4. Pulsa **Dar acceso a un usuario**, indica su nombre o equipo y el uso permitido.

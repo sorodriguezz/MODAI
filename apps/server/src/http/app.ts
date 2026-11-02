@@ -14,10 +14,12 @@ import { analyzePackageQuality } from "@modai/contracts/package-quality";
 import { PackageService } from "../core/package-service.js";
 import type { MemoryInput, PublishPackageInput, ResolveRequest } from "@modai/contracts/types";
 import { AgentService } from "../core/agent-service.js";
+import { isAgentPackage, legacyCapabilities, manifestIdentity, normalizeManifest } from "@modai/core";
 import { RunService } from "../core/run-service.js";
 import { parseInput, publishSchema, projectSchema, keySchema, memorySchema, memoryQuerySchema, composeSchema, runSchema, resolveSchema } from "@modai/contracts/schemas";
 import type { SignaturePolicy } from "@modai/contracts/types";
 import { registerAdminAssets } from "./admin-assets.js";
+import { registerAuthRoutes, registerSessionAuth, seedInitialAdmin } from "./auth-routes.js";
 
 export interface AppOptions {
   databasePath: string;
@@ -30,6 +32,12 @@ export interface AppOptions {
   workerLeaseMs?: number;
   adminDirectory?: string | false;
   publicUrl?: string;
+  /** First admin for the panel; defaults to MODAI_ADMIN_USERNAME / MODAI_ADMIN_PASSWORD. `false` disables seeding. */
+  initialAdmin?: { username: string; password: string } | false;
+  sessionIdleMs?: number;
+  sessionMaxMs?: number;
+  loginRateLimitMax?: number;
+  loginDelayMs?: number;
 }
 
 type AuthenticatedRequest = FastifyRequest & { modaiIdentity?: Identity };
@@ -47,8 +55,9 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   const context = new ContextService(db);
   const agents = new AgentService(packages);
   const runs = new RunService(db, options.workerLeaseMs);
-  const auth = new AuthService(db, options.apiToken);
-  if (!auth.configured()) { db.close(); throw new AppError(500, "AUTH_NOT_CONFIGURED", "Configura MODAI_API_TOKEN o una API key admin activa antes de arrancar"); }
+  const auth = new AuthService(db, options.apiToken, { idleMs: options.sessionIdleMs, absoluteMs: options.sessionMaxMs });
+  try { await seedInitialAdmin(auth, new AuditService(db), options.initialAdmin); } catch (error) { db.close(); throw error; }
+  if (!auth.configured()) { db.close(); throw new AppError(500, "AUTH_NOT_CONFIGURED", "Configura MODAI_API_TOKEN, MODAI_ADMIN_USERNAME/MODAI_ADMIN_PASSWORD o una API key admin activa antes de arrancar"); }
   const audit = new AuditService(db);
   const metrics = new MetricsService();
   const backup = new BackupService(db, packages, context);
@@ -72,6 +81,7 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   app.addHook("onRequest", async (request) => {
     (request as AuthenticatedRequest).modaiIdentity = auth.authenticate(tokenFrom(request));
   });
+  registerSessionAuth(app, auth, publicUrl);
   app.addHook("onResponse", async (request, reply) => {
     metrics.observe(request.method, request.routeOptions.url ?? request.url, reply.statusCode);
   });
@@ -88,7 +98,7 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     });
   });
 
-  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.5.0", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
+  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.6.0", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
   app.get("/", async (_request, reply) => reply.redirect("/admin"));
   if (options.adminDirectory !== false) {
     try { registerAdminAssets(app, options.adminDirectory); }
@@ -102,10 +112,12 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     const identity = requireRole(request, "reader");
     return { label: identity.label, role: identity.role, projectIds: identity.projectIds, organizationIds: identity.organizationIds, packageScopes: identity.packageScopes };
   });
+  registerAuthRoutes(app, { auth, audit, publicUrl, loginRateLimitMax: options.loginRateLimitMax, loginDelayMs: options.loginDelayMs });
 
-  app.get<{ Querystring: { q?: string; type?: string; includeYanked?: string } }>("/api/v1/packages", async (request) => {
+  app.get<{ Querystring: { q?: string; type?: string; includeYanked?: string; name?: string } }>("/api/v1/packages", async (request) => {
     requireRole(request, "reader");
-    return { packages: packages.list(request.query.q, request.query.type, request.query.includeYanked === "true") };
+    const list = packages.list(request.query.name ?? request.query.q, request.query.type, request.query.includeYanked === "true");
+    return { packages: request.query.name ? list.filter(item => item.name === request.query.name) : list };
   });
   app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/package", async (request) => {
     requireRole(request, "reader");
@@ -118,14 +130,14 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   });
   app.post<{ Body: PublishPackageInput }>("/api/v1/packages", { bodyLimit: 36 * 1024 * 1024 }, async (request, reply) => {
     const input = parseInput(publishSchema, request.body);
-    auth.requirePublish(identityOf(request), input.manifest.name);
+    auth.requirePublish(identityOf(request), manifestIdentity(input.manifest).name);
     const published = packages.publish(input);
     record(request, "package.publish", `${published.name}@${published.version}`, { signed: Boolean(request.body.signature), quality: published.quality?.score });
     return reply.code(201).send({ package: published });
   });
   app.post<{ Body: ResolveRequest }>("/api/v1/resolve", async (request) => {
     requireRole(request, "reader");
-    return { packages: packages.resolve(parseInput(resolveSchema, request.body)) };
+    return { packages: await packages.resolve(parseInput(resolveSchema, request.body)) };
   });
   app.get<{ Params: { id: string } }>("/api/v1/artifacts/:id", async (request) => {
     requireRole(request, "reader");
@@ -269,20 +281,29 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     record(request, "organization.create", organization.id);
     return reply.code(201).send({ organization });
   });
-  app.get("/api/v1/agents", async request => { requireRole(request, "reader"); return { agents: packages.list(undefined, "agent") }; });
-  app.get("/api/v1/capabilities", async request => {
+  app.get("/api/v1/agents", async request => { requireRole(request, "reader"); return { agents: packages.list().filter(item => isAgentPackage(item.manifest)) }; });
+  app.get<{ Querystring: { capability?: string } }>("/api/v1/capabilities", async request => {
     requireRole(request, "reader");
-    return { capabilities: packages.list().flatMap(item => (item.manifest.capabilities ?? []).map(capability => ({ packageName: item.name, version: item.version, capability }))) };
+    const latest = packages.list();
+    // Legacy runtime capabilities plus v1 capability contracts (provides/requires) and tools.
+    const capabilities = latest.flatMap(item => legacyCapabilities(item.manifest).map(capability => ({ packageName: item.name, version: item.version, capability })));
+    const contracts = latest.flatMap(item => {
+      try {
+        const spec = normalizeManifest(item.manifest).spec;
+        return [{ packageName: item.name, version: item.version, category: spec.category, provides: spec.provides, requires: spec.requires, optional: spec.optional, tools: spec.contributes.tools.map(tool => ({ name: tool.name, implements: tool.implements })) }];
+      } catch { return []; }
+    }).filter(item => !request.query.capability || item.provides.some(provided => provided.capability === request.query.capability));
+    return { capabilities, contracts };
   });
   app.post("/api/v1/agents/compose", async request => {
     const input = parseInput(composeSchema, request.body);
     auth.requireProject(identityOf(request), input.projectId);
-    return { bundle: agents.compose(input.projectId, input.name, input.range, input.overrides) };
+    return { bundle: await agents.compose(input.projectId, input.name, input.range, input.overrides) };
   });
   app.post("/api/v1/runs", async (request, reply) => {
     const actor = requireRole(request, "publisher"), input = parseInput(runSchema, request.body);
     auth.requireProject(actor, input.projectId, true);
-    const bundle = agents.compose(input.projectId, input.name, input.range, input.overrides);
+    const bundle = await agents.compose(input.projectId, input.name, input.range, input.overrides);
     const run = runs.submit(bundle, input.task, actor.id, input.idempotencyKey);
     record(request, "run.submit", run.id, { projectId: run.projectId });
     return reply.code(201).send({ run });

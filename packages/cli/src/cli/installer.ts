@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import type { ArtifactFile, PackageRecord, SignaturePolicy, Permission } from "@modai/contracts/types";
+import { isV1Manifest, type ArtifactFile, type PackageManifest, type PackageRecord, type SignaturePolicy, type Permission } from "@modai/contracts/types";
 import { sha256, requiredTargetPermission, publicKeyFingerprint, signaturePayload, verifyEd25519 } from "@modai/contracts/security";
 import { ApiClient } from "@modai/sdk";
 import { loadClientConfig, type LockedPackage, type ProjectLock, type ProjectManifest } from "./config.js";
@@ -53,10 +53,12 @@ export async function synchronize(
   const desiredTargets = new Map<string, string>();
   const pending: Array<{ package: PackageRecord; target: string; path: string; content: Buffer; sha256: string; executable: boolean }> = [];
   for (const item of resolved) {
+    if (isV1Manifest(item.manifest)) throw new Error(`${item.name}@${item.version} usa la especificación v1; este proyecto usa el formato 0.5. Ejecuta 'modai migrate' para convertirlo.`);
+    const legacy = item.manifest as PackageManifest;
     const artifact = await api.artifact(item.artifactId);
     verifyPackage(item, artifact, trust.policy, trust.trustedPublishers);
     const sources = new Map(artifact.files.map((file) => [file.path, file]));
-    for (const rule of item.manifest.files ?? []) {
+    for (const rule of legacy.files ?? []) {
       const source = sources.get(rule.source);
       if (!source) throw new Error(`Artefacto inválido: ${item.name} no contiene ${rule.source}`);
       const content = Buffer.from(source.content, "base64");
@@ -64,7 +66,7 @@ export async function synchronize(
       const target = rule.target.replaceAll("\\", "/");
       const permission = requiredTargetPermission(target);
       for (const required of [permission, rule.executable ? "process.execute" : undefined] as Array<Permission | undefined>) {
-        if (required && (!item.manifest.permissions?.includes(required) || !granted.includes(required))) throw new Error(`La instalación requiere conceder ${required}: ${target}`);
+        if (required && (!legacy.permissions?.includes(required) || !granted.includes(required))) throw new Error(`La instalación requiere conceder ${required}: ${target}`);
       }
       const owner = desiredTargets.get(target.toLowerCase());
       if (owner && owner !== item.name) throw new Error(`Colisión: ${owner} y ${item.name} administran ${target}`);

@@ -1,0 +1,1 @@
+En código frontend: coloca el estado en el menor alcance que lo necesite, separa componentes de datos de componentes de presentación y no introduzcas un store global sin justificar qué rutas lo comparten.

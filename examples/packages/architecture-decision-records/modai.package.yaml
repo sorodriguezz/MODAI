@@ -1,0 +1,18 @@
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@architecture/decision-records"
+  version: 1.0.0
+  description: Analiza trade-offs y registra decisiones de arquitectura (ADR) con alternativas, consecuencias y criterios de revisión.
+  license: MIT
+  keywords: [arquitectura, adr, trade-offs, decisiones]
+spec:
+  category: architecture
+  provides:
+    - architecture.decision-records@1.0.0
+  entrypoints:
+    skills: skills
+    knowledge: knowledge
+    rules: rules
+  compatibility:
+    modai: ">=0.6.0"

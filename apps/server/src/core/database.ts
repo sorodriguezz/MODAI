@@ -176,6 +176,35 @@ export class Database {
     }
     this.ensureColumn("knowledge_vectors", "embedding_blob", "BLOB");
     this.connection.exec("CREATE INDEX IF NOT EXISTS idx_vector_space ON knowledge_vectors(model, dimensions)");
+    // Panel accounts: people log in with username/password; API keys remain for CLI, MCP and workers.
+    this.connection.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        display_name TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('reader','publisher','worker','admin')),
+        project_ids_json TEXT NOT NULL DEFAULT '[]',
+        organization_ids_json TEXT NOT NULL DEFAULT '[]',
+        package_scopes_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_login_at TEXT,
+        disabled_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS sessions (
+        token_hash TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        absolute_expires_at TEXT NOT NULL,
+        user_agent TEXT,
+        ip TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
+    `);
   }
 
   private ensureColumn(table: string, column: string, definition: string): void {

@@ -1,0 +1,40 @@
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@testing/playwright"
+  version: 1.0.0
+  description: Implementa la capacidad browser.automation ejecutando Playwright del proyecto y devolviendo resultados normalizados.
+  license: MIT
+  keywords: [testing, e2e, playwright, browser]
+spec:
+  category: testing
+  provides:
+    - capability: browser.automation
+      version: 1.0.0
+      description: "Herramienta browser_run_tests: entrada {grep?, project?, config?}; salida {passed, failed, skipped, tests:[{title, file, status, durationMs, error?}]}"
+  permissions:
+    - process.execute
+    - filesystem.read
+    - network
+  contributes:
+    tools:
+      - name: browser_run_tests
+        implements: browser.automation
+        description: Ejecuta las pruebas Playwright del proyecto (opcionalmente filtradas) y devuelve un resumen por prueba.
+        command: node
+        args: ["${packageDir}/tools/run-playwright.mjs"]
+        timeoutMs: 600000
+        readOnly: true
+        inputSchema:
+          type: object
+          properties:
+            grep: { type: string, maxLength: 500, description: "Expresión para filtrar pruebas por título" }
+            project: { type: string, maxLength: 100, description: "Proyecto de Playwright (navegador)" }
+            config: { type: string, maxLength: 500, description: "Ruta relativa del archivo de configuración" }
+          additionalProperties: false
+  entrypoints:
+    skills: skills
+  include:
+    - tools
+  compatibility:
+    modai: ">=0.6.0"
