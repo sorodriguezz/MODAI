@@ -1,6 +1,6 @@
 # Publicar solamente el CLI en npm
 
-El único workspace destinado a npm es `packages/cli` (`@sorodriguez/modai`). Su compilación incorpora el SDK y los contratos internos. El paquete incluye `modai`, `modai-mcp` y el worker; sus dependencias de ejecución son bibliotecas públicas. No necesita otros paquetes npm de MODAI.
+El único workspace destinado a npm es `packages/cli` (`@sorodriguez/modai`). Su compilación incorpora el Core, el SDK y los contratos internos. El paquete incluye `modai`, `modai-mcp` y el worker; sus dependencias de ejecución son bibliotecas públicas. No necesita otros paquetes npm de MODAI.
 
 `@modai/contracts`, `@modai/sdk`, `@modai/server`, `@modai/admin` y la raíz declaran `private: true`.
 
@@ -13,12 +13,12 @@ npm ci
 npm run test:client-package
 ```
 
-Esto compila y genera `dist/npm/sorodriguez-modai-0.5.0.tgz`, lo instala en un directorio temporal ajeno al monorepo y comprueba CLI, dos clientes con credenciales distintas, memoria compartida autorizada, aislamiento, activación, MCP y worker. `npm test` ejecuta además la suite de integración del servidor.
+Esto compila y genera `dist/npm/sorodriguez-modai-0.6.0.tgz`, lo instala en un directorio temporal ajeno al monorepo y comprueba CLI, dos clientes con credenciales distintas, memoria compartida autorizada, aislamiento, activación, MCP y worker. `npm test` ejecuta además la suite de integración del servidor.
 
 Revisa el contenido antes de publicar:
 
 ```sh
-npm publish ./dist/npm/sorodriguez-modai-0.5.0.tgz --access public --dry-run
+npm publish ./dist/npm/sorodriguez-modai-0.6.0.tgz --access public --dry-run
 ```
 
 El nombre público es `@sorodriguez/modai`. Publica con una cuenta que tenga permisos sobre el scope `@sorodriguez`. El SDK, los contratos y el servidor conservan sus nombres internos y no se publican.
@@ -28,10 +28,10 @@ El nombre público es `@sorodriguez/modai`. Publica con una cuenta que tenga per
 ```sh
 npm login
 npm whoami
-npm publish ./dist/npm/sorodriguez-modai-0.5.0.tgz --access public
+npm publish ./dist/npm/sorodriguez-modai-0.6.0.tgz --access public
 ```
 
-También puedes publicar desde el workspace; su `prepack` construye los contratos, SDK y CLI:
+También puedes publicar desde el workspace; su `prepack` construye contratos, SDK, Core y CLI:
 
 ```sh
 npm publish --workspace @sorodriguez/modai --access public
