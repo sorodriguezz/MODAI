@@ -1,0 +1,28 @@
+# Contexto de build para plataformas que construyen desde la raíz (Fly.io, Railway).
+# Mantener sincronizado con deploy/Dockerfile.dockerignore.
+node_modules
+dist
+.git
+.env
+var
+**/var
+deploy/.env
+deploy/.env.*
+*.log
+backups
+coverage
+.cache
+**/*.gguf
+**/*.safetensors
+**/*.pem
+**/*.key
+**/*.db
+**/*.sqlite*
+.modai
+
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+
+**/client.yaml
+**/local-models.yaml

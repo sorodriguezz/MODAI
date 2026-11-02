@@ -1,0 +1,48 @@
+# Fly.io. Despliega desde la raíz del repositorio:
+#   fly deploy . --config deploy/fly/fly.toml --dockerfile deploy/Dockerfile --ha=false
+# (o npm run deploy:fly). Guía: docs/guides/DEPLOY.md
+#
+# MODAI usa SQLite: debe existir UNA sola máquina con UN volumen. --ha=false evita la segunda
+# máquina que Fly crea por defecto; no escales con `fly scale count` por encima de 1.
+
+app = "modai-REEMPLAZAR"          # nombre único de tu app en Fly
+primary_region = "scl"             # Santiago; cambia según tu ubicación (fly platform regions)
+
+[env]
+  MODAI_HOST = "0.0.0.0"
+  MODAI_PORT = "8787"
+  MODAI_DATABASE_PATH = "/app/data/modularai.db"
+  MODAI_ARTIFACT_DIR = "/app/data/artifacts"   # un solo volumen para base y artefactos
+  MODAI_TRUST_PROXY = "true"                   # el proxy de Fly termina TLS y reenvía la IP del cliente
+  MODAI_SIGNATURE_POLICY = "optional"
+  # MODAI_PUBLIC_URL = "https://modai-REEMPLAZAR.fly.dev"
+  # Secretos (no aquí): fly secrets set MODAI_API_TOKEN=... MODAI_ADMIN_USERNAME=... MODAI_ADMIN_PASSWORD=...
+
+[[mounts]]
+  source = "modai_data"
+  destination = "/app/data"
+  initial_size = "1gb"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = "stop"      # se detiene sin tráfico; el volumen conserva los datos
+  auto_start_machines = true
+  min_machines_running = 0         # usa 1 si los workers necesitan la API siempre disponible
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "30s"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

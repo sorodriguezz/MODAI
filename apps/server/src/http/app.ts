@@ -32,6 +32,8 @@ export interface AppOptions {
   workerLeaseMs?: number;
   adminDirectory?: string | false;
   publicUrl?: string;
+  /** Proxy trust for client IP and protocol (rate limits, Secure cookies): true, hop count or IP/CIDR list. */
+  trustProxy?: boolean | number | string;
   /** First admin for the panel; defaults to MODAI_ADMIN_USERNAME / MODAI_ADMIN_PASSWORD. `false` disables seeding. */
   initialAdmin?: { username: string; password: string } | false;
   sessionIdleMs?: number;
@@ -49,7 +51,8 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('MODAI_PUBLIC_URL debe ser un origen HTTP(S), sin ruta ni credenciales');
     publicUrl = url.origin;
   }
-  const app = Fastify({ logger: options.logger ?? true, bodyLimit: 1024 * 1024 });
+  // Fastify accepts a hop count for trustProxy at runtime; its typings omit it.
+  const app = Fastify({ logger: options.logger ?? true, bodyLimit: 1024 * 1024, trustProxy: (options.trustProxy ?? false) as boolean });
   const db = new Database(options.databasePath);
   const packages = new PackageService(db, options.artifactDirectory, options.signaturePolicy, options.maxArtifactStorageBytes);
   const context = new ContextService(db);

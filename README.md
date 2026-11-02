@@ -211,6 +211,19 @@ Los datos viven en los volúmenes `modularai_modai-data` y `modularai_modai-arti
 
 Para la red local con HTTPS (CA interna de Caddy): `docker compose -f deploy/compose.yaml -f deploy/compose.lan.yaml up -d --build`. Para un dominio público: `npm run docker:public`. Ver la [guía del servidor central](docs/guides/CENTRAL-SERVER.md).
 
+### Dónde desplegarlo
+
+El servidor necesita un proceso permanente y disco persistente (SQLite y artefactos), por eso no funciona en plataformas serverless como Vercel. Hay configuraciones listas para:
+
+| Entorno | Arranque |
+|---|---|
+| **Raspberry Pi** (64 bits) | `docker compose -f deploy/compose.yaml -f deploy/compose.raspberry.yaml up -d --build` o `npm run docker:pi` |
+| **Fly.io** | `npm run deploy:fly` con `deploy/fly/fly.toml` |
+| **Railway** | Repositorio de GitHub + `deploy/railway/railway.json` + volumen en `/app/data` |
+| **VPS con dominio** | `npm run docker:public` |
+
+Paso a paso, respaldos (`deploy/backup.sh`) e imagen multi-arquitectura en GHCR: [guía de despliegue](docs/guides/DEPLOY.md).
+
 ## Si algo no funciona
 
 | Síntoma | Qué revisar |
@@ -230,7 +243,7 @@ Para la red local con HTTPS (CA interna de Caddy): `docker compose -f deploy/com
 - [Índice de documentación](docs/README.md) · [historial de cambios](CHANGELOG.md)
 - [ADR-004: plataforma de paquetes y capacidades](docs/architecture/ADR-004-package-platform.md) · [especificación v1](docs/spec/PACKAGE-SPEC-v1.md)
 - [Crear y publicar paquetes](docs/guides/AUTHORING-PACKAGES.md) · [migración a 0.6](docs/guides/MIGRATION-0.6.md)
-- [Panel web y usuarios](docs/guides/ADMIN-PANEL.md) · [servidor central](docs/guides/CENTRAL-SERVER.md) · [MCP](docs/guides/MCP.md) · [API](docs/guides/API.md)
+- [Despliegue: Raspberry Pi, Fly.io y Railway](docs/guides/DEPLOY.md) · [panel web y usuarios](docs/guides/ADMIN-PANEL.md) · [servidor central](docs/guides/CENTRAL-SERVER.md) · [MCP](docs/guides/MCP.md) · [API](docs/guides/API.md)
 - [Modelos y embeddings del cliente](docs/guides/CLIENT-MODELS.md) · [agentes y workers](docs/guides/AGENTS-AND-CAPABILITIES.md) · [harness engineering](docs/guides/HARNESS-ENGINEERING.md) · [publicar la CLI](docs/guides/PUBLISH-CLI.md)
 
 ## Alcance actual

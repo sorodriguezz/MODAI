@@ -12,6 +12,8 @@ Empieza por el [README del proyecto](../README.md) para entender el producto y l
 
 ## Guías
 
+- [Despliegue en Raspberry Pi, Fly.io y Railway](guides/DEPLOY.md).
+
 - [Servidor central y conexión de usuarios](guides/CENTRAL-SERVER.md).
 - [Publicar solamente el CLI en npm](guides/PUBLISH-CLI.md).
 - [Organización de aplicaciones y paquetes](architecture/PROJECT-LAYOUT.md).

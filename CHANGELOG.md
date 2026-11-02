@@ -14,6 +14,7 @@ Implementa [ADR-004](docs/architecture/ADR-004-package-platform.md): MODAI como 
 - Servidor: usa el resolvedor y validador del Core, acepta manifiestos v1, `/api/v1/capabilities` expone contratos y filtra por `?capability=`, `/api/v1/packages?name=`; composición de agentes basada en contribuciones, no en tipos.
 - Panel web con inicio de sesión por usuario y contraseña, primer administrador protegido por el secreto de arranque, gestión de usuarios y rediseño de la interfaz.
 - Paquetes de referencia: `@patterns/frontend-architecture`, `@architecture/decision-records`, `@testing/playwright`, `@testing/regression`, `@profiles/fullstack-quality`.
+- Despliegue en Raspberry Pi (`compose.raspberry.yaml`, `npm run docker:pi`, `deploy/backup.sh`), Fly.io (`deploy/fly/fly.toml`, `npm run deploy:fly`) y Railway (`deploy/railway/`); imagen multi-arquitectura en GHCR mediante GitHub Actions. El servidor acepta `PORT` y `MODAI_TRUST_PROXY`; el contenedor ajusta la propiedad de volúmenes y baja privilegios al usuario `node`.
 - Pruebas de aceptación: un paquete externo de regresión se crea, publica, instala, conecta por MCP y ejecuta sin modificar el Core.
 - Cambios incompatibles: `modai registry --query` pasa a `modai registry packages --query`; `modai init` crea proyectos v1; `POST /api/v1/resolve` puede responder `409 CAPABILITY_UNSATISFIED`.
 

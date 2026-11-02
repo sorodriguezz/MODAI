@@ -1,0 +1,10 @@
+# Variables del servicio en Railway (Settings → Variables → Raw Editor).
+# Railway inyecta PORT; MODAI lo usa automáticamente si no defines MODAI_PORT.
+MODAI_API_TOKEN=REEMPLAZAR_POR_UN_SECRETO_LARGO_Y_ALEATORIO
+MODAI_ADMIN_USERNAME=admin
+MODAI_ADMIN_PASSWORD=REEMPLAZAR_MINIMO_10_CARACTERES
+MODAI_PUBLIC_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
+MODAI_TRUST_PROXY=true
+MODAI_DATABASE_PATH=/app/data/modularai.db
+MODAI_ARTIFACT_DIR=/app/data/artifacts
+MODAI_SIGNATURE_POLICY=optional

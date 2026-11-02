@@ -13,6 +13,8 @@ services:
     environment:
       MODAI_API_TOKEN: "${MODAI_API_TOKEN:?Define MODAI_API_TOKEN en deploy/.env}"
       MODAI_PUBLIC_URL: "${MODAI_PUBLIC_URL:-}"
+      # true solo si un proxy (Caddy, Tailscale serve, Cloudflare Tunnel) es el único acceso al puerto.
+      MODAI_TRUST_PROXY: "${MODAI_TRUST_PROXY:-false}"
       MODAI_ADMIN_USERNAME: "${MODAI_ADMIN_USERNAME:-}"
       MODAI_ADMIN_PASSWORD: "${MODAI_ADMIN_PASSWORD:-}"
       MODAI_SIGNATURE_POLICY: "${MODAI_SIGNATURE_POLICY:-optional}"
