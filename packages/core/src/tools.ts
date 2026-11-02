@@ -8,6 +8,9 @@ import type { PackageGrant } from "./project.js";
 /** Environment forwarded to every tool. Secrets are only forwarded when declared and granted. */
 const BASE_ENV = ["PATH", "HOME", "USERPROFILE", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "TERM", "SHELL", "APPDATA", "LOCALAPPDATA", "PROGRAMFILES", "COMSPEC", "PATHEXT"];
 
+/** Permissions consumed at install time (`--allow`); they never authorise running anything. */
+export const INSTALL_PERMISSIONS: readonly string[] = ["project.instructions", "project.files", "project.source"];
+
 export interface Authorization { allowed: boolean; missing: string[]; reason?: string }
 
 /**
@@ -16,7 +19,7 @@ export interface Authorization { allowed: boolean; missing: string[]; reason?: s
  */
 export function authorize(locked: LockedPackageV1 | undefined, grant: PackageGrant | undefined): Authorization {
   if (!locked) return { allowed: false, missing: [], reason: "Paquete no instalado" };
-  const required = locked.permissions.filter(permission => !["project.instructions", "project.files"].includes(permission));
+  const required = locked.permissions.filter(permission => !INSTALL_PERMISSIONS.includes(permission));
   if (!grant) return { allowed: false, missing: required, reason: "No autorizado en este equipo; revisa sus permisos y ejecuta modai grant <paquete>" };
   if (grant.integrity !== locked.integrity) return { allowed: false, missing: required, reason: "El contenido del paquete cambió desde la autorización; revisa y vuelve a ejecutar modai grant" };
   const missing = required.filter(permission => !grant.permissions.includes(permission));

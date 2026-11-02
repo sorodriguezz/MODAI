@@ -1,5 +1,11 @@
 # Cambios
 
+## Sin publicar
+
+- **Componentes de código** (`spec.contributes.components` y permiso `project.source`): paquetes con código propio (módulos de backend, componentes de UI, servicios) que se copian al proyecto de forma reversible; `modai remove` conserva los archivos editados. El índice del agente (`AGENTS.md`/`CLAUDE.md`) los enumera. Ejemplo: `@components/health-module`.
+- CLI: `modai list [tipo]` (alias `ls`) para lo instalado o, con `--available`/`--registry`, lo publicado, por contribución (`components`, `skills`, `tools`…), kind (`profiles`) o categoría (`harness`, `backend`…); `modai component create` empaqueta una carpeta de código existente y `modai component list`.
+- Panel web: **Crear paquete** y **Editar y publicar nueva versión** desde el navegador (plantillas de componente, harness, skill, conocimiento o vacío; archivos editables y subida de archivos o carpetas; validación de calidad antes de publicar), filtro por tipo y pestaña **Archivos** en el detalle de cada paquete.
+
 ## 0.6.0
 
 Implementa [ADR-004](docs/architecture/ADR-004-package-platform.md): MODAI como plataforma de paquetes y capacidades extensibles.

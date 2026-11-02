@@ -35,6 +35,19 @@ export function adapterTargetPermission(target: string): "project.instructions" 
   return "project.instructions";
 }
 
+/**
+ * Validates a file path produced by a component. Components write source code, so they stay out of
+ * hidden directories (agent and tool configuration) and never write root-level files such as
+ * package.json or Makefile, which build tools execute or read automatically.
+ */
+export function componentTargetPermission(target: string): "project.source" {
+  const normalized = assertWritableTarget(target);
+  const segments = normalized.split("/");
+  if (segments.length < 2) throw new AppError(400, "UNSAFE_TARGET", `Un componente se instala dentro de una carpeta, no en la raíz del proyecto: ${target}`);
+  if (segments[0].startsWith(".") || EXECUTION_HOOKS.has(segments[0].toLowerCase())) throw new AppError(400, "UNSAFE_TARGET", `Un componente no escribe en carpetas ocultas ni de configuración: ${target}`);
+  return "project.source";
+}
+
 const EXECUTION_HOOKS = new Set([".husky", ".githooks", ".devcontainer", ".circleci", ".gitlab", ".buildkite", ".direnv", ".envrc", ".npmrc", ".yarnrc", ".yarnrc.yml", ".pnpmfile.cjs", "package.json", "makefile", ".gitlab-ci.yml", ".travis.yml"]);
 
 /** Expands {placeholders}; values are sanitised so a contribution name can never introduce path segments. */

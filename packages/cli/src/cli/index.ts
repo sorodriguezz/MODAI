@@ -34,6 +34,7 @@ import { registryFromArgument, registrySource, runSync, summarize, defaultLocalR
 import { CompositeRegistry } from "@modai/core/registry";
 import { createRegistries } from "@modai/core/workspace";
 import { tokenFor } from "../v1/runtime.js";
+import { registerListCommands } from "../v1/list.js";
 
 const v1 = () => isV1Project(process.cwd());
 
@@ -54,7 +55,7 @@ function print(value: unknown): void {
 }
 
 const program = new Command();
-program.name("modai").description("MODAI: gestor de paquetes y capacidades extensibles para agentes de IA").version("0.6.0");
+program.name("modai").description("MODAI: gestor de paquetes y capacidades extensibles para agentes de IA").version("0.7.0");
 
 program
   .command("connect")
@@ -481,6 +482,7 @@ adminCommand.command("trust-publisher").argument("<public-key>").option("--label
 program.command("trust").argument("<public-key>","Clave pública Ed25519 que se autoriza en este equipo").action(path=>{const config=loadClientConfig();if(!config)throw new Error("Conecta primero la CLI");const fingerprint=publicKeyFingerprint(readFileSync(resolve(path),"utf8"));config.trustedPublishers=[...new Set([...(config.trustedPublishers??[]),fingerprint])];saveClientConfig(config);print({trustedPublisher:fingerprint});});
 program.command("signatures").argument("<policy>","optional, signed o trusted").action(value=>{const config=loadClientConfig();if(!config)throw new Error("Conecta primero la CLI");config.signaturePolicy=signaturePolicySchema.parse(value);saveClientConfig(config);print({signaturePolicy:config.signaturePolicy});});
 registerV1Commands(program, print);
+registerListCommands(program, print, commaList);
 registerAgentCommands(program, () => {let project:ReturnType<typeof loadProject>|undefined;try{project=loadProject()}catch{}return effectiveConnection(project?.manifest.server)}, print);
 
 registerClientCommands(program, () => {

@@ -4,7 +4,7 @@ import { assertSafeRelativePath, requiredTargetPermission, sha256 } from "@modai
 import type { AnyPackageManifest, ArtifactFile } from "@modai/contracts/types";
 import type { PackageManifestV1 } from "@modai/contracts/spec-v1";
 import { normalizeManifest } from "./normalize.js";
-import { adapterTargetPermission } from "./targets.js";
+import { adapterTargetPermission, componentTargetPermission, expandTemplate } from "./targets.js";
 
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
@@ -12,6 +12,16 @@ export function skillFiles(skill: { path: string; files?: string[] }, paths: Ite
   const base = skill.path === "." ? "" : `${skill.path.replace(/\/$/, "")}/`;
   if (skill.files) return skill.files.map(relative => ({ source: `${base}${relative}`, relative }));
   return [...paths].filter(path => path.startsWith(base)).map(source => ({ source, relative: source.slice(base.length) })).sort((a, b) => a.source.localeCompare(b.source));
+}
+
+/** Files of a component: every package file under `path`, mapped under the expanded `target`. */
+export function componentFiles(component: { name: string; path: string; target: string }, packageName: string, paths: Iterable<string>): Array<{ source: string; target: string }> {
+  const base = component.path === "." ? "" : `${component.path.replace(/\/$/, "")}/`;
+  const directory = expandTemplate(component.target, { component: component.name, package: packageName }).replace(/\/$/, "");
+  return [...paths]
+    .filter(path => path.startsWith(base) && path !== "modai.package.yaml")
+    .map(source => ({ source, target: `${directory}/${source.slice(base.length)}` }))
+    .sort((a, b) => a.source.localeCompare(b.source));
 }
 
 /** References in tool/MCP args of the form ${packageDir}/relative/path. */
@@ -67,6 +77,14 @@ export function validatePackage(raw: AnyPackageManifest, files: ArtifactFile[]):
   unique("Regla", contributes.rules.map(item => item.name));
   unique("Herramienta", contributes.tools.map(item => item.name));
   unique("Servidor MCP", contributes.mcpServers.map(item => item.name));
+  unique("Componente", contributes.components.map(item => item.name));
+  for (const component of contributes.components) {
+    assertSafeRelativePath(component.path, "components.path");
+    const entries = componentFiles(component, manifest.metadata.name, paths);
+    invariant(entries.length > 0, 400, "COMPONENT_EMPTY", `El componente ${component.name} no tiene archivos en ${component.path}`);
+    for (const entry of entries) componentTargetPermission(entry.target);
+    requirePermission("project.source", `El componente ${component.name}`);
+  }
   for (const skill of contributes.skills) {
     const entries = skillFiles(skill, paths);
     invariant(entries.some(entry => entry.relative === "SKILL.md"), 400, "SKILL_ENTRYPOINT_MISSING", `La skill ${skill.name} necesita ${skill.path}/SKILL.md`);

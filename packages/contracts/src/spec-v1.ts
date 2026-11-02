@@ -19,6 +19,7 @@ const contributionName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/, "Usa min√
 export const PERMISSIONS_V1 = [
   "project.instructions", // write agent instruction files outside .modai/ and .agents/
   "project.files",        // install raw files under docs/
+  "project.source",       // install source-code components into the project tree (src/, lib/, ...)
   "process.execute",      // run commands declared by the package
   "mcp.connect",          // start MCP servers declared by the package
   "filesystem.read",      // declared intent: the tool reads project files
@@ -70,6 +71,17 @@ export const mcpServerContributionSchema = z.object({
   envKeys: envKeysSchema,
 }).strict();
 
+export const componentContributionSchema = z.object({
+  name: contributionName,
+  description: z.string().max(1000).optional(),
+  /** Directory inside the package whose files form the component ("." for the package root). */
+  path: relativePathSchema,
+  /** Project directory where the files are installed. Placeholders: {component}, {package}. */
+  target: relativePathSchema,
+  language: z.string().max(64).optional(),
+  tags: z.array(z.string().max(64)).max(50).default([]),
+}).strict();
+
 export const contributesSchema = z.object({
   /** Agent Skills directories (each contains SKILL.md); activated on demand by compatible agents. */
   skills: z.array(z.object({ name: contributionName, path: relativePathSchema, files: z.array(relativePathSchema).max(500).optional() }).strict()).max(200).default([]),
@@ -80,6 +92,12 @@ export const contributesSchema = z.object({
   tools: z.array(toolContributionSchema).max(100).default([]),
   mcpServers: z.array(mcpServerContributionSchema).max(20).default([]),
   agents: z.array(agentDefinitionSchema.extend({ name: contributionName })).max(20).default([]),
+  /**
+   * Reusable source code (a backend module, a UI component, a service template...) copied into the
+   * project tree. Every file under `path` lands under `target`; like any managed file, it is removed
+   * on `modai remove` only while intact, so user edits are preserved.
+   */
+  components: z.array(componentContributionSchema).max(100).default([]),
   /** Escape hatch for raw files; targets are restricted to safe locations. */
   files: z.array(z.object({ source: relativePathSchema, target: relativePathSchema, executable: z.boolean().optional() }).strict()).max(2000).default([]),
 }).strict();
@@ -122,7 +140,7 @@ export const packageManifestV1Schema = z.object({
     optional: z.array(requiredCapabilitySchema).max(100).default([]),
     conflicts: z.array(z.union([z.object({ package: packageNameSchema }).strict(), z.object({ capability: capabilityIdSchema }).strict()])).max(100).default([]),
     permissions: z.array(permissionV1Schema).max(PERMISSIONS_V1.length).default([]),
-    contributes: contributesSchema.default({ skills: [], rules: [], knowledge: [], tools: [], mcpServers: [], agents: [], files: [] }),
+    contributes: contributesSchema.default({ skills: [], rules: [], knowledge: [], tools: [], mcpServers: [], agents: [], components: [], files: [] }),
     /** Extra files shipped in the artifact (for example tool scripts). Directories are included recursively. */
     include: z.array(relativePathSchema).max(500).default([]),
     /** Packaging-time shorthand, expanded into `contributes` by the CLI before publishing. */
@@ -145,6 +163,7 @@ export type RequiredCapability = { capability: string; version: string; descript
 export type ToolContribution = z.output<typeof toolContributionSchema>;
 export type McpServerContribution = z.output<typeof mcpServerContributionSchema>;
 export type Contributions = z.output<typeof contributesSchema>;
+export type ComponentContribution = z.output<typeof componentContributionSchema>;
 export type AdapterDefinition = z.output<typeof adapterDefinitionSchema>;
 
 // ---------------------------------------------------------------------------

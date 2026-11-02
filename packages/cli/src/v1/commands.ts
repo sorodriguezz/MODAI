@@ -6,7 +6,7 @@ import YAML from "yaml";
 import { ApiClient } from "@modai/sdk";
 import { API_VERSION, type ProjectFile } from "@modai/contracts/spec-v1";
 import {
-  BUILTIN_ADAPTERS, availableAdapters, createProjectFile, inspectWorkspace, isLegacyProject, isV1Project, loadContextIndex, loadGrants,
+  BUILTIN_ADAPTERS, INSTALL_PERMISSIONS, availableAdapters, createProjectFile, inspectWorkspace, isLegacyProject, isV1Project, loadContextIndex, loadGrants,
   loadPackageSource, loadV1Project, normalizeManifest, readKnowledgeChunk, runTool, saveGrants, saveProjectFile, searchKnowledge, suggestProviders,
 } from "@modai/core";
 import { loadClientConfig } from "../cli/config.js";
@@ -65,7 +65,7 @@ export async function addV1(root: string, specs: string[], options: { allow?: st
     saveProjectFile(root, file);
   }
   print(`Añadido ${parsed.map(item => item.name).join(", ")}.\n${summarize(report)}`);
-  const executable = parsed.filter(item => project.lock.packages[item.name]?.permissions.some(permission => !["project.instructions", "project.files"].includes(permission)));
+  const executable = parsed.filter(item => project.lock.packages[item.name]?.permissions.some(permission => !INSTALL_PERMISSIONS.includes(permission)));
   if (executable.length) print(`Contiene herramientas ejecutables no autorizadas todavía. Revisa y autoriza con: ${executable.map(item => `modai grant ${item.name}`).join("; ")}`);
 }
 

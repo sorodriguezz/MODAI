@@ -85,6 +85,7 @@ El resolvedor **no instala proveedores implícitamente**: la decisión de qué i
 | `tools[]` | `{ name, description, inputSchema, command, args, envKeys, timeoutMs, readOnly, implements? }` | Herramienta del gateway MCP y `modai tools run`, solo si está autorizada |
 | `mcpServers[]` | `{ name, description, command, args, envKeys }` | Proceso MCP proxied por el gateway, solo si está autorizado |
 | `agents[]` | definición de agente (instrucciones, skills, capacidades, memoria) | Composición por el servidor (ADR-003) |
+| `components[]` | `{ name, path, target, description?, language?, tags[] }`; código reutilizable (módulos de backend, componentes de UI, servicios…). Requiere `project.source` | Cada archivo de `path` se copia bajo `target` (marcadores `{component}`, `{package}`). Archivos administrados: `modai remove` retira solo los intactos y conserva los editados |
 | `files[]` | `{ source, target, executable? }` | Copia literal a destinos seguros (`.agents/`, `.modai/…`, `docs/` con `project.files`, archivos de instrucciones con `project.instructions`) |
 
 ### Contrato de herramientas
@@ -101,6 +102,7 @@ El resolvedor **no instala proveedores implícitamente**: la decisión de qué i
 |---|---|
 | `project.instructions` | Escribir fuera de `.modai/` y `.agents/` (archivos de instrucciones de agentes: `AGENTS.md`, `CLAUDE.md`, `.cursor/…`). Se concede al instalar (`--allow`). |
 | `project.files` | Instalar archivos literales bajo `docs/`. Se concede al instalar. |
+| `project.source` | Instalar `components` en el árbol de código (`src/`, `lib/`, `app/`…). Nunca en carpetas ocultas, en archivos de la raíz (`package.json`, `Makefile`…) ni en rutas reservadas. Se concede al instalar. |
 | `process.execute` | Ejecutar `tools`. Obligatorio para declarar herramientas. |
 | `mcp.connect` | Iniciar `mcpServers`. |
 | `filesystem.read`, `filesystem.write`, `network` | Intención declarada de la herramienta; se muestra al autorizar. |

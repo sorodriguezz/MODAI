@@ -4,7 +4,31 @@ El único workspace destinado a npm es `packages/cli` (`@sorodriguez/modai`). Su
 
 `@modai/contracts`, `@modai/sdk`, `@modai/server`, `@modai/admin` y la raíz declaran `private: true`.
 
-## Preparar y comprobar
+## Publicación automática (GitHub Actions)
+
+[`.github/workflows/npm-publish.yml`](../../.github/workflows/npm-publish.yml) publica la CLI cada vez que llega a `main` un commit que cambia la versión de `packages/cli/package.json`:
+
+1. Si esa versión ya existe en npm, termina sin hacer nada.
+2. Comprueba que la versión coincide en todos los archivos que la repiten, instala, compila, ejecuta `npm test`, empaqueta y prueba el paquete instalado.
+3. Publica con provenance: una versión estable (`0.7.0`) como `latest`; una prerelease (`0.7.0-beta.1`) como `next`.
+4. Crea el tag `v0.7.0`. Un tag creado por el workflow no dispara otros workflows: si quieres también la imagen Docker de esa versión, ejecuta **Imagen Docker** a mano desde la pestaña Actions sobre el tag.
+
+Para lanzar una versión:
+
+```sh
+npm run version:cli -- 0.7.0      # actualiza package.json, modai --version, MCP y CORE_VERSION
+# edita CHANGELOG.md
+git commit -am "release: CLI 0.7.0" && git push
+```
+
+Configura una sola vez la autenticación con npm (una de las dos):
+
+- **Trusted publishing** (recomendado, sin secretos): en npmjs.com → `@sorodriguez/modai` → Settings → Trusted publisher → GitHub Actions, con el repositorio `sorodriguezz/MODAI` y el workflow `npm-publish.yml`.
+- **Token**: crea un token granular con permiso de publicación sobre el paquete y guárdalo en GitHub como secreto `NPM_TOKEN` (Settings → Secrets and variables → Actions).
+
+`npm run check:cli-version` detecta versiones desalineadas antes de hacer push.
+
+## Preparar y comprobar a mano
 
 Con Node 26.13.0:
 

@@ -223,3 +223,36 @@ test("los adaptadores no pueden escribir en árboles de código ni en ubicacione
   assert.equal(adapterTargetPermission("opencode.json"), "project.instructions");
   assert.equal(adapterTargetPermission(".agents/skills/x/SKILL.md"), undefined);
 });
+
+test("un componente instala código del usuario en el proyecto, exige project.source y conserva ediciones al retirarse", async () => {
+  const { componentTargetPermission } = await import("@modai/core");
+  const registry = new LocalRegistry(join(root, "registry-components"));
+  const spec = { category: "backend", permissions: ["project.source"], contributes: { components: [{ name: "auth", description: "Módulo de autenticación", path: "component", target: "src/modules/{component}", language: "nestjs" }] } };
+  await publish(registry, writePackage(join(root, "component-sources", "auth"), v1("@acme/auth-module", "1.0.0", spec), {
+    "component/auth.service.ts": "export class AuthService {}\n", "component/dto/login.dto.ts": "export class LoginDto {}\n",
+  }));
+  const project = join(root, "component-project");
+  mkdirSync(project);
+  saveProjectFile(project, createProjectFile("components", { registries: [{ name: "local", path: "../registry-components" }], adapters: ["agents-md"], dependencies: { "@acme/auth-module": "^1.0.0" } }));
+  const sync = (grants: string[]) => syncWorkspace(loadV1Project(project), { registries: [registry], grants, trust: { policy: "optional", trustedPublishers: [] } });
+  await assert.rejects(() => sync(["project.instructions"]), /project\.source/);
+  await sync(["project.instructions", "project.source"]);
+  assert.equal(readFileSync(join(project, "src/modules/auth/dto/login.dto.ts"), "utf8"), "export class LoginDto {}\n");
+  assert.match(readFileSync(join(project, "AGENTS.md"), "utf8"), /Componentes de código[\s\S]*`auth` \(@acme\/auth-module\) — Módulo de autenticación → `src\/modules\/auth`/);
+
+  writeFileSync(join(project, "src/modules/auth/auth.service.ts"), "export class AuthService { custom = true }\n");
+  const file = loadV1Project(project).file;
+  file.dependencies = {};
+  saveProjectFile(project, file);
+  const report = await sync(["project.instructions", "project.source"]);
+  assert.ok(!existsSync(join(project, "src/modules/auth/dto/login.dto.ts")));
+  assert.match(readFileSync(join(project, "src/modules/auth/auth.service.ts"), "utf8"), /custom/);
+  assert.ok(report.preserved.some(item => item.includes("auth.service.ts")));
+
+  const bad = (component: Record<string, unknown>, permissions = ["project.source"]) => () => validatePackage(v1("@bad/component", "1.0.0", { permissions, contributes: { components: [{ name: "x", path: "c", ...component }] } }) as never, [{ path: "c/a.ts", content: Buffer.from("x").toString("base64"), sha256: "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881" }]);
+  assert.doesNotThrow(bad({ target: "lib/{component}" }));
+  assert.throws(bad({ target: "lib/x" }, []), /project\.source/);
+  assert.throws(bad({ target: "missing", path: "nope" }), /no tiene archivos/);
+  for (const target of [".husky", ".github/workflows", "node_modules/x", "../outside"]) assert.throws(bad({ target }), /UNSAFE|reservado|no escribe|segura/, target);
+  assert.throws(() => componentTargetPermission("package.json"), /dentro de una carpeta/);
+});

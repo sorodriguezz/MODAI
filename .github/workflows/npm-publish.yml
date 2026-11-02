@@ -1,0 +1,87 @@
+# Publica la CLI (@sorodriguez/modai) en npm cuando cambia la versión de packages/cli/package.json en main.
+# Si esa versión ya existe en npm no hace nada. Las versiones estables se publican como `latest`;
+# las prerelease (0.7.0-beta.1) como `next`, para no desplazar a la estable.
+#
+# Autenticación (una de dos):
+#   - Trusted publishing (recomendado): en npmjs.com → paquete → Settings → Trusted publisher → GitHub Actions,
+#     repositorio sorodriguezz/MODAI y workflow npm-publish.yml. No requiere secretos.
+#   - Token: crea un token "Automation" o granular con permiso de publicación y guárdalo como secreto NPM_TOKEN.
+name: Publicar CLI en npm
+
+on:
+  push:
+    branches: [main]
+    paths: ["packages/cli/package.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # crear el tag vX.Y.Z
+  id-token: write # trusted publishing y provenance
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: ¿Hay una versión nueva?
+        id: version
+        run: |
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
+          PUBLISHED=$(npm view "@sorodriguez/modai@$VERSION" version 2>/dev/null || true)
+          if [ "$PUBLISHED" = "$VERSION" ]; then
+            echo "La versión $VERSION ya está en npm; no se publica."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            case "$VERSION" in *-*) TAG=next ;; *) TAG=latest ;; esac
+            echo "Se publicará $VERSION con la etiqueta $TAG."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comprobar que la versión es coherente en todo el código
+        if: steps.version.outputs.publish == 'true'
+        run: node scripts/cli-version.mjs check
+
+      - name: Instalar, compilar y probar
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          npm ci
+          npm run build
+          npm test
+
+      - name: Empaquetar y probar el paquete instalado
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          node scripts/pack-client.mjs
+          node scripts/smoke-client.mjs
+
+      - name: Publicar en npm
+        if: steps.version.outputs.publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm install -g npm@latest
+          npm publish "./dist/npm/sorodriguez-modai-${{ steps.version.outputs.version }}.tgz" --access public --provenance --tag "${{ steps.version.outputs.tag }}"
+
+      - name: Crear el tag v${{ steps.version.outputs.version }}
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "El tag $TAG ya existe."
+          else
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "$TAG"
+          fi

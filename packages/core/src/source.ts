@@ -71,6 +71,7 @@ export function loadPackageSource(directory: string): PublishPackageInput {
       const files = skill.files as string[] | undefined;
       for (const file of files ? files.map(item => posix.join(path, item)) : listFiles(root, path)) sources.add(file);
     }
+    for (const component of contributes.components ?? []) for (const file of listFiles(root, String(component.path))) if (file !== "modai.package.yaml") sources.add(file);
     for (const key of ["rules", "knowledge"]) for (const item of contributes[key] ?? []) sources.add(String(item.path));
     for (const item of contributes.files ?? []) sources.add(String(item.source));
     for (const path of spec.include ?? []) for (const file of listFiles(root, path)) sources.add(file);

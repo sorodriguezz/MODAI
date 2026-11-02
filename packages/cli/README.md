@@ -22,6 +22,8 @@ modai search "dónde ubicar el estado compartido"
 |---|---|
 | `modai init` | Crea `modai.yaml` (registries, adaptadores, memoria) |
 | `modai add <paquete…>` / `remove` / `update` / `outdated` / `sync [--frozen]` | Ciclo de vida reproducible y reversible |
+| `modai list [tipo]` (`ls`) | Lo instalado, o con `--available`/`--registry` lo publicado: `packages`, `components`, `skills`, `tools`, `mcp`, `agents`, `rules`, `knowledge`, `profiles`, `adapters`, `capabilities`, `registries` o una categoría (`harness`, `backend`…). `--json` para scripts |
+| `modai component create <dir> --name @scope/x --from <código>` | Empaqueta código propio (un módulo de backend, un componente…) como componente instalable con `modai add … --allow project.source` |
 | `modai capabilities` / `providers <capacidad>` / `provider <capacidad> <paquete>` | Contratos instalados, proveedores disponibles y elección de proveedor |
 | `modai grant` / `revoke` / `permissions` | Autorización local de herramientas y servidores MCP |
 | `modai tools list` / `tools run <herramienta> --input '{…}'` | Herramientas de paquetes |

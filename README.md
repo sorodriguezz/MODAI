@@ -74,6 +74,7 @@ modai init --registry ~/modai-registry --adapter agent-skills,claude-code,mcp --
 modai add @profiles/fullstack-quality
 modai status
 modai capabilities                          # quién implementa cada contrato
+modai list                                  # lo instalado; también: list components, list harness, list skills --available…
 modai search "dónde ubicar el estado compartido"
 modai grant @testing/regression --yes       # autoriza sus herramientas en este equipo
 modai tools run regression_baseline --input '{"mode":"compare","results":{"tests":[]}}'
@@ -139,6 +140,13 @@ npm run test:client-package   # genera dist/npm/sorodriguez-modai-0.6.0.tgz, lo 
 ```
 
 ## Crear tus propios paquetes
+
+Desde el panel web: **Paquetes → Crear paquete** (componente de código, harness, skill o conocimiento), con edición y subida de archivos y validación antes de publicar. Desde la CLI:
+
+```sh
+modai component create ./pkg-auth --name @acme/auth-module --from ./src/modules/auth   # tu código como componente reutilizable
+modai add @acme/auth-module --allow project.source                                    # en otro proyecto: se copia a src/modules/auth
+```
 
 ```sh
 modai package scaffold ./mi-paquete --name @acme/mi-paquete --category testing --with-tool

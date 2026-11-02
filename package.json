@@ -25,7 +25,9 @@
     "docker:public": "node scripts/deploy.mjs --public up -d --build",
     "docker:pi": "node scripts/deploy.mjs --pi up -d --build",
     "deploy:fly": "fly deploy . --config deploy/fly/fly.toml --dockerfile deploy/Dockerfile --ha=false",
-    "backup:docker": "sh deploy/backup.sh"
+    "backup:docker": "sh deploy/backup.sh",
+    "version:cli": "node scripts/cli-version.mjs set",
+    "check:cli-version": "node scripts/cli-version.mjs check"
   },
   "engines": {
     "node": ">=26.13.0 <27"

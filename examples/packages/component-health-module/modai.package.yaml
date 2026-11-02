@@ -1,0 +1,19 @@
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@components/health-module"
+  version: 1.0.0
+  description: Módulo de health check para backends Node (Express o NestJS). Expone GET /health con versión, uptime y estado de dependencias; se copia al proyecto para adaptarlo.
+  keywords: [backend, health, observability]
+spec:
+  category: backend
+  permissions:
+    - project.source
+  contributes:
+    components:
+      - name: health
+        description: Endpoint GET /health con verificación de dependencias
+        path: component
+        target: src/modules/{component}
+        language: typescript
+        tags: [backend, observability]

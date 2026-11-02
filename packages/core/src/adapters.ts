@@ -1,8 +1,8 @@
 import { AppError } from "@modai/contracts/errors";
 import { requiredTargetPermission } from "@modai/contracts/security";
 import { adapterDefinitionSchema, type AdapterDefinition, type PackageManifestV1 } from "@modai/contracts/spec-v1";
-import { adapterTargetPermission, assertWritableTarget, expandTemplate } from "./targets.js";
-import { skillFiles } from "./validate.js";
+import { adapterTargetPermission, assertWritableTarget, componentTargetPermission, expandTemplate } from "./targets.js";
+import { componentFiles, skillFiles } from "./validate.js";
 
 /**
  * Built-in adapters are plain data with exactly the same schema as an Adapter package.
@@ -83,6 +83,11 @@ export function planContributions(units: InstallUnit[], adapters: AvailableAdapt
       const permission = requiredTargetPermission(path);
       addFile({ path, content: unit.files.get(rule.source)!, owner: unit.name, executable: Boolean(rule.executable), permission });
     }
+    for (const component of contributes.components) {
+      for (const entry of componentFiles(component, unit.name, unit.files.keys())) {
+        addFile({ path: assertWritableTarget(entry.target), content: unit.files.get(entry.source)!, owner: unit.name, executable: false, permission: componentTargetPermission(entry.target) });
+      }
+    }
     for (const skill of contributes.skills) {
       for (const adapter of adapters) {
         const template = adapter.definition.targets.skills?.path;
@@ -133,7 +138,7 @@ export function planContributions(units: InstallUnit[], adapters: AvailableAdapt
 }
 
 function renderIndex(units: InstallUnit[], skillLocation: Map<string, string>): string | undefined {
-  const skills: string[] = [], tools: string[] = [], knowledge: string[] = [], capabilities: string[] = [];
+  const skills: string[] = [], tools: string[] = [], knowledge: string[] = [], capabilities: string[] = [], components: string[] = [];
   for (const unit of units) {
     const { contributes, provides } = unit.manifest.spec;
     for (const skill of contributes.skills) {
@@ -143,13 +148,18 @@ function renderIndex(units: InstallUnit[], skillLocation: Map<string, string>): 
       skills.push(`- \`${skill.name}\` (${unit.name}) — ${description ?? "ver SKILL.md"} → ${location}`);
     }
     for (const tool of contributes.tools) tools.push(`- \`${tool.name}\` (${unit.name})${tool.implements ? ` implementa \`${tool.implements}\`` : ""} — ${tool.description}`);
+    for (const component of contributes.components) {
+      const directory = expandTemplate(component.target, { component: component.name, package: unit.name });
+      components.push(`- \`${component.name}\` (${unit.name})${component.description ? ` — ${component.description}` : ""} → \`${directory}\``);
+    }
     if (contributes.knowledge.length) knowledge.push(`${unit.name} (${contributes.knowledge.length})`);
     for (const capability of provides) capabilities.push(`\`${capability.capability}@${capability.version}\` ← ${unit.name}`);
   }
-  if (!skills.length && !tools.length && !knowledge.length && !capabilities.length) return undefined;
+  if (!skills.length && !tools.length && !knowledge.length && !capabilities.length && !components.length) return undefined;
   const sections = ["## Capacidades MODAI", "Bloque generado por `modai sync` a partir de modai.yaml y modai.lock; no lo edites a mano."];
   if (skills.length) sections.push(`### Skills (cárgalas solo cuando la tarea lo requiera)\n\n${skills.join("\n")}`);
   if (tools.length) sections.push(`### Herramientas (servidor MCP \`modai\`; requieren \`modai grant\` en este equipo)\n\n${tools.join("\n")}`);
+  if (components.length) sections.push(`### Componentes de código (instalados en el proyecto; adáptalos libremente, MODAI conserva tus cambios)\n\n${components.join("\n")}`);
   if (knowledge.length) sections.push(`### Conocimiento\n\nUsa \`modai_search_knowledge\` para recuperar fragmentos relevantes en lugar de cargar documentos completos. Fuentes: ${knowledge.join(", ")}.`);
   if (capabilities.length) sections.push(`### Capacidades disponibles\n\n${capabilities.join("\n")}`);
   return sections.join("\n\n");
