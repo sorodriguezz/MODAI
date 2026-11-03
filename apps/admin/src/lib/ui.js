@@ -78,7 +78,7 @@ let returnFocus = null;
 
 /**
  * Opens the shared modal dialog. `body` is an html`` fragment. Returns the body element.
- * Native <dialog> traps focus, closes on Escape and makes the page inert.
+ * Native <dialog> traps focus and makes the page inert. It does not close on Escape or on a backdrop click.
  */
 export function openDialog({ title, description, body, size = "md", onClose } = {}) {
   const dialog = $("dialog");
@@ -114,12 +114,9 @@ export function closeDialogAndWait() {
 export function initDialog() {
   const dialog = $("dialog");
   dialog.querySelector(".dialog-close").addEventListener("click", closeDialog);
-  // Click on the backdrop closes the dialog.
-  dialog.addEventListener("mousedown", (event) => {
-    if (event.target !== dialog) return;
-    const rect = dialog.getBoundingClientRect();
-    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDialog();
-  });
+  // A modal only closes from its own buttons: neither a click on the backdrop nor Escape may discard what
+  // someone has already filled in.
+  dialog.addEventListener("cancel", (event) => event.preventDefault());
 }
 
 /**

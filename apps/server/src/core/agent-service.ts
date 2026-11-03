@@ -2,7 +2,7 @@ import type { AgentBundle } from "@modai/contracts/types";
 import { agentDefinitionSchema, parseInput } from "@modai/contracts/schemas";
 import { invariant } from "@modai/contracts/errors";
 import { sha256 } from "@modai/contracts/security";
-import { agentDefinitionOf, contributesSkills, normalizeManifest, resolveAgentCapabilities, skillFiles } from "@modai/core";
+import { agentDefinitionOf, contributesSkills, effectiveManifest, normalizeManifest, resolveAgentCapabilities, selectPackageFeatures, skillFiles } from "@modai/core";
 import { PackageService } from "./package-service.js";
 
 const INSTRUCTION_FILE = /(^|\/)(SKILL|AGENTS|CLAUDE)\.md$/i;
@@ -11,7 +11,11 @@ export class AgentService {
   constructor(private readonly packages: PackageService) {}
 
   async compose(projectId: string, name: string, range = "*", overrides?: Record<string, string>): Promise<AgentBundle> {
-    const resolved = await this.packages.resolve({ packages: [{ name, range }], overrides });
+    // The server composes with each package's default features, like `modai add` without flags.
+    const resolved = (await this.packages.resolve({ packages: [{ name, range }], overrides })).map(item => {
+      const manifest = normalizeManifest(item.manifest);
+      return { ...item, manifest: effectiveManifest(manifest, selectPackageFeatures(manifest)) as unknown as typeof item.manifest };
+    });
     const root = resolved.find(item => item.name === name)!;
     const rawDefinition = agentDefinitionOf(root.manifest);
     invariant(rawDefinition, 400, "NOT_AN_AGENT", `${name} no es un agente`);

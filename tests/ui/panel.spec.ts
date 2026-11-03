@@ -26,7 +26,8 @@ async function login(page: Page) {
 
 test.describe.configure({ mode: "serial" });
 
-test("crea un componente en el editor: archivos, carpetas, validación y publicación", async ({ page }) => {
+test("crea un componente en el editor: archivos, carpetas, validación y publicación", async ({ page, request }) => {
+  await request.post("/api/v1/namespaces", { headers: { authorization: `Bearer ${UI.token}` }, data: { name: "@ui" } });
   await login(page);
   await page.goto("/admin#/packages");
   await page.getByRole("button", { name: "Crear paquete" }).first().click();
@@ -44,7 +45,10 @@ test("crea un componente en el editor: archivos, carpetas, validación y publica
   await expect(dialog.locator(".form-error")).toBeVisible();
   await expect(dialog.getByRole("button", { name: /Identidad/ })).toHaveAttribute("aria-current", "step");
 
-  await dialog.getByLabel("Nombre", { exact: true }).fill("@ui/users-module");
+  await dialog.locator("#pkgNamespaceInput").fill("ui");
+  await dialog.getByRole("option", { name: "@ui", exact: true }).click();
+  await expect(dialog.locator("#pkgNamespace")).toHaveValue("@ui");
+  await dialog.getByLabel("Nombre", { exact: true }).fill("users-module");
   await dialog.getByLabel("Descripción").fill("Módulo de usuarios para NestJS con controlador, servicio y DTOs.");
   await dialog.getByLabel("Nombre del componente").fill("users");
   await next();
@@ -189,4 +193,64 @@ test("elimina un proyecto tras confirmar escribiendo su identificador", async ({
   await expect(page.getByText(/Proyecto «Para borrar» eliminado/)).toBeVisible();
   await expect(page.locator("#projectResults")).not.toContainText("ui-borrar");
   await expect(page.locator("#projectResults")).toContainText("ui-shop");
+});
+
+test("la versión de un paquete nuevo no puede repetir ni ser menor que la última publicada", async ({ page, request }) => {
+  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui" } });
+  await publish(request, "@ui/ver-check", "1.2.0");
+  await login(page);
+  await page.goto("/admin#/packages");
+  await page.getByRole("button", { name: "Crear paquete" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await dialog.locator("#pkgNamespaceInput").click();
+  await dialog.getByRole("option", { name: "@ui", exact: true }).click();
+  await dialog.getByLabel("Nombre", { exact: true }).fill("ver-check");
+  await expect(dialog.locator("#pkgVersionHint")).toContainText("Última publicada: 1.2.0");
+  await expect(dialog.locator("#pkgVersion")).toHaveValue("1.2.1");
+  await dialog.locator("#pkgVersion").fill("1.0.0");
+  await expect(dialog.locator("#pkgVersionHint")).toContainText("mayor que la última publicada (1.2.0)");
+  await dialog.locator("#pkgVersion").fill("1.2.0");
+  await expect(dialog.locator("#pkgVersionHint")).toContainText("ya existe");
+  await dialog.getByLabel("Descripción").fill("Paquete de prueba de versiones del panel con descripción suficiente.");
+  await dialog.getByLabel("Nombre del componente").fill("users");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(dialog.locator(".form-error")).toContainText("ya existe");
+  await dialog.locator("#pkgVersion").fill("1.3.0");
+  await expect(dialog.locator("#pkgVersionHint")).not.toHaveClass(/invalid/);
+});
+
+test("el detalle de un paquete con features arma el comando de instalación respetando requires y conflicts", async ({ page, request }) => {
+  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui" } });
+  await publish(request, "@ui/health-flags", "1.0.0", {
+    permissions: ["project.source"],
+    contributes: { knowledge: [{ path: "knowledge/README.md", title: "Guía" }], components: [{ name: "health", path: "component", target: "src/modules/{component}" }] },
+    features: {
+      metrics: { description: "Métricas", default: true, overlays: [{ component: "health", path: "features/metrics" }] },
+      tls: { description: "TLS", requires: ["metrics"], overlays: [{ component: "health", path: "features/tls" }] },
+      legacy: { description: "Legacy", conflicts: ["tls"], overlays: [{ component: "health", path: "features/legacy" }] },
+    },
+  }, [file("knowledge/README.md", "# Guía\n"), file("component/health.ts", "x"), file("features/metrics/m.ts", "m"), file("features/tls/t.ts", "t"), file("features/legacy/l.ts", "l")]);
+  await login(page);
+  await page.goto("/admin#/packages?name=@ui/health-flags");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Opciones (features)")).toBeVisible();
+  const command = dialog.locator("#installCommand");
+  await expect(command).toHaveText("modai add @ui/health-flags@1.0.0 --allow project.source");
+  // Unchecking a default writes --no-x; checking a feature that requires it checks it back.
+  await dialog.locator('[data-feature="metrics"]').uncheck();
+  await expect(command).toContainText("--no-metrics");
+  await dialog.locator('[data-feature="tls"]').check();
+  await expect(dialog.locator('[data-feature="metrics"]')).toBeChecked();
+  await expect(command).toHaveText("modai add @ui/health-flags@1.0.0 --tls --allow project.source");
+  // A conflicting feature unchecks the other one.
+  await dialog.locator('[data-feature="legacy"]').check();
+  await expect(dialog.locator('[data-feature="tls"]')).not.toBeChecked();
+  await expect(command).toHaveText("modai add @ui/health-flags@1.0.0 --legacy --allow project.source");
+  // Unchecking a feature unchecks what needs it, so the command is always one the CLI accepts.
+  await dialog.locator('[data-feature="tls"]').check();
+  await expect(dialog.locator('[data-feature="legacy"]')).not.toBeChecked();
+  await dialog.locator('[data-feature="metrics"]').uncheck();
+  await expect(dialog.locator('[data-feature="tls"]')).not.toBeChecked();
+  await expect(command).toHaveText("modai add @ui/health-flags@1.0.0 --no-metrics --allow project.source");
 });

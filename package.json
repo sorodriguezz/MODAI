@@ -1,6 +1,6 @@
 {
   "name": "modularai",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "description": "MODAI: plataforma de paquetes y capacidades extensibles para IA (Core, CLI, registry y gateway de contexto).",
@@ -16,7 +16,7 @@
     "docker:down": "node scripts/deploy.mjs down",
     "docker:logs": "node scripts/deploy.mjs logs -f server",
     "docker:ps": "node scripts/deploy.mjs ps",
-    "docker:seed": "node scripts/deploy.mjs --profile examples run --rm seed-examples",
+    "docker:seed": "node scripts/deploy.mjs --profile examples run --build --rm seed-examples",
     "docker:lan": "node scripts/deploy.mjs --lan up -d --build",
     "pack:client": "npm run build:cli && node scripts/pack-client.mjs",
     "test:client-package": "npm run build && node scripts/pack-client.mjs && node scripts/smoke-client.mjs",

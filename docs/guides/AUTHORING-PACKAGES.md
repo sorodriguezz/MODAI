@@ -47,6 +47,20 @@ Valida estructura, contratos y calidad:
 modai package validate ./regression
 ```
 
+### Partes opcionales con features
+
+Si un paquete tiene variantes (NestJS o Express, con o sin métricas), no publiques un paquete por combinación: declara `spec.features` y deja que quien lo instale elija.
+
+```sh
+modai add @components/health-module --help            # qué opciones ofrece
+modai add @components/health-module --nestjs --metrics
+modai feature list                                    # qué está activo en el proyecto
+modai feature disable @components/health-module metrics
+modai feature enable @components/health-module express   # falla: no combina con nestjs
+```
+
+Cada flag va **después** del paquete al que se aplica: `modai add @eq/health --tls @eq/auth --jwt`. La elección queda en `modai.yaml` (`features`), así `modai sync` y `modai update` la reproducen en cualquier equipo. El formato completo está en [PACKAGE-SPEC-v1 › Features](../spec/PACKAGE-SPEC-v1.md#features-specfeatures) y hay un ejemplo en `examples/packages/component-health-module`.
+
 ## 2. Publicar
 
 ```sh

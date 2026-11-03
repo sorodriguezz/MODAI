@@ -680,3 +680,23 @@ button.card:hover { border-color: var(--border-strong); box-shadow: var(--shadow
 .definition-grid.review dd { overflow-wrap: anywhere; }
 @media (max-width: 640px) { .wizard-steps .wizard-title { display: none; } .wizard-steps li { min-width: 0; } }
 .file-summary { list-style: none; margin: 0; padding: 8px 12px; max-height: 200px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); display: grid; gap: 4px; font-size: 13px; }
+
+/* Search combobox (namespace picker) */
+.combo { position: relative; }
+.combo-input { width: 100%; padding-right: 38px; }
+.combo-icon { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; display: inline-flex; }
+.combo-list {
+  position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px; list-style: none;
+  max-height: 232px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg);
+}
+.combo-list li { padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer; overflow-wrap: anywhere; }
+.combo-list li.active { background: var(--surface-3); }
+.combo-list li.selected { color: var(--primary-text); font-weight: 600; }
+.combo-list li.empty { color: var(--muted); cursor: default; }
+
+/* While a modal is open only the modal scrolls, never the page behind it. */
+html:has(dialog[open]), body:has(dialog[open]) { overflow: hidden; }
+.dialog { overscroll-behavior: contain; }
+.dialog-body { overscroll-behavior: contain; }
+.hint.invalid { color: var(--danger); }

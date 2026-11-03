@@ -7,7 +7,7 @@ export function group(parent: Command, name: string, description: string): Comma
 
 /** Help sections of `modai --help`, in display order. Commands not listed fall under the last one. */
 export const HELP_SECTIONS: Array<[heading: string, commands: string[]]> = [
-  ["Proyecto:", ["init", "template", "add", "remove", "sync", "update", "outdated", "status", "list", "override", "workspace"]],
+  ["Proyecto:", ["init", "template", "add", "feature", "remove", "sync", "update", "outdated", "status", "list", "override", "workspace"]],
   ["Lo que instalan los paquetes:", ["component", "harness", "capability", "adapter", "permissions"]],
   ["Contexto y memoria:", ["context", "memory", "knowledge"]],
   ["Publicar paquetes:", ["package", "skill", "registry"]],

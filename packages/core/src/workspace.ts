@@ -7,11 +7,12 @@ import { buildContextIndex, saveContextIndex } from "./context.js";
 import { applyDesiredState, pruneStore, readStoreRecord, storePackageDir, verifyStore, writeStore } from "./installer.js";
 import { computeIntegrity, verifyFiles, verifySignature, type TrustPolicy } from "./integrity.js";
 import { normalizeManifest } from "./normalize.js";
+import { applyPackageFeatures, effectiveManifest } from "./package-features.js";
 import { ensureProjectGitignore, loadGrants, saveLock, type V1Project } from "./project.js";
 import { CompositeRegistry, HttpRegistry, LocalRegistry, type PackageArtifact, type Registry } from "./registry.js";
 import { CapabilityError, resolve, type Candidate } from "./resolver.js";
 import { loadPackageSource } from "./source.js";
-import { authorize } from "./tools.js";
+import { authorize, sameFeatures } from "./tools.js";
 import { validatePackage } from "./validate.js";
 
 export function createRegistries(root: string, sources: RegistrySource[], tokenFor: (url: string) => string | undefined): Registry[] {
@@ -89,7 +90,7 @@ export async function syncWorkspace(project: V1Project, options: SyncOptions): P
   const lockedPackages: Record<string, LockedPackageV1> = {};
   if (roots.length) {
     try {
-      resolution = await resolve(source, { roots, overrides: file.overrides, providers: file.providers, locked });
+      resolution = await resolve(source, { roots, overrides: file.overrides, providers: file.providers, locked, features: file.features });
     } catch (error) {
       if (error instanceof CapabilityError && error.code === "CAPABILITY_UNSATISFIED") {
         const capability = (error.details as { capability: string }).capability;
@@ -109,13 +110,16 @@ export async function syncWorkspace(project: V1Project, options: SyncOptions): P
         throw new AppError(409, "LOCK_INTEGRITY_MISMATCH", `${node.name}@${node.version} no coincide con la integridad de modai.lock (${previous.integrity}). El registry sirvió contenido distinto para la misma versión.`);
       }
       const signer = node.ref.kind === "registry" ? verifySignature(node.name, artifact.manifest, artifact.files, artifact.signature, options.trust) : undefined;
-      units.push({ name: node.name, version: node.version, manifest, files: new Map(artifact.files.map(item => [item.path, Buffer.from(item.content, "base64")])) });
+      // The unit carries the package as installed: base plus the contributions, dependencies and overlays of its features.
+      const applied = applyPackageFeatures(manifest, new Map(artifact.files.map(item => [item.path, Buffer.from(item.content, "base64")])), node.features);
+      units.push({ name: node.name, version: node.version, manifest: applied.manifest, files: applied.files });
       lockedPackages[node.name] = {
         version: node.version, source: artifact.source, integrity, ...(signer ? { signer } : {}),
         kind: manifest.kind, category: manifest.spec.category, dependencies: node.dependencies,
         provides: manifest.spec.provides.map(item => `${item.capability}@${item.version}`),
         requires: resolution.requires[node.name] ?? {},
         permissions: [...manifest.spec.permissions].sort(),
+        features: node.features,
       };
       artifacts.set(node.name, { ...artifact, integrity });
     }
@@ -137,7 +141,7 @@ export async function syncWorkspace(project: V1Project, options: SyncOptions): P
   saveLock(root, nextLock);
 
   const grants = loadGrants(root);
-  const regrant = Object.entries(grants.packages).filter(([name, grant]) => lockedPackages[name] && grant.integrity !== lockedPackages[name].integrity).map(([name]) => name);
+  const regrant = Object.entries(grants.packages).filter(([name, grant]) => lockedPackages[name] && (grant.integrity !== lockedPackages[name].integrity || !sameFeatures(grant.features, lockedPackages[name].features))).map(([name]) => name);
   return {
     lock: nextLock,
     installed: units.map(unit => ({ name: unit.name, version: unit.version, source: lockedPackages[unit.name].source })),
@@ -171,7 +175,8 @@ export function inspectWorkspace(project: V1Project): InstalledPackage[] {
   return Object.entries(project.lock.packages).map(([name, locked]) => {
     const record = readStoreRecord(project.root, name);
     const verified = verifyStore(project.root, name, locked.integrity);
-    const manifest = record ? normalizeManifest(record.manifest) : undefined;
+    // What is installed is the package with the features recorded in the lock.
+    const manifest = record ? effectiveManifest(normalizeManifest(record.manifest), locked.features) : undefined;
     if (!manifest) throw new AppError(409, "STORE_MISSING", `Falta ${name} en .modai/store; ejecuta modai sync`);
     return {
       name, version: locked.version, kind: locked.kind, category: locked.category, description: manifest.metadata.description,

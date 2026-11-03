@@ -16,3 +16,6 @@ export * from "./tools.js";
 export * from "./project.js";
 export * from "./workspace.js";
 export * from "./archive.js";
+export * from "./features.js";
+export * from "./package-features.js";
+export * from "./template-spec.js";

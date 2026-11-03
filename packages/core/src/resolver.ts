@@ -2,6 +2,7 @@ import semver from "semver";
 import { AppError, invariant } from "@modai/contracts/errors";
 import type { PackageStatus } from "@modai/contracts/types";
 import type { PackageManifestV1 } from "@modai/contracts/spec-v1";
+import { featureDependencies, selectPackageFeatures } from "./package-features.js";
 import { CORE_VERSION } from "./version.js";
 
 const PACKAGE_NAME = /^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/;
@@ -14,6 +15,8 @@ export interface ResolveInput {
   overrides?: Record<string, string>;
   /** Preferred versions (from modai.lock). Used first when they satisfy every constraint. */
   locked?: Record<string, string>;
+  /** Feature choices per package (modai.yaml `features`). Feature dependencies join the resolution. */
+  features?: Record<string, Record<string, boolean>>;
   /** Explicit provider per capability (modai.yaml `providers`). */
   providers?: Record<string, string>;
   platform?: string;
@@ -21,7 +24,7 @@ export interface ResolveInput {
   checkCapabilities?: boolean;
 }
 
-export interface ResolvedNode<T> { name: string; version: string; manifest: PackageManifestV1; ref: T; dependencies: Record<string, string> }
+export interface ResolvedNode<T> { name: string; version: string; manifest: PackageManifestV1; ref: T; dependencies: Record<string, string>; features: string[] }
 
 export interface Resolution<T> {
   /** Dependencies first, in a deterministic order. */
@@ -44,6 +47,10 @@ export async function resolve<T>(source: ResolveSource<T>, input: ResolveInput):
   const cache = new Map<string, Promise<Array<Candidate<T>>>>();
   const versions = (name: string) => { if (!cache.has(name)) cache.set(name, source.versions(name)); return cache.get(name)!; };
   let attempts = 0;
+  // Features of each candidate for the modai.yaml choice; a candidate that lacks a requested feature is skipped.
+  const featuresOf = (name: string, manifest: PackageManifestV1) => selectPackageFeatures(manifest, input.features?.[name]);
+  // Newest version of each package skipped because the chosen features do not fit it, to explain the outcome.
+  const featureSkips = new Map<string, { version: string; error: unknown }>();
 
   const solve = async (pending: Requirement[], selected: Selected, constraints: Map<string, string[]>): Promise<Selected> => {
     invariant(++attempts <= 5000 && pending.length <= 1000 && selected.size <= 200, 422, "RESOLUTION_LIMIT", "La resolución excede el presupuesto; reduce dependencias o fija versiones");
@@ -72,15 +79,24 @@ export async function resolve<T>(source: ResolveSource<T>, input: ResolveInput):
     if (!candidates.length) throw new AppError(404, "DEPENDENCY_NOT_FOUND", `No hay versión de ${requirement.name} compatible con ${ranges.join(", ")}`, { chain: requirement.chain });
 
     let lastError: unknown;
+    let featureError: unknown;
     for (const candidate of candidates) {
       const nextSelected = new Map(selected);
       nextSelected.set(requirement.name, candidate);
       const chain = [...requirement.chain, requirement.name];
-      const dependencies = Object.entries(candidate.manifest.spec.dependencies).map(([name, range]) => ({ name, range, chain }));
+      let features: string[];
+      try { features = featuresOf(requirement.name, candidate.manifest); }
+      catch (error) {
+        featureError ??= error;
+        if (!featureSkips.has(requirement.name)) featureSkips.set(requirement.name, { version: candidate.version, error });
+        continue;
+      }
+      const dependencies = Object.entries(featureDependencies(candidate.manifest, features)).map(([name, range]) => ({ name, range, chain }));
       try { return await solve([...dependencies, ...rest], nextSelected, nextConstraints); }
       catch (error) { lastError = error; }
     }
-    throw lastError;
+    // When no version fits the chosen features, the newest one explains why (not the oldest).
+    throw lastError ?? featureError;
   };
 
   const selected = await solve(input.roots.map(item => ({ name: item.name, range: item.range ?? "*", chain: [] })), new Map(), new Map());
@@ -89,14 +105,20 @@ export async function resolve<T>(source: ResolveSource<T>, input: ResolveInput):
   const append = (name: string): void => {
     if (added.has(name)) return;
     const item = selected.get(name)!;
-    const dependencies = Object.keys(item.manifest.spec.dependencies);
+    const features = featuresOf(name, item.manifest);
+    const dependencies = Object.keys(featureDependencies(item.manifest, features));
     for (const dependency of dependencies) append(dependency);
     added.add(name);
-    ordered.push({ name, version: item.version, manifest: item.manifest, ref: item.ref, dependencies: Object.fromEntries(dependencies.map(dependency => [dependency, selected.get(dependency)!.version])) });
+    ordered.push({ name, version: item.version, manifest: item.manifest, ref: item.ref, features, dependencies: Object.fromEntries(dependencies.map(dependency => [dependency, selected.get(dependency)!.version])) });
   };
   for (const item of input.roots) append(item.name);
 
   const resolution: Resolution<T> = { packages: ordered, capabilities: {}, requires: {}, missingOptional: [], warnings: [] };
+  for (const [name, skip] of featureSkips) {
+    const chosen = selected.get(name);
+    if (chosen && semver.gt(skip.version, chosen.version)) resolution.warnings.push(`Se usa ${name}@${chosen.version}: la ${skip.version} no admite las features elegidas (${(skip.error as Error).message.replace(/^[^:]+: /, "")}). Revisa modai.yaml o cámbialas con modai feature.`);
+  }
+  for (const name of Object.keys(input.features ?? {})) if (!selected.has(name)) resolution.warnings.push(`modai.yaml elige features de ${name}, que no está instalado; se ignoran`);
   checkCompatibility(ordered, input);
   if (input.checkCapabilities !== false) resolveCapabilities(resolution, input.providers ?? {});
   return resolution;

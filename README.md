@@ -148,6 +148,15 @@ modai component create ./pkg-auth --name @acme/auth-module --from ./src/modules/
 modai add @acme/auth-module --allow project.source                                    # en otro proyecto: se copia a src/modules/auth
 ```
 
+Un paquete se puede armar por partes con **features**: el autor las declara en `spec.features` y quien instala elige con flags, que se guardan en `modai.yaml`.
+
+```sh
+modai add @components/health-module --help                      # qué opciones declara
+modai add @components/health-module --nestjs --metrics --allow project.source
+modai feature disable @components/health-module metrics         # cambiarlas después
+modai template use @eq/springboot ./api --sdd --x-lib           # lo mismo para templates
+```
+
 ```sh
 modai package scaffold ./mi-paquete --name @acme/mi-paquete --category testing --with-tool
 modai package validate ./mi-paquete
@@ -165,6 +174,7 @@ Guía completa: [crear, publicar e instalar paquetes](docs/guides/AUTHORING-PACK
 |---|---|
 | `modai init` | Crea `modai.yaml`: registries, adaptadores y memoria (`--registry`, `--adapter`, `--profile`, `--project`) |
 | `modai add` / `remove` / `update` / `outdated` / `sync [--frozen]` / `status` | Ciclo de vida reproducible y reversible |
+| `modai add <paquete> --<feature>` / `--help` · `modai feature list\|enable\|disable\|reset` | Partes opcionales de un paquete: elegirlas al instalar, ver cuáles ofrece y cambiarlas después |
 | `modai capability list` / `providers <capacidad>` / `provider <capacidad> <paquete>` | Contratos instalados, proveedores disponibles y elección de proveedor |
 | `modai permissions grant` / `revoke` / `permissions` | Autorización local de herramientas y servidores MCP |
 | `modai capability tools` / `tools run` | Herramientas aportadas por paquetes |

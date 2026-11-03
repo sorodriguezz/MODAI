@@ -7,6 +7,7 @@ import { join, relative, resolve } from "node:path";
 import type { Command } from "commander";
 import { isV1Project, loadV1Project } from "@modai/core";
 import { addPackages, parseSpec, removePackage } from "./commands.js";
+import { featureChoice, manifestForSpec, splitPackageFlags } from "./features.js";
 import { confirm, projectRegistry, runSync, summarize } from "./runtime.js";
 import { commaList } from "../cli/agent-commands.js";
 import { isJsonMode, printList, type Print } from "../cli/output.js";
@@ -139,26 +140,38 @@ export function registerWorkspaceCommands(program: Command, print: Print): void 
       }), `No hay proyectos MODAI bajo ${resolve(options.root)}.`);
     });
 
-  common(workspace.command("add").argument("<packages...>", "@scope/nombre[@rango]").description("Añade paquetes en todos los proyectos encontrados"))
+  common(workspace.command("add").argument("<packages...>", "@scope/nombre[@rango], cada uno seguido de sus flags (--tls, --no-metrics)").description("Añade paquetes en todos los proyectos encontrados, con las mismas features en todos"))
     .option("--allow <permissions>", "Permisos de instalación concedidos en cada proyecto", commaList)
-    .action(async (specs: string[], options: RunOptions & { allow?: string[] }) => {
+    .allowUnknownOption()
+    .action(async (_specs: string[], options: RunOptions & { allow?: string[] }, command: Command) => {
+      // Same syntax as modai add: each feature flag belongs to the package written before it.
+      const groups = splitPackageFlags(command.args);
       // file: paths are resolved once, against where the command runs, not inside each project.
-      const absolute = specs.map(spec => /^(file:|\.\.?\/|\/)/.test(spec) ? `file:${resolve(spec.replace(/^file:/, ""))}` : spec);
+      const absolute = groups.map(item => ({ ...item, spec: /^(file:|\.\.?\/|\/)/.test(item.spec) ? `file:${resolve(item.spec.replace(/^file:/, ""))}` : item.spec }));
+      const specs = absolute.map(item => item.spec);
+      const choices = async (root: string) => {
+        const features: Record<string, Record<string, boolean>> = {};
+        for (const item of absolute) if (item.flags.length) { const manifest = await manifestForSpec(item.spec, root); features[manifest.metadata.name] = featureChoice(manifest, item.flags); }
+        return features;
+      };
+      const flagsText = absolute.filter(item => item.flags.length).map(item => `${item.spec} ${item.flags.join(" ")}`).join("; ");
       await runOnProjects({
-        describe: `Añadir ${specs.join(", ")}`,
+        describe: `Añadir ${specs.join(", ")}${flagsText ? ` (${flagsText})` : ""}`,
         plan: async project => {
           const loaded = loadV1Project(project.root);
-          const missing = absolute.map(spec => parseSpec(spec, project.root)).filter(item => !(item.name in loaded.file.dependencies));
+          const missing = specs.map(spec => parseSpec(spec, project.root)).filter(item => !(item.name in loaded.file.dependencies));
           if (!missing.length) return { project: project.path, result: "sin cambios", detail: "ya está instalado" };
           const registry = projectRegistry(loaded);
           for (const item of missing) if (!item.value.startsWith("file:") && !(await registry.versions(item.name)).length) throw new Error(`${item.name} no existe en sus registries`);
+          await choices(project.root); // unknown or misspelled flags fail in the plan, before touching any project
           return { project: project.path, result: "pendiente", detail: `añadirá ${missing.map(item => item.name).join(", ")}` };
         },
         apply: async project => {
           const loaded = loadV1Project(project.root);
-          const missing = absolute.filter(spec => !(parseSpec(spec, project.root).name in loaded.file.dependencies));
-          const { names, needsGrant } = await addPackages(project.root, missing, { allow: options.allow });
-          return `añadido ${names.join(", ")}${needsGrant.length ? ` · requiere modai permissions grant ${needsGrant.join(", ")}` : ""}`;
+          const missing = specs.filter(spec => !(parseSpec(spec, project.root).name in loaded.file.dependencies));
+          const { names, needsGrant, report } = await addPackages(project.root, missing, { allow: options.allow, features: await choices(project.root) });
+          const withFeatures = names.filter(name => report.lock.packages[name]?.features.length).map(name => `${name} (${report.lock.packages[name]!.features.join(", ")})`);
+          return `añadido ${names.join(", ")}${withFeatures.length ? ` · features: ${withFeatures.join("; ")}` : ""}${needsGrant.length ? ` · requiere modai permissions grant ${needsGrant.join(", ")}` : ""}`;
         },
       }, options, print);
     });

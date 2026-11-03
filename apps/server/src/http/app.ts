@@ -117,7 +117,7 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     });
   });
 
-  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.9.1", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
+  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.10.0", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
   app.get("/", async (_request, reply) => reply.redirect("/admin"));
   if (options.adminDirectory !== false) {
     try { registerAdminAssets(app, options.adminDirectory); }
@@ -417,7 +417,7 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
     const { template, files } = templates.files(request.query.name, request.query.version);
     const publish = auth.publishableNamespaces(identityOf(request)!);
-    return { template, versions: templates.versions(request.query.name), files: files.map(file => ({ path: file.path, size: Buffer.from(file.content, "base64").length })), canPublish: publish.all || publish.namespaces.includes(namespaceOf(template.name)) };
+    return { template, ...templates.manifest(request.query.name, request.query.version), versions: templates.versions(request.query.name), files: files.map(file => ({ path: file.path, size: Buffer.from(file.content, "base64").length })), canPublish: publish.all || publish.namespaces.includes(namespaceOf(template.name)) };
   });
   app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/template/files", async request => {
     auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));

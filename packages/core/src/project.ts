@@ -41,7 +41,11 @@ function sortKeys<T>(value: Record<string, T>): Record<string, T> {
 }
 
 export function saveProjectFile(root: string, file: ProjectFile): void {
-  const clean = { ...file, dependencies: sortKeys(file.dependencies), overrides: sortKeys(file.overrides), providers: sortKeys(file.providers) };
+  // Empty feature choices are noise: a package without an entry simply follows its defaults.
+  const features = sortKeys(Object.fromEntries(Object.entries(file.features).filter(([, choice]) => Object.keys(choice).length).map(([name, choice]) => [name, sortKeys(choice)])));
+  const { apiVersion, kind, name, registries, dependencies, features: _features, overrides, providers, ...rest } = file;
+  // Feature choices sit next to the dependencies they refine.
+  const clean = { apiVersion, kind, name, registries, dependencies: sortKeys(dependencies), ...(Object.keys(features).length ? { features } : {}), overrides: sortKeys(overrides), providers: sortKeys(providers), ...rest };
   writeProjectFile(root, PROJECT_FILE, `# Proyecto MODAI. Edita dependencias con 'modai add/remove'; la especificación está en docs/spec/PACKAGE-SPEC-v1.md\n${YAML.stringify(clean, { lineWidth: 0 })}`);
 }
 
@@ -61,7 +65,8 @@ export function ensureProjectGitignore(root: string): void {
 // this machine can grant them. Grants never travel with the project.
 // ---------------------------------------------------------------------------
 
-export interface PackageGrant { integrity: string; permissions: string[]; grantedAt: string }
+/** `features`: the features applied when it was granted; switching features on or off needs a new grant. */
+export interface PackageGrant { integrity: string; permissions: string[]; features?: string[]; grantedAt: string }
 export interface ProjectGrants { install: string[]; packages: Record<string, PackageGrant> }
 
 function grantsPath(): string { return join(configDirectory(), "grants-v1.json"); }

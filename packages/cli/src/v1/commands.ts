@@ -56,9 +56,19 @@ export async function initV1(root: string, options: { name?: string; registry?: 
 }
 
 /** Adds packages to one project; modai.yaml changes only if the whole sync succeeds. */
-export async function addPackages(root: string, specs: string[], options: { allow?: string[]; force?: boolean; keepMine?: boolean }): Promise<{ names: string[]; report: SyncReport; needsGrant: string[] }> {
+/**
+ * Adds packages to one project; modai.yaml changes only if the whole sync succeeds. `features` holds, per package, the
+ * flags given on the command line (true = on, false = off); they merge with the choices already in modai.yaml.
+ */
+export async function addPackages(root: string, specs: string[], options: { allow?: string[]; force?: boolean; keepMine?: boolean; features?: Record<string, Record<string, boolean>> }): Promise<{ names: string[]; report: SyncReport; needsGrant: string[] }> {
   const parsed = specs.map(spec => parseSpec(spec, root));
-  const { report, project } = await runSync(root, file => { for (const item of parsed) file.dependencies[item.name] = item.value; }, { allow: options.allow, force: options.force, keepMine: options.keepMine, update: parsed.map(item => item.name) });
+  const { report, project } = await runSync(root, file => {
+    for (const item of parsed) {
+      file.dependencies[item.name] = item.value;
+      const choice = options.features?.[item.name];
+      if (choice && Object.keys(choice).length) file.features[item.name] = { ...(file.features[item.name] ?? {}), ...choice };
+    }
+  }, { allow: options.allow, force: options.force, keepMine: options.keepMine, update: parsed.map(item => item.name) });
   // Like npm: an unconstrained request is recorded as a caret range of the resolved version.
   const pinned = parsed.filter(item => item.value === "*" && project.lock.packages[item.name]);
   if (pinned.length) {
@@ -70,9 +80,10 @@ export async function addPackages(root: string, specs: string[], options: { allo
   return { names: parsed.map(item => item.name), report, needsGrant };
 }
 
-export async function addV1(root: string, specs: string[], options: { allow?: string[]; force?: boolean; keepMine?: boolean }, print: Print): Promise<void> {
+export async function addV1(root: string, specs: string[], options: { allow?: string[]; force?: boolean; keepMine?: boolean; features?: Record<string, Record<string, boolean>> }, print: Print): Promise<void> {
   const { names, report, needsGrant } = await addPackages(root, specs, options);
-  print(`Añadido ${names.join(", ")}.\n${summarize(report)}`);
+  const withFeatures = names.filter(name => report.lock.packages[name]?.features.length).map(name => `${name} (${report.lock.packages[name]!.features.join(", ")})`);
+  print(`Añadido ${names.join(", ")}.${withFeatures.length ? ` Features: ${withFeatures.join("; ")}.` : ""}\n${summarize(report)}`);
   if (needsGrant.length) print(`Contiene herramientas ejecutables no autorizadas todavía. Revisa y autoriza con: ${needsGrant.map(name => `modai permissions grant ${name}`).join("; ")}`);
 }
 
@@ -80,7 +91,7 @@ export async function addV1(root: string, specs: string[], options: { allow?: st
 export async function removePackage(root: string, name: string): Promise<SyncReport> {
   const project = loadV1Project(root);
   if (!(name in project.file.dependencies)) throw new Error(`${name} no es una dependencia directa del proyecto.`);
-  const { report } = await runSync(root, file => { delete file.dependencies[name]; for (const [capability, provider] of Object.entries(file.providers)) if (provider === name) delete file.providers[capability]; });
+  const { report } = await runSync(root, file => { delete file.dependencies[name]; delete file.features[name]; for (const [capability, provider] of Object.entries(file.providers)) if (provider === name) delete file.providers[capability]; });
   const grants = loadGrants(root);
   for (const grantName of Object.keys(grants.packages)) if (!report.lock.packages[grantName]) delete grants.packages[grantName];
   saveGrants(root, grants);
@@ -125,7 +136,9 @@ export function statusV1(root: string, print: Print): void {
     ...(project.file.context.projectId ? { projectId: project.file.context.projectId, server: project.file.context.server } : {}),
     registries: project.file.registries.map(item => item.url ?? item.path), adapters: project.file.adapters, memory: project.file.context.memory,
     dependencies: project.file.dependencies,
+    ...(Object.keys(project.file.features).length ? { features: project.file.features } : {}),
     installed: installed.map(item => ({ name: item.name, version: item.version, kind: item.kind, category: item.category, verified: item.verified,
+      ...(project.lock.packages[item.name]?.features.length ? { features: project.lock.packages[item.name]!.features } : {}),
       provides: item.manifest.spec.provides.map(capability => `${capability.capability}@${capability.version}`),
       contributes: Object.fromEntries(Object.entries(item.manifest.spec.contributes).filter(([, value]) => value.length).map(([key, value]) => [key, value.length])),
       executable: item.authorization.missing.length || item.authorization.allowed ? (item.authorization.allowed ? "autorizado" : "requiere modai permissions grant") : "no" })),
@@ -218,10 +231,10 @@ export function registerV1Commands(program: Command, print: Print): void {
       const item = inspectWorkspace(project).find(entry => entry.name === name)!;
       if (!item.verified) throw new Error(`La copia local de ${name} no supera la verificación de integridad; ejecuta modai sync`);
       const { tools, mcpServers } = item.manifest.spec.contributes;
-      print(`${name}@${locked.version} (${locked.integrity})\nPermisos declarados: ${locked.permissions.join(", ") || "ninguno"}\nHerramientas: ${tools.map(tool => `${tool.name} → ${tool.command} ${tool.args.join(" ")}`).join("; ") || "ninguna"}\nServidores MCP: ${mcpServers.map(server => `${server.name} → ${server.command} ${server.args.join(" ")}`).join("; ") || "ninguno"}\nMODAI no es un sandbox: un proceso autorizado se ejecuta con tus permisos de usuario.`);
+      print(`${name}@${locked.version} (${locked.integrity})${locked.features.length ? `\nFeatures activas: ${locked.features.join(", ")} (la autorización vale solo para estas)` : ""}\nPermisos declarados: ${locked.permissions.join(", ") || "ninguno"}\nHerramientas: ${tools.map(tool => `${tool.name} → ${tool.command} ${tool.args.join(" ")}`).join("; ") || "ninguna"}\nServidores MCP: ${mcpServers.map(server => `${server.name} → ${server.command} ${server.args.join(" ")}`).join("; ") || "ninguno"}\nMODAI no es un sandbox: un proceso autorizado se ejecuta con tus permisos de usuario.`);
       if (!(await confirm(`¿Autorizar ${name} en este equipo?`, options.yes))) { print("Sin cambios."); return; }
       const grants = loadGrants(root);
-      grants.packages[name] = { integrity: locked.integrity, permissions: locked.permissions, grantedAt: new Date().toISOString() };
+      grants.packages[name] = { integrity: locked.integrity, permissions: locked.permissions, features: locked.features, grantedAt: new Date().toISOString() };
       saveGrants(root, grants);
       print(`Autorizado ${name}. Sus herramientas quedan disponibles en el gateway MCP (modai-mcp) y en modai capability run.`);
     });

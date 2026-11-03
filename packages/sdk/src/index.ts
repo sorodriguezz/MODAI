@@ -242,7 +242,7 @@ export class ApiClient {
     return (await this.request<{ template: TemplateRecord }>("/api/v1/templates", { method: "POST", body: JSON.stringify(input) })).template;
   }
 
-  async templateInfo(name: string, version?: string): Promise<{ template: TemplateRecord; versions: TemplateRecord[]; files: Array<{ path: string; size: number }>; canPublish: boolean }> {
+  async templateInfo(name: string, version?: string): Promise<{ template: TemplateRecord; features: Array<{ name: string; description: string; default: boolean; requires: string[]; conflicts: string[]; uses?: string; path?: string; vars: Record<string, string> }>; addon?: { for: string[] }; versions: TemplateRecord[]; files: Array<{ path: string; size: number }>; canPublish: boolean }> {
     return this.request(`/api/v1/template?name=${encodeURIComponent(name)}${version ? `&version=${encodeURIComponent(version)}` : ""}`);
   }
   async setTemplateStatus(name: string, version: string, status: "active" | "yanked"): Promise<TemplateRecord> {

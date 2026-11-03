@@ -21,7 +21,7 @@ import { registerWorkspaceCommands } from "../v1/workspace.js";
 import { tokenFor } from "../v1/runtime.js";
 
 const program = new Command();
-program.name("modai").description("MODAI: gestor de paquetes y capacidades para agentes de IA").version("0.9.1")
+program.name("modai").description("MODAI: gestor de paquetes y capacidades para agentes de IA").version("0.10.0")
   .option("--json", "Salida JSON para scripts (en cualquier comando)")
   .hook("preAction", () => setJsonMode(Boolean(program.opts().json)));
 

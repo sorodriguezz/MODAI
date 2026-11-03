@@ -7,6 +7,8 @@ import { openDialog, closeDialog, setBusy, toast, toastError } from "../lib/ui.j
 import { base64ToBytes, bytesToText, cleanPath, formatBytes, textToBytes, toArtifactFiles } from "../lib/files.js";
 import { store, can, state } from "../state.js";
 import { wizard } from "../lib/wizard.js";
+import { namespaceField, bindNamespaceSearch } from "../lib/namespace-picker.js";
+import { bindVersionCheck } from "../lib/versions.js";
 import { openSkillImport } from "./skill-import.js";
 
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -134,6 +136,10 @@ export async function openPackageEditor({ base, template = "component", onPublis
     s.manifestText = JSON.stringify(base.manifest, null, 2);
   }
 
+  const publish = state.permissions?.publish || { all: false, namespaces: [] };
+  const pkgNamespaces = base ? [] : publish.all ? (await store.namespaces().catch(() => [])).map((n) => n.name) : publish.namespaces;
+  const [pkgScope, pkgShort = ""] = String(s.meta.name || "").split("/").length === 2 ? String(s.meta.name).split("/") : ["", String(s.meta.name || "")];
+
   const body = openDialog({
     title: base ? "Nueva versión de " + base.name : "Crear paquete",
     description: base ? "Parte de la versión " + base.version + ". Las versiones publicadas son inmutables: esto publica una versión nueva." : "Elige qué quieres compartir, añade los archivos y publícalo en este servidor.",
@@ -147,8 +153,11 @@ export async function openPackageEditor({ base, template = "component", onPublis
         </div></fieldset></section>`}
       <section data-step="identity" data-title="Identidad"><div class="stack">
       <div class="field-row">
-        <div class="field"><label for="pkgName">Nombre</label><input id="pkgName" required pattern="@[a-z0-9][a-z0-9._\\-]*\\/[a-z0-9][a-z0-9._\\-]*" placeholder="@acme/auth-module" value="${s.meta.name}" ${base ? "readonly" : ""} list="pkgNamespaces"><datalist id="pkgNamespaces">${(state.permissions?.publish.namespaces || []).map((ns) => html`<option value="${ns}/"></option>`)}</datalist><p class="hint">@namespace/nombre, en minúsculas. ${state.permissions?.publish.all ? "Puedes publicar en cualquier namespace." : html`Puedes publicar en: ${(state.permissions?.publish.namespaces || []).join(", ") || "ningún namespace"}.`}</p></div>
-        <div class="field"><label for="pkgVersion">Versión</label><input id="pkgVersion" required pattern="\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.\\-]+)?" value="${s.meta.version}"><p class="hint">SemVer: 1.2.3</p></div>
+        <div class="field-row">
+          ${namespaceField({ id: "pkgNamespace", names: pkgNamespaces, selected: pkgScope, readonly: Boolean(base) })}
+          <div class="field"><label for="pkgName">Nombre</label><input id="pkgName" required pattern="[a-z0-9][a-z0-9._\\-]*" placeholder="auth-module" value="${pkgShort}" ${base ? "readonly" : ""} spellcheck="false" autocapitalize="off"><p class="hint">En minúsculas. El paquete será <code>namespace/nombre</code>.</p></div>
+        </div>
+        <div class="field"><label for="pkgVersion">Versión</label><input id="pkgVersion" required pattern="\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.\\-]+)?" value="${s.meta.version}"><p class="hint" id="pkgVersionHint">SemVer: 1.2.3</p></div>
       </div>
       <div class="field"><label for="pkgDescription">Descripción</label><textarea id="pkgDescription" rows="2" required maxlength="5000" placeholder="Qué aporta, cuándo usarlo y qué espera del proyecto.">${s.meta.description}</textarea></div>
       <div id="templateFields"></div>
@@ -185,12 +194,20 @@ export async function openPackageEditor({ base, template = "component", onPublis
     </form>`,
   });
   const form = body.querySelector("form");
+  bindNamespaceSearch(form, "pkgNamespace", pkgNamespaces);
   const $ = (id) => form.querySelector("#" + id);
   const showError = (error) => { const box = form.querySelector(".form-error"); box.textContent = error.message; box.hidden = false; };
   const clearError = () => (form.querySelector(".form-error").hidden = true);
 
+  const pkgFullName = () => `${$("pkgNamespace").value.trim()}/${$("pkgName").value.trim()}`;
+  const versionCheck = bindVersionCheck({
+    name: pkgFullName, input: $("pkgVersion"), hint: $("pkgVersionHint"),
+    fetchVersions: async (name) => (await get("/packages?includeYanked=true&name=" + encodeURIComponent(name))).packages.map((item) => item.version),
+    watch: [$("pkgNamespace"), $("pkgName")],
+  });
+
   const readForm = () => {
-    s.meta.name = $("pkgName").value.trim();
+    s.meta.name = `${$("pkgNamespace").value.trim()}/${$("pkgName").value.trim()}`;
     s.meta.version = $("pkgVersion").value.trim();
     s.meta.description = $("pkgDescription").value.trim();
     if ($("pkgCategory")) s.meta.category = $("pkgCategory").value.trim();
@@ -418,6 +435,9 @@ export async function openPackageEditor({ base, template = "component", onPublis
       identity: () => {
         readForm();
         const namespace = s.meta.name.split("/")[0];
+        if (!namespace) return "Elige un namespace.";
+        const versionIssue = versionCheck.problem();
+        if (versionIssue) return versionIssue;
         return namespace && !can.publishTo(namespace) ? `No tienes permiso para publicar en ${namespace}. Elige uno de tus namespaces o pide acceso a la administración de su organización.` : "";
       },
       files: () => s.files.size || s.template === "blank" || s.template === "existing" ? "" : "Añade al menos un archivo.",

@@ -24,7 +24,7 @@ function firstHeading(content: string, fallback: string): string {
   return content.match(/^#\s+(.+)$/m)?.[1]?.trim().slice(0, 300) || fallback;
 }
 
-type RawV1 = { spec?: { entrypoints?: { skills?: string; knowledge?: string; rules?: string }; contributes?: Record<string, unknown[]>; include?: string[] } };
+type RawV1 = { spec?: { entrypoints?: { skills?: string; knowledge?: string; rules?: string }; contributes?: Record<string, unknown[]>; include?: string[]; features?: unknown } };
 
 /** Expands `spec.entrypoints` directory conventions into explicit `spec.contributes` entries. */
 function expandEntrypoints(root: string, manifest: RawV1): void {
@@ -66,15 +66,23 @@ export function loadPackageSource(directory: string): PublishPackageInput {
   if (manifest?.apiVersion !== API_VERSION) throw new Error(`${manifestPath} debe declarar apiVersion: ${API_VERSION} (ver docs/spec/PACKAGE-SPEC-v1.md).`);
   expandEntrypoints(root, manifest as RawV1);
   const spec = (manifest as RawV1).spec ?? {};
-  const contributes = (spec.contributes ?? {}) as Record<string, Array<Record<string, unknown>>>;
-  for (const skill of contributes.skills ?? []) {
-    const path = String(skill.path);
-    const files = skill.files as string[] | undefined;
-    for (const file of files ? files.map(item => posix.join(path, item)) : listFiles(root, path)) sources.add(file);
+  // Files of the package's contributions and of every feature's (contributions and overlays), active or not: the
+  // person picks features at install time, so the artifact carries all of them.
+  const collect = (contributes: Record<string, Array<Record<string, unknown>>>) => {
+    for (const skill of contributes.skills ?? []) {
+      const path = String(skill.path);
+      const files = skill.files as string[] | undefined;
+      for (const file of files ? files.map(item => posix.join(path, item)) : listFiles(root, path)) sources.add(file);
+    }
+    for (const component of contributes.components ?? []) for (const file of listFiles(root, String(component.path))) if (file !== "modai.package.yaml") sources.add(file);
+    for (const key of ["rules", "knowledge"]) for (const item of contributes[key] ?? []) sources.add(String(item.path));
+    for (const item of contributes.files ?? []) sources.add(String(item.source));
+  };
+  collect((spec.contributes ?? {}) as Record<string, Array<Record<string, unknown>>>);
+  for (const feature of Object.values((spec.features ?? {}) as Record<string, { contributes?: Record<string, Array<Record<string, unknown>>>; overlays?: Array<{ path: string }> }>)) {
+    collect(feature?.contributes ?? {});
+    for (const overlay of feature?.overlays ?? []) for (const file of listFiles(root, String(overlay.path))) if (file !== "modai.package.yaml") sources.add(file);
   }
-  for (const component of contributes.components ?? []) for (const file of listFiles(root, String(component.path))) if (file !== "modai.package.yaml") sources.add(file);
-  for (const key of ["rules", "knowledge"]) for (const item of contributes[key] ?? []) sources.add(String(item.path));
-  for (const item of contributes.files ?? []) sources.add(String(item.source));
   for (const path of spec.include ?? []) for (const file of listFiles(root, path)) sources.add(file);
   const files: ArtifactFile[] = [];
   let totalBytes = 0;

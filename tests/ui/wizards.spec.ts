@@ -71,7 +71,8 @@ test("importa un .skill con vista previa y lo publica", async ({ page }) => {
   await expect(page.getByText("Publicado @ui-skills/pr-review@1.0.0")).toBeVisible();
 });
 
-test("sube un template desde un .zip y muestra cómo usarlo", async ({ page }) => {
+test("sube un template desde un .zip y muestra cómo usarlo", async ({ page, request }) => {
+  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-plantillas" } });
   await login(page);
   await page.goto("/admin#/templates");
   await page.getByRole("button", { name: "Subir template" }).first().click();
@@ -80,7 +81,8 @@ test("sube un template desde un .zip y muestra cómo usarlo", async ({ page }) =
   await dialog.locator("#tplZip").setInputFiles({ name: "nest.zip", mimeType: "application/zip", buffer: zip });
   await expect(dialog.locator("#tplSourceSummary")).toContainText("nest.zip");
   await dialog.getByRole("button", { name: "Siguiente" }).click();
-  await dialog.locator("#tplNamespace").fill("@ui-plantillas");
+  await dialog.locator("#tplNamespaceInput").click();
+  await dialog.getByRole("option", { name: "@ui-plantillas" }).click();
   await dialog.locator("#tplName").fill("nest-sdd");
   await dialog.getByLabel("Descripción").fill("NestJS con SDD para pruebas del panel");
   await dialog.getByLabel(/Stack/).fill("NestJS · SDD");
@@ -160,7 +162,8 @@ test("crea un template desde cero en el editor del panel y publica una versión 
   await dialog.getByRole("button", { name: "Guardar archivo" }).click();
   await dialog.getByRole("button", { name: "Eliminar AGENTS.md" }).click();
   await dialog.getByRole("button", { name: "Siguiente" }).click();
-  await dialog.locator("#tplNamespace").fill("@ui-plantillas");
+  await dialog.locator("#tplNamespaceInput").click();
+  await dialog.getByRole("option", { name: "@ui-plantillas" }).click();
   await dialog.locator("#tplName").fill("desde-cero");
   await dialog.getByLabel("Descripción").fill("Template creado en el panel");
   await dialog.getByRole("button", { name: "Siguiente" }).click();
@@ -206,4 +209,40 @@ test("una administración de organización ve Deprecar y Retirar solo en sus nam
   await page.goto("/admin#/packages?name=@ui-otro/cosa");
   await dialog.getByRole("tab", { name: /Versiones/ }).click();
   await expect(dialog.getByRole("button", { name: "Deprecar" })).toHaveCount(0);
+});
+
+test("un modal solo se cierra con sus botones: ni el fondo ni Escape descartan lo escrito, y la página de atrás no se desplaza", async ({ page }) => {
+  await login(page);
+  await page.goto("/admin#/templates");
+  await page.getByRole("button", { name: "Subir template" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(4, 4);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe("hidden");
+  await dialog.getByRole("button", { name: "Cerrar" }).first().click();
+  await expect(dialog).toBeHidden();
+  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe("hidden");
+});
+
+test("el detalle de un template con features las lista y arma el comando al marcarlas", async ({ page, request }) => {
+  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-plantillas" } });
+  const yaml = "features:\n  sdd:\n    description: Spec-Driven Development\n    path: features/sdd\n  lombok:\n    description: Lombok\n    path: features/lombok\n    default: true\n";
+  const archive = writeZip([
+    { path: "pom.xml", bytes: Buffer.from("<project/>") }, { path: "modai.template.yaml", bytes: Buffer.from(yaml) },
+    { path: "features/sdd/AGENTS.md", bytes: Buffer.from("sdd") }, { path: "features/lombok/lombok.config", bytes: Buffer.from("x") },
+  ]).toString("base64");
+  const response = await request.post("/api/v1/templates", { headers: auth, data: { name: "@ui-plantillas/spring-flags", version: "1.0.0", description: "Spring con features", archive } });
+  expect(response.status(), await response.text()).toBe(201);
+  await login(page);
+  await page.goto("/admin#/templates");
+  await page.locator('[data-name="@ui-plantillas/spring-flags"]').click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Opciones (features)")).toBeVisible();
+  await expect(dialog.locator("#tplUseCommand")).not.toContainText("--sdd");
+  await dialog.locator('[data-feature="sdd"]').check();
+  await expect(dialog.locator("#tplUseCommand")).toContainText("--sdd");
+  await dialog.locator('[data-feature="lombok"]').uncheck();
+  await expect(dialog.locator("#tplUseCommand")).toContainText("--no-lombok");
 });

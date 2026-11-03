@@ -1,4 +1,5 @@
 import { html, mount, delegate } from "../lib/html.js";
+import { bindFeaturePicker, featureList, featurePicker } from "../lib/feature-picker.js";
 import { icon } from "../lib/icons.js";
 import { get, post, del } from "../lib/api.js";
 import { base64ToBytes, bytesToText, formatBytes } from "../lib/files.js";
@@ -34,9 +35,9 @@ const TYPES = {
 };
 const INSTALL_PERMISSIONS = ["project.instructions", "project.files", "project.source"];
 
-function installCommand(item, info) {
+function installCommand(item, info, flags = []) {
   const allow = info.permissions.filter((permission) => INSTALL_PERMISSIONS.includes(permission));
-  return "modai add " + item.name + "@" + item.version + (allow.length ? " --allow " + allow.join(",") : "");
+  return "modai add " + item.name + "@" + item.version + (flags.length ? " " + flags.join(" ") : "") + (allow.length ? " --allow " + allow.join(",") : "");
 }
 
 function capabilityList(items, emptyText) {
@@ -83,6 +84,7 @@ function overviewPanel(item, info) {
   return html`
     <p class="lead">${info.description}</p>
     ${item.deprecatedMessage ? html`<div class="callout tone-${item.status === "yanked" ? "danger" : "warning"}">${icon("alert")}<span><b>${item.status === "yanked" ? "Versión retirada" : "Versión deprecada"}:</b> ${item.deprecatedMessage}</span></div>` : ""}
+    ${featurePicker("packageFeatures", featureList(item.manifest?.spec?.features), html`Marca lo que quieres y el comando se arma solo. En la CLI: <code>modai add ${item.name} --help</code>; después se cambian con <code>modai feature enable|disable</code>.`)}
     ${codeBlock("installCommand", installCommand(item, info), "Copiar")}
     ${info.contributes.components.length ? html`<p class="hint">Los componentes se copian al proyecto. Quien los instale puede modificarlos: <code>modai remove</code> conserva los archivos editados.</p>` : ""}
     <dl class="definition-grid">
@@ -160,6 +162,8 @@ export async function openPackage(name, version, onChange, onPublished = onChang
       ${can.publish() ? html`<div class="dialog-actions"><button type="button" class="btn" data-action="newVersion">${icon("edit")}Editar y publicar nueva versión</button></div>` : ""}
       <div role="tabpanel" data-panel="manifest" class="tab-panel" hidden>${codeBlock("manifestJson", JSON.stringify(item.manifest, null, 2), "Copiar JSON")}</div>`,
   });
+  const features = featureList(item.manifest?.spec?.features);
+  bindFeaturePicker(body, "packageFeatures", features, (flags) => { const code = body.querySelector("#installCommand"); if (code) code.textContent = installCommand(item, info, flags); });
   let files = null, usageLoaded = false;
   bindTabs(body, async (tab) => {
     if (tab === "usage" && !usageLoaded) {

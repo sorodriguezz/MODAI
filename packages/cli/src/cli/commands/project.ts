@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import semver from "semver";
 import { addV1, capabilitiesV1, initV1, outdatedV1, removeV1, statusV1, syncV1, updateV1 } from "../../v1/commands.js";
+import { featureChoice, manifestForSpec, packageHelp, registerFeatureCommands, splitPackageFlags } from "../../v1/features.js";
 import { requireV1Project, runSync, summarize } from "../../v1/runtime.js";
 import { commaList } from "../agent-commands.js";
 import { group } from "../groups.js";
@@ -21,12 +22,32 @@ export function registerProjectCommands(program: Command, print: Print): void {
     .action(options => initV1(process.cwd(), options, print));
 
   program.command("add")
-    .description("Añade paquetes (y sus dependencias) al proyecto")
-    .argument("<packages...>", "@scope/nombre[@rango] o file:../ruta")
+    .description("Añade paquetes (y sus dependencias) al proyecto. Las features de cada paquete se activan con --<feature> después de su nombre")
+    .argument("[packages...]", "@scope/nombre[@rango] o file:../ruta, cada uno seguido de sus flags (--tls, --no-metrics)")
     .option("--allow <permissions>", "Permisos de instalación concedidos en este equipo", commaList)
     .option("--force", "Sobrescribe archivos administrados que fueron modificados")
     .option("--keep-mine", "Conserva tus archivos modificados y deja la versión nueva al lado (.modai-new)")
-    .action((specs: string[], options) => addV1(requireV1Project(), specs, options, print));
+    .helpOption(false).option("-h, --help", "Ayuda; con un paquete indicado, muestra también las features que declara")
+    .allowUnknownOption().allowExcessArguments()
+    .addHelpText("after", "\nEjemplo: modai add @eq/health --tls @eq/auth --jwt --no-sessions\nCada flag se aplica al paquete escrito antes. Las features que ofrece un paquete: modai add @scope/paquete --help")
+    .action(async (_specs: string[], options: { allow?: string[]; force?: boolean; keepMine?: boolean; help?: boolean }, command: Command) => {
+      // Feature flags are defined by each package, so commander cannot know them: read the raw tokens in order.
+      const groups = splitPackageFlags(command.args.filter(token => token !== "-h"));
+      if (options.help || command.args.includes("-h")) {
+        if (!groups.length) { command.outputHelp(); return; }
+        for (const item of groups) print(packageHelp(await manifestForSpec(item.spec)));
+        return;
+      }
+      if (!groups.length) throw new Error("Indica al menos un paquete: modai add @scope/paquete [--feature]");
+      const root = requireV1Project();
+      const features: Record<string, Record<string, boolean>> = {};
+      for (const item of groups) {
+        if (!item.flags.length) continue;
+        const manifest = await manifestForSpec(item.spec, root);
+        features[manifest.metadata.name] = featureChoice(manifest, item.flags);
+      }
+      await addV1(root, groups.map(item => item.spec), { ...options, features }, print);
+    });
 
   program.command("remove")
     .description("Retira una dependencia directa conservando los archivos que modificaste")
@@ -47,6 +68,8 @@ export function registerProjectCommands(program: Command, print: Print): void {
     .option("--keep-mine", "Si modificaste archivos administrados, conserva tu versión y deja la nueva al lado (.modai-new)")
     .option("--force", "Sobrescribe tus cambios en archivos administrados")
     .action((names: string[] = [], options: { keepMine?: boolean; force?: boolean }) => updateV1(requireV1Project(), names, options, print));
+
+  registerFeatureCommands(program, print);
 
   program.command("outdated").description("Compara el lock con las versiones disponibles en los registries").action(() => outdatedV1(requireV1Project(), print));
   program.command("status").description("Muestra el estado del proyecto").action(() => statusV1(requireV1Project(), print));

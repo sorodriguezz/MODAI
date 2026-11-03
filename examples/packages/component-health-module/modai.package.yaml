@@ -2,8 +2,8 @@ apiVersion: modai.dev/v1
 kind: Package
 metadata:
   name: "@components/health-module"
-  version: 1.0.0
-  description: Módulo de health check para backends Node (Express o NestJS). Expone GET /health con versión, uptime y estado de dependencias; se copia al proyecto para adaptarlo.
+  version: 1.1.0
+  description: Módulo de health check para backends Node (Express o NestJS). Expone GET /health con versión, uptime y estado de dependencias; se copia al proyecto para adaptarlo. Se arma por partes con features (--nestjs, --express, --metrics).
   keywords: [backend, health, observability]
 spec:
   category: backend
@@ -17,3 +17,22 @@ spec:
         target: src/modules/{component}
         language: typescript
         tags: [backend, observability]
+  # Partes opcionales: modai add @components/health-module --nestjs --metrics
+  features:
+    nestjs:
+      description: Controlador y módulo de NestJS para GET /health
+      conflicts: [express]
+      overlays:
+        - { component: health, path: features/nestjs }
+    express:
+      description: Router de Express para GET /health
+      conflicts: [nestjs]
+      overlays:
+        - { component: health, path: features/express }
+    metrics:
+      description: Métricas del proceso en formato Prometheus (metrics.ts) y guía de uso
+      overlays:
+        - { component: health, path: features/metrics/component }
+      contributes:
+        knowledge:
+          - { path: features/metrics/docs/METRICS.md, title: Métricas del health module, tags: [observability, prometheus] }

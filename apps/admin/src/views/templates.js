@@ -1,3 +1,6 @@
+import { bindVersionCheck } from "../lib/versions.js";
+import { bindFeaturePicker, featureList, featurePicker } from "../lib/feature-picker.js";
+import { namespaceField, bindNamespaceSearch } from "../lib/namespace-picker.js";
 import { html, mount, delegate, toMarkup } from "../lib/html.js";
 import { icon } from "../lib/icons.js";
 import { get, post, patch } from "../lib/api.js";
@@ -11,7 +14,8 @@ const MAX_BYTES = 25 * 1024 * 1024;
 /** Same exclusions as the server and the CLI: dependencies, build output, VCS data and local secrets. */
 const EXCLUDED = /(^|\/)(node_modules|\.git|dist|build|coverage|\.next|\.turbo|\.modai\/store|\.DS_Store|Thumbs\.db)(\/|$)|(^|\/)\.env(\.(?!example$|sample$|template$)[^/]*)?$/;
 const downloadUrl = (name, version) => "/api/v1/template/download?name=" + encodeURIComponent(name) + "&version=" + encodeURIComponent(version);
-const useCommand = (name, version) => `modai template use ${name}@${version} ./mi-proyecto --var projectName=mi-proyecto`;
+const useCommand = (name, version, flags = []) => `modai template use ${name}@${version} ./mi-proyecto${flags.length ? " " + flags.join(" ") : ""} --var projectName=mi-proyecto`;
+
 
 async function publishableNamespaces() {
   const publish = state.permissions?.publish || { all: false, namespaces: [] };
@@ -54,9 +58,9 @@ async function templateForm(base, onSaved) {
       </div></section>
       <section data-step="data" data-title="Datos"><div class="stack">
         <div class="field-row">
-          <div class="field"><label for="tplNamespace">Namespace</label>${base ? html`<input id="tplNamespace" value="${baseNamespace}" readonly>` : namespaces.length ? html`<select id="tplNamespace" required>${namespaces.map((ns) => html`<option value="${ns}">${ns}</option>`)}</select>` : html`<select id="tplNamespace" required disabled><option value="">No hay namespaces</option></select><p class="hint">Crea uno primero en el menú Namespaces; publicar no lo crea.</p>`}</div>
+          ${namespaceField({ id: "tplNamespace", names: namespaces, selected: baseNamespace, readonly: Boolean(base) })}
           <div class="field"><label for="tplName">Nombre</label><input id="tplName" required pattern="[a-z0-9][a-z0-9._\\-]*" placeholder="nestjs-sdd" value="${baseShort}" ${base ? "readonly" : ""}></div>
-          <div class="field"><label for="tplVersion">Versión</label><input id="tplVersion" required pattern="\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.\\-]+)?" value="${nextVersion}"></div>
+          <div class="field"><label for="tplVersion">Versión</label><input id="tplVersion" required pattern="\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.\\-]+)?" value="${nextVersion}"><p class="hint" id="tplVersionHint">SemVer: 1.2.3</p></div>
         </div>
         <div class="field"><label for="tplDescription">Descripción</label><textarea id="tplDescription" rows="3" required maxlength="2000" placeholder="Qué incluye, para qué tipo de proyecto sirve y cómo se arranca.">${base?.description || ""}</textarea></div>
         <div class="field-row">
@@ -110,7 +114,13 @@ async function templateForm(base, onSaved) {
       } catch (error) { box.textContent = error.message; }
     }
   });
+  bindNamespaceSearch(form, "tplNamespace", namespaces);
   const name = () => `${form.tplNamespace.value.trim()}/${form.tplName.value.trim()}`;
+  const versionCheck = bindVersionCheck({
+    name, input: form.tplVersion, hint: form.querySelector("#tplVersionHint"),
+    fetchVersions: async (full) => { try { return (await get("/template?name=" + encodeURIComponent(full))).versions.map((item) => item.version); } catch { return []; } },
+    watch: [form.tplNamespace, form.tplName],
+  });
   wizard(form, {
     start: base ? 0 : 0,
     validate: {
@@ -119,7 +129,7 @@ async function templateForm(base, onSaved) {
         if (editor.editing) return "Guarda o cancela el archivo que estás editando.";
         return editorFiles.size ? "" : "Agrega al menos un archivo.";
       },
-      data: () => (can.publishTo(form.tplNamespace.value.trim()) ? "" : `No puedes publicar en ${form.tplNamespace.value.trim()}.`),
+      data: () => (!form.tplNamespace.value.trim() ? "Elige un namespace." : !can.publishTo(form.tplNamespace.value.trim()) ? `No puedes publicar en ${form.tplNamespace.value.trim()}.` : versionCheck.problem()),
     },
     onEnter: {
       data: () => { if (source() === "editor") editorContent().catch((error) => { content = null; toastError(error); }); },
@@ -144,7 +154,7 @@ async function openTemplate(name, version, reload) {
   let detail;
   try { detail = await get("/template?name=" + encodeURIComponent(name) + (version ? "&version=" + encodeURIComponent(version) : "")); }
   catch (error) { return toastError(error); }
-  const { template, versions, files, canPublish } = detail;
+  const { template, versions, files, canPublish, features = [], addon } = detail;
   const body = openDialog({
     title: template.name,
     description: (template.stack ? template.stack + " · " : "") + "versión " + template.version,
@@ -153,6 +163,8 @@ async function openTemplate(name, version, reload) {
       <p class="lead">${template.description}</p>
       ${template.tags.length ? html`<ul class="chip-list">${template.tags.map((tag) => html`<li class="chip">${tag}</li>`)}</ul>` : ""}
       <h4>Crear un proyecto</h4>
+      ${featurePicker("tplFeatures", featureList(features), html`Marca lo que quieres y el comando se arma solo. En la CLI: <code>modai template use ${template.name} --help</code>.`)}
+      ${addon ? html`<div class="callout tone-info">${icon("info")}<span>Es un <b>add-on</b>${addon.for.length ? " para " + addon.for.join(", ") : ""}: se combina con otro template usando <code>--with ${template.name}</code>.</span></div>` : ""}
       ${codeBlock("tplUseCommand", useCommand(template.name, template.version), "Copiar")}
       <div class="row-actions"><a class="btn" href="${downloadUrl(template.name, template.version)}" download>${icon("download")}Descargar .zip</a>${canPublish ? html`<button type="button" class="btn primary" data-action="newVersion">${icon("plus")}Nueva versión</button>` : ""}</div>
       <h4>Versiones</h4>
@@ -161,6 +173,7 @@ async function openTemplate(name, version, reload) {
           <td class="actions">${canPublish ? html`<button type="button" class="btn small ghost" data-action="toggle" data-version="${v.version}" data-status="${v.status === "active" ? "yanked" : "active"}">${v.status === "active" ? "Retirar" : "Restaurar"}</button>` : ""}</td></tr>`)}</tbody></table></div>
       <details class="disclosure"><summary>Archivos (${files.length} · ${formatBytes(template.sizeBytes)})</summary><ul class="file-summary">${files.map((f) => html`<li><code>${f.path}</code> <span class="muted small">${formatBytes(f.size)}</span></li>`)}</ul></details>`,
   });
+  bindFeaturePicker(body, "tplFeatures", featureList(features), (flags) => { const code = body.querySelector("#tplUseCommand"); if (code) code.textContent = useCommand(template.name, template.version, flags); });
   delegate(body, {
     newVersion: () => templateForm(template, async (saved) => { await reload(); openTemplate(saved.name, saved.version, reload); }),
     version: (button) => openTemplate(template.name, button.dataset.version, reload),

@@ -147,6 +147,105 @@ test("la CLI publica un .skill y crea proyectos desde un template", async () => 
   assert.notEqual((await modai("template", "use", "@cli/nest", "mi-app")).status, 0, "no escribe sobre una carpeta con archivos");
 });
 
+test("un template con features se arma por capas con flags (--sdd, --no-x, --with) y su --help muestra lo que declara", async () => {
+  const { execFile } = await import("node:child_process");
+  const { mkdirSync, writeFileSync, readFileSync, existsSync } = await import("node:fs");
+  if (!app.server.listening) await app.listen({ host: "127.0.0.1", port: 0 });
+  const server = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
+  const env = { ...process.env, MODAI_SERVER: server, MODAI_API_TOKEN: bootstrap, MODAI_CONFIG_DIR: join(root, "config"), MODAI_NO_UPDATE_NOTIFIER: "1", MODAI_NO_USAGE_REPORT: "1" };
+  const modai = (...args: string[]) => new Promise<{ status: number; stdout: string; stderr: string }>(resolve => execFile(process.execPath, [join(process.cwd(), "node_modules/tsx/dist/cli.mjs"), join(process.cwd(), "packages/cli/src/cli/index.ts"), ...args], { cwd: root, env },
+    (error, stdout, stderr) => resolve({ status: error ? Number(error.code ?? 1) : 0, stdout, stderr })));
+  const write = (path: string, text: string) => { mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, text); };
+
+  // An add-on: a template meant to be layered onto others.
+  const addon = join(root, "addon-sdd");
+  write(join(addon, "specs", "README.md"), "# Specs de {{projectName}}\n");
+  write(join(addon, "modai.template.yaml"), 'addon:\n  for: ["@cli/springboot"]\n');
+  assert.equal((await modai("template", "publish", addon, "--name", "@cli/sdd-addon@1.0.0", "--description", "SDD como capa")).status, 0);
+
+  const base = join(root, "springboot");
+  write(join(base, "pom.xml"), "<project>{{projectName}}</project>\n");
+  write(join(base, "AGENTS.md"), "base\n");
+  write(join(base, "features", "sdd", "AGENTS.md"), "con sdd\n");
+  write(join(base, "features", "sdd", "docs", "sdd.md"), "SDD {{specsDir}}\n");
+  write(join(base, "features", "x-lib", "src", "XLib.java"), "class XLib {}\n");
+  write(join(base, "features", "lombok", "lombok.config"), "config.stopBubbling = true\n");
+  write(join(base, "modai.template.yaml"), [
+    "features:", "  sdd:", "    description: Spec-Driven Development", "    path: features/sdd", "    vars: { specsDir: specs }", "    uses: \"@cli/sdd-addon@1.0.0\"", "    packages:", "      \"@methodologies/sdd\": \"^1\"", "      \"@components/health-module\": { version: \"^1\", features: [metrics] }",
+    "  x-lib:", "    description: Librería X", "    path: features/x-lib", "    requires: [lombok]",
+    "  lombok:", "    description: Lombok", "    path: features/lombok", "    default: true", ""].join("\n"));
+  const published = await modai("template", "publish", base, "--name", "@cli/springboot@1.0.0", "--description", "Spring Boot modular", "--stack", "Spring Boot");
+  assert.equal(published.status, 0, published.stderr);
+
+  // --help shows what this template declares (not just the fixed options).
+  const help = await modai("template", "use", "@cli/springboot", "--help");
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /--sdd\s+Spec-Driven Development/);
+  assert.match(help.stdout, /--x-lib\s+Librería X \(requiere lombok\)/);
+  assert.match(help.stdout, /--lombok \/ --no-lombok\s+Lombok \(activada por defecto\)/);
+  assert.match(help.stdout, /--sdd\s+Spec-Driven Development \(usa @cli\/sdd-addon@1\.0\.0; instala @methodologies\/sdd, @components\/health-module\)/);
+  assert.match((await modai("template", "use", "-h")).stdout, /--dry-run/);
+
+  // Default: the base plus the features switched on by default.
+  const plain = await modai("template", "use", "@cli/springboot", "app-base");
+  assert.equal(plain.status, 0, plain.stderr);
+  assert.equal(readFileSync(join(root, "app-base", "AGENTS.md"), "utf8"), "base\n");
+  assert.ok(existsSync(join(root, "app-base", "lombok.config")));
+  assert.ok(!existsSync(join(root, "app-base", "src", "XLib.java")));
+  assert.ok(!existsSync(join(root, "app-base", "modai.template.yaml")), "el manifiesto no se copia");
+  assert.ok(!existsSync(join(root, "app-base", "features")), "las carpetas de features no se copian");
+
+  // Flags add layers; --sdd also pulls its add-on first, then the feature folder wins over the base.
+  const full = await modai("template", "use", "@cli/springboot", "--sdd", "--x-lib", "app-full");
+  assert.equal(full.status, 0, full.stderr);
+  assert.match(full.stdout, /features: lombok, sdd, x-lib|features: sdd, x-lib, lombok/);
+  assert.equal(readFileSync(join(root, "app-full", "AGENTS.md"), "utf8"), "con sdd\n");
+  assert.equal(readFileSync(join(root, "app-full", "docs", "sdd.md"), "utf8"), "SDD specs\n");
+  assert.equal(readFileSync(join(root, "app-full", "specs", "README.md"), "utf8"), "# Specs de app-full\n");
+  assert.ok(existsSync(join(root, "app-full", "src", "XLib.java")));
+  // The MODAI packages of --sdd land in the new project's modai.yaml (created, since the template has none).
+  const projectYaml = readFileSync(join(root, "app-full", "modai.yaml"), "utf8");
+  assert.match(projectYaml, /"@methodologies\/sdd": \^1/);
+  assert.match(projectYaml, /features:\n\s+"@components\/health-module":\n\s+metrics: true/);
+  assert.match(full.stdout, /modai sync/);
+  assert.ok(!existsSync(join(root, "app-base", "modai.yaml")), "sin features que aporten paquetes no se crea modai.yaml");
+
+  // --no-<feature> switches a default off; one that another feature requires cannot be.
+  const without = await modai("template", "use", "@cli/springboot", "app-sin", "--no-lombok");
+  assert.equal(without.status, 0, without.stderr);
+  assert.ok(!existsSync(join(root, "app-sin", "lombok.config")));
+  const clash = await modai("template", "use", "@cli/springboot", "app-clash", "--x-lib", "--no-lombok");
+  assert.notEqual(clash.status, 0);
+  assert.match(clash.stderr, /no se puede quitar "lombok" porque "x-lib" la requiere/);
+
+  // An unknown flag fails with the template's own options; --with layers an add-on; --dry-run writes nothing.
+  const unknown = await modai("template", "use", "@cli/springboot", "app-x", "--sdd2");
+  assert.notEqual(unknown.status, 0);
+  assert.match(unknown.stderr, /¿Quisiste decir --sdd\?.*Features: --sdd, --x-lib, --lombok/);
+  const withAddon = await modai("template", "use", "@cli/springboot", "app-with", "--with", "@cli/sdd-addon");
+  assert.equal(withAddon.status, 0, withAddon.stderr);
+  assert.ok(existsSync(join(root, "app-with", "specs", "README.md")));
+  const dry = await modai("template", "use", "@cli/springboot", "app-dry", "--x-lib", "--dry-run");
+  assert.equal(dry.status, 0, dry.stderr);
+  assert.match(dry.stdout, /src\/XLib\.java/);
+  assert.ok(!existsSync(join(root, "app-dry")));
+  // The add-on only accepts the bases it was made for.
+  const other = join(root, "otra-base");
+  write(join(other, "a.txt"), "a");
+  assert.equal((await modai("template", "publish", other, "--name", "@cli/otra@1.0.0", "--description", "otra")).status, 0);
+  const wrong = await modai("template", "use", "@cli/otra", "app-wrong", "--with", "@cli/sdd-addon");
+  assert.notEqual(wrong.status, 0);
+  assert.match(wrong.stderr, /solo para @cli\/springboot/);
+
+  // The server refuses a manifest that points at a folder that does not exist.
+  const broken = join(root, "roto");
+  write(join(broken, "a.txt"), "a");
+  write(join(broken, "modai.template.yaml"), "features:\n  x:\n    description: falta\n    path: features/x\n");
+  const rejected = await modai("template", "publish", broken, "--name", "@cli/roto@1.0.0", "--description", "roto");
+  assert.notEqual(rejected.status, 0);
+  assert.match(rejected.stderr + rejected.stdout, /features\/x/);
+});
+
 test("la misma CLI gestiona skills, conocimiento, memoria, templates, usuarios y namespaces", async () => {
   const { execFile } = await import("node:child_process");
   const { mkdirSync, writeFileSync, readFileSync, existsSync } = await import("node:fs");

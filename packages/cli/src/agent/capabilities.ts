@@ -26,7 +26,7 @@ export class CapabilityHost {
             if (!this.options.allowedEnv?.includes(name)) throw new Error(`Variable no autorizada para MCP: ${name}`);
             if (process.env[name] !== undefined) env[name] = process.env[name]!;
           }
-          const client = new Client({ name: "modai-capabilities", version: "0.9.1" });
+          const client = new Client({ name: "modai-capabilities", version: "0.10.0" });
           this.clients.push(client);
           const transport = new StdioClientTransport({ ...this.launch(capability), env, cwd: this.options.cwd, stderr: "pipe" });
           transport.stderr?.on("data", () => {});

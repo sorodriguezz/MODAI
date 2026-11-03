@@ -5,7 +5,7 @@ import semver from "semver";
 import { AppError, invariant } from "@modai/contracts/errors";
 import { assertSafeRelativePath, sha256 } from "@modai/contracts/security";
 import type { ArtifactFile } from "@modai/contracts/types";
-import { readZip, writeZip, type ArchiveEntry } from "@modai/core";
+import { parseTemplateManifest, readZip, TEMPLATE_MANIFEST, validateTemplateManifest, writeZip, type ArchiveEntry, type TemplateManifest } from "@modai/core";
 import { Database } from "./database.js";
 
 /**
@@ -89,6 +89,11 @@ export class TemplateService {
     if (roots.size === 1 && entries.every(entry => entry.path.includes("/"))) { const root = [...roots][0]!; entries = entries.map(entry => ({ path: entry.path.slice(root.length + 1), bytes: entry.bytes })); }
     entries = entries.filter(entry => !EXCLUDED.test(entry.path));
     invariant(entries.length > 0, 400, "INVALID_TEMPLATE", "El template no tiene archivos (se excluyen node_modules, .git, dist y .env)");
+    const manifestEntry = entries.find(entry => entry.path === TEMPLATE_MANIFEST);
+    if (manifestEntry) {
+      try { validateTemplateManifest(parseTemplateManifest(manifestEntry.bytes.toString("utf8")), entries.map(entry => entry.path)); }
+      catch (error) { throw new AppError(400, "INVALID_TEMPLATE_MANIFEST", (error as Error).message); }
+    }
     const size = entries.reduce((total, entry) => total + entry.bytes.length, 0);
     invariant(size <= MAX_BYTES, 413, "TEMPLATE_TOO_LARGE", "El template supera 25 MiB");
     const body = JSON.stringify({ files: entries.map(entry => ({ path: entry.path, content: entry.bytes.toString("base64"), sha256: sha256(entry.bytes) })) });
@@ -116,6 +121,15 @@ export class TemplateService {
     invariant(stored?.sha256 === sha256(body), 500, "ARTIFACT_CORRUPT", "El template no supera la verificación de integridad");
     const { artifactId, ...record } = template;
     return { template: record, files: (JSON.parse(body) as { files: ArtifactFile[] }).files };
+  }
+
+  /** Features and add-on declaration of a version, read from its `modai.template.yaml` (empty when it has none). */
+  manifest(name: string, version?: string): TemplateManifest {
+    const file = this.files(name, version).files.find(item => item.path === TEMPLATE_MANIFEST);
+    if (!file) return { features: [] };
+    // A version published before a rule changed keeps working for reading; `template use` reports the problem.
+    try { return parseTemplateManifest(Buffer.from(file.content, "base64").toString("utf8")); }
+    catch (error) { return { features: [], manifestError: (error as Error).message } as TemplateManifest; }
   }
 
   zip(name: string, version?: string): { template: TemplateRecord; zip: Buffer } {

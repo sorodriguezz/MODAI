@@ -102,6 +102,27 @@ export const contributesSchema = z.object({
   files: z.array(z.object({ source: relativePathSchema, target: relativePathSchema, executable: z.boolean().optional() }).strict()).max(2000).default([]),
 }).strict();
 
+/**
+ * An optional, named part of a package switched on with a flag (`modai add @eq/health --tls`). When on, its
+ * contributions and dependencies are added to the package's, and its overlays add or replace files of a component.
+ * The selection lives in modai.yaml (`features`) and the resolved list in modai.lock.
+ */
+export const featureNameSchema = z.string().regex(/^[a-z][a-z0-9-]{0,39}$/, "Usa minúsculas, números y guiones, empezando por letra (máx. 40)");
+const emptyContributions = { skills: [], rules: [], knowledge: [], tools: [], mcpServers: [], components: [], files: [] };
+export const packageFeatureSchema = z.object({
+  description: z.string().min(1).max(500),
+  default: z.boolean().default(false),
+  requires: z.array(featureNameSchema).max(50).default([]),
+  conflicts: z.array(featureNameSchema).max(50).default([]),
+  /** Extra packages while the feature is on. */
+  dependencies: z.record(packageNameSchema, rangeSchema).refine(value => Object.keys(value).length <= 50, "Máximo 50 dependencias").default({}),
+  /** Same shape as spec.contributes (agents excepted): merged into the package's while the feature is on. */
+  contributes: contributesSchema.omit({ agents: true }).default(emptyContributions),
+  /** Files under `path` are added to (or replace files of) the component `component` of this package. */
+  overlays: z.array(z.object({ component: contributionName, path: relativePathSchema }).strict()).max(50).default([]),
+}).strict();
+export type PackageFeature = z.output<typeof packageFeatureSchema>;
+
 const blockTarget = z.object({ mode: z.literal("block"), file: relativePathSchema }).strict();
 const fileTarget = z.object({ mode: z.literal("file"), path: relativePathSchema, header: z.string().max(4000).optional() }).strict();
 export const adapterDefinitionSchema = z.object({
@@ -146,6 +167,8 @@ export const packageManifestV1Schema = z.object({
     /** Packaging-time shorthand, expanded into `contributes` by the CLI before publishing. */
     entrypoints: z.object({ skills: relativePathSchema.optional(), knowledge: relativePathSchema.optional(), rules: relativePathSchema.optional() }).strict().optional(),
     adapter: adapterDefinitionSchema.optional(),
+    /** Optional parts switched on with flags. Declaration order is the order in which they apply. */
+    features: z.record(featureNameSchema, packageFeatureSchema).refine(value => Object.keys(value).length <= 50, "Máximo 50 features").default({}),
     compatibility: z.object({
       modai: rangeSchema.optional(),
       os: z.array(z.enum(["linux", "darwin", "win32"])).max(3).optional(),
@@ -184,6 +207,8 @@ export const projectFileSchema = z.object({
   /** Direct dependencies: "@scope/name": "^1.0.0" or "file:../path". */
   dependencies: z.record(packageNameSchema, z.string().min(1).max(4096)).default({}),
   overrides: z.record(packageNameSchema, rangeSchema).default({}),
+  /** Feature choices per package: true switches a feature on, false switches a default one off. Others follow their default. */
+  features: z.record(packageNameSchema, z.record(featureNameSchema, z.boolean())).default({}),
   /** Explicit provider choice when several installed packages provide a capability. */
   providers: z.record(capabilityIdSchema, packageNameSchema).default({}),
   adapters: z.array(z.string().regex(/^[a-z][a-z0-9-]{0,63}$/)).max(20).default(["agent-skills", "mcp"]),
@@ -215,6 +240,8 @@ export const lockedPackageSchema = z.object({
   provides: z.array(z.string()).default([]),
   requires: z.record(z.string(), z.string()).default({}),
   permissions: z.array(z.string()).default([]),
+  /** Features applied to this package, in declaration order. */
+  features: z.array(z.string()).default([]),
 }).strict();
 export type LockedPackageV1 = z.output<typeof lockedPackageSchema>;
 
