@@ -2,6 +2,10 @@
 
 ## Sin publicar
 
+- CLI: `modai upgrade` (alias `self-update`) actualiza la CLI a la última versión de npm con el gestor con que se instaló; `--check` solo informa y `--tag next` usa prereleases. Aviso diario de versión nueva en terminales interactivas (`MODAI_NO_UPDATE_NOTIFIER=1` lo desactiva; nunca en CI).
+
+## 0.7.0
+
 - **Componentes de código** (`spec.contributes.components` y permiso `project.source`): paquetes con código propio (módulos de backend, componentes de UI, servicios) que se copian al proyecto de forma reversible; `modai remove` conserva los archivos editados. El índice del agente (`AGENTS.md`/`CLAUDE.md`) los enumera. Ejemplo: `@components/health-module`.
 - CLI: `modai list [tipo]` (alias `ls`) para lo instalado o, con `--available`/`--registry`, lo publicado, por contribución (`components`, `skills`, `tools`…), kind (`profiles`) o categoría (`harness`, `backend`…); `modai component create` empaqueta una carpeta de código existente y `modai component list`.
 - Panel web: **Crear paquete** y **Editar y publicar nueva versión** desde el navegador (plantillas de componente, harness, skill, conocimiento o vacío; archivos editables y subida de archivos o carpetas; validación de calidad antes de publicar), filtro por tipo y pestaña **Archivos** en el detalle de cada paquete.

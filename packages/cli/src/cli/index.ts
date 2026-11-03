@@ -35,6 +35,7 @@ import { CompositeRegistry } from "@modai/core/registry";
 import { createRegistries } from "@modai/core/workspace";
 import { tokenFor } from "../v1/runtime.js";
 import { registerListCommands } from "../v1/list.js";
+import { registerUpgradeCommand, startUpdateNotice } from "./upgrade.js";
 
 const v1 = () => isV1Project(process.cwd());
 
@@ -55,7 +56,7 @@ function print(value: unknown): void {
 }
 
 const program = new Command();
-program.name("modai").description("MODAI: gestor de paquetes y capacidades extensibles para agentes de IA").version("0.7.0");
+program.name("modai").description("MODAI: gestor de paquetes y capacidades extensibles para agentes de IA").version("0.7.1");
 
 program
   .command("connect")
@@ -483,6 +484,7 @@ program.command("trust").argument("<public-key>","Clave pública Ed25519 que se 
 program.command("signatures").argument("<policy>","optional, signed o trusted").action(value=>{const config=loadClientConfig();if(!config)throw new Error("Conecta primero la CLI");config.signaturePolicy=signaturePolicySchema.parse(value);saveClientConfig(config);print({signaturePolicy:config.signaturePolicy});});
 registerV1Commands(program, print);
 registerListCommands(program, print, commaList);
+registerUpgradeCommand(program, print);
 registerAgentCommands(program, () => {let project:ReturnType<typeof loadProject>|undefined;try{project=loadProject()}catch{}return effectiveConnection(project?.manifest.server)}, print);
 
 registerClientCommands(program, () => {
@@ -495,6 +497,8 @@ registerClientCommands(program, () => {
 
 program.configureOutput({ outputError: (message) => process.stderr.write(message) });
 
+const showUpdateNotice = ["upgrade", "self-update", "worker"].includes(process.argv[2] ?? "") ? () => {} : startUpdateNotice(program.version()!);
+
 try {
   await program.parseAsync(process.argv);
 } catch (error) {
@@ -502,3 +506,4 @@ try {
   process.stderr.write(`Error: ${message}\n`);
   process.exitCode = 1;
 }
+showUpdateNotice();

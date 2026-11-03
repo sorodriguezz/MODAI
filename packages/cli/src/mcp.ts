@@ -28,7 +28,7 @@ try { project = loadProject(root); } catch (error) { if (existsSync(resolve(root
 const connection = effectiveConnection(project?.manifest.server);
 const api = new ApiClient(connection.server, connection.token);
 await api.assertCompatible();
-const mcp = new Server({ name: "modai", version: "0.7.0" }, { capabilities: { tools: {}, resources: {}, prompts: {} } });
+const mcp = new Server({ name: "modai", version: "0.7.1" }, { capabilities: { tools: {}, resources: {}, prompts: {} } });
 const result = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] });
 const querySchema = { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 2000 } }, required: ["query"], additionalProperties: false };
 const noArguments = { type: "object", properties: {}, additionalProperties: false };
