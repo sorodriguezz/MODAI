@@ -9,11 +9,6 @@ export class AppError extends Error {
   }
 }
 
-export function invariant(
-  condition: unknown,
-  statusCode: number,
-  code: string,
-  message: string,
-): asserts condition {
+export function invariant(condition: unknown, statusCode: number, code: string, message: string): asserts condition {
   if (!condition) throw new AppError(statusCode, code, message);
 }

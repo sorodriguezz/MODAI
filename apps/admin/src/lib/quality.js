@@ -23,10 +23,12 @@ function dimensionList(dimensions = {}) {
   if (!entries.length) return "";
   return html`<div class="quality-dimensions">
     <p class="hint">La nota es el promedio de ${entries.length === 1 ? "esta dimensión" : `estas ${entries.length} dimensiones`}; solo cuentan las que aplican a lo que contiene el paquete.</p>
-    <ul>${entries.map(([key, value]) => html`<li class="tone-${scoreTone(value)}">
+    <ul>${entries.map(
+      ([key, value]) => html`<li class="tone-${scoreTone(value)}">
       <span class="quality-dimension-name"><b>${DIMENSIONS[key]?.[0] || key}</b><span class="muted small">${DIMENSIONS[key]?.[1] || ""}</span></span>
       <span class="quality-bar" aria-hidden="true"><span style="width:${value}%"></span></span>
-      <span class="quality-value">${value}</span></li>`)}</ul></div>`;
+      <span class="quality-value">${value}</span></li>`,
+    )}</ul></div>`;
 }
 
 function findingList(findings = []) {

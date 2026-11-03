@@ -1,6 +1,6 @@
-import { html } from "../lib/html.js";
 import { post } from "../lib/api.js";
-import { openDialog, closeDialog, bindForm, passwordField, strengthMeter, bindStrength, toast } from "../lib/ui.js";
+import { html } from "../lib/html.js";
+import { bindForm, bindStrength, closeDialog, openDialog, passwordField, strengthMeter, toast } from "../lib/ui.js";
 import { state } from "../state.js";
 
 export function openChangePassword() {

@@ -1,7 +1,8 @@
-import { build, context } from "esbuild";
-import { mkdirSync, copyFileSync, watch } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { copyFileSync, mkdirSync, watch } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { build, context } from "esbuild";
+
 const root = fileURLToPath(new URL("../", import.meta.url));
 mkdirSync(resolve(root, "dist"), { recursive: true });
 const copy = () => {
@@ -26,7 +27,5 @@ if (process.argv.includes("--watch")) {
   watch(resolve(root, "src"), { recursive: true }, (_event, name) => {
     if (name && /\.(html|css|svg)$|^theme\.js$/.test(name)) copy();
   });
-  console.log(
-    "Panel: observando apps/admin/src; recarga /admin para ver cambios.",
-  );
+  console.log("Panel: observando apps/admin/src; recarga /admin para ver cambios.");
 } else await build(options);

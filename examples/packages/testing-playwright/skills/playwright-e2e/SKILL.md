@@ -1,4 +1,5 @@
 ---
+
 name: playwright-e2e
 description: Ejecuta e interpreta pruebas end-to-end con Playwright mediante la herramienta browser_run_tests. Úsala para verificar flujos de usuario; no para pruebas unitarias.
 ---

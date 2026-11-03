@@ -1,16 +1,45 @@
-import { html, mount, delegate } from "../lib/html.js";
+import { del, get, post } from "../lib/api.js";
 import { bindFeaturePicker, featureList, featurePicker } from "../lib/feature-picker.js";
-import { icon } from "../lib/icons.js";
-import { get, post, del } from "../lib/api.js";
 import { base64ToBytes, bytesToText, formatBytes } from "../lib/files.js";
-import { openPackageEditor } from "./package-editor.js";
-import { openTemplateEditor, mountTemplateUsage } from "./templates.js";
-import { collectAgents, openAgent } from "./agents.js";
+import { delegate, html, mount } from "../lib/html.js";
+import { icon } from "../lib/icons.js";
 import { qualityPanel } from "../lib/quality.js";
-import { openDialog, closeDialog, confirmDialog, promptDialog, toast, toastError, statusBadge, formatDate, timeTag, skeletonCards, emptyState, errorState, codeBlock, debounce, bindTabs } from "../lib/ui.js";
-import { store, can, describeManifest } from "../state.js";
+import {
+  bindTabs,
+  closeDialog,
+  codeBlock,
+  confirmDialog,
+  debounce,
+  emptyState,
+  errorState,
+  formatDate,
+  openDialog,
+  promptDialog,
+  skeletonCards,
+  statusBadge,
+  timeTag,
+  toast,
+  toastError,
+} from "../lib/ui.js";
+import { can, describeManifest, store } from "../state.js";
+import { collectAgents, openAgent } from "./agents.js";
+import { openPackageEditor } from "./package-editor.js";
+import { mountTemplateUsage, openTemplateEditor } from "./templates.js";
 
-const categoryIcons = { component: "code", skill: "spark", agent: "bot", knowledge: "book", memory: "brain", mcp: "plug", tool: "tool", adapter: "layers", harness: "layers", profile: "user", template: "copy", methodology: "book" };
+const categoryIcons = {
+  component: "code",
+  skill: "spark",
+  agent: "bot",
+  knowledge: "book",
+  memory: "brain",
+  mcp: "plug",
+  tool: "tool",
+  adapter: "layers",
+  harness: "layers",
+  profile: "user",
+  template: "copy",
+  methodology: "book",
+};
 const permissionLabels = {
   "project.instructions": "Escribir instrucciones del agente",
   "project.files": "Instalar archivos en docs/",
@@ -41,7 +70,14 @@ const INSTALL_PERMISSIONS = ["project.instructions", "project.files", "project.s
 
 function installCommand(item, info, flags = []) {
   const allow = info.permissions.filter((permission) => INSTALL_PERMISSIONS.includes(permission));
-  return "modai add " + item.name + "@" + item.version + (flags.length ? " " + flags.join(" ") : "") + (allow.length ? " --allow " + allow.join(",") : "");
+  return (
+    "modai add " +
+    item.name +
+    "@" +
+    item.version +
+    (flags.length ? " " + flags.join(" ") : "") +
+    (allow.length ? " --allow " + allow.join(",") : "")
+  );
 }
 
 function capabilityList(items, emptyText) {
@@ -131,22 +167,30 @@ function versionsPanel(versions) {
   const manage = can.managePackages(versions[0]?.name);
   return html`<div class="table-wrap"><table class="table">
     <thead><tr><th scope="col">Versión</th><th scope="col">Estado</th><th scope="col" class="hide-sm">Publicada</th>${manage ? html`<th scope="col"><span class="sr-only">Acciones</span></th>` : ""}</tr></thead>
-    <tbody>${versions.map((item) => html`<tr>
+    <tbody>${versions.map(
+      (item) => html`<tr>
       <td><b>${item.version}</b>${item.deprecatedMessage ? html`<div class="muted small">${item.deprecatedMessage}</div>` : ""}</td>
       <td>${statusBadge(item.status)}</td>
       <td class="hide-sm">${timeTag(item.publishedAt)}</td>
-      ${manage ? html`<td class="actions">
+      ${
+        manage
+          ? html`<td class="actions">
         ${item.status === "active" ? html`<button class="btn small ghost" data-action="deprecate" data-version="${item.version}">Deprecar</button>` : ""}
         ${item.status !== "yanked" ? html`<button class="btn small ghost danger-text" data-action="yank" data-version="${item.version}">Retirar</button>` : can.deletePackages() ? html`<button class="btn small ghost danger-text" data-action="hardDelete" data-version="${item.version}">${icon("trash", 16)}Eliminar</button>` : ""}
-      </td>` : ""}
-    </tr>`)}</tbody></table></div>
+      </td>`
+          : ""
+      }
+    </tr>`,
+    )}</tbody></table></div>
     ${manage ? html`<p class="hint">Deprecar avisa a quien instale la versión. Retirar (yank) impide nuevas resoluciones. Solo una versión retirada puede eliminarse definitivamente.</p>` : ""}`;
 }
 
 export async function openPackage(name, version, onChange, onPublished = onChange) {
   let versions;
   try {
-    versions = (await get("/packages?includeYanked=true&name=" + encodeURIComponent(name))).packages.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    versions = (await get("/packages?includeYanked=true&name=" + encodeURIComponent(name))).packages.sort(
+      (a, b) => new Date(b.publishedAt) - new Date(a.publishedAt),
+    );
   } catch (error) {
     return toastError(error);
   }
@@ -176,20 +220,35 @@ export async function openPackage(name, version, onChange, onPublished = onChang
   });
   if (template) mountTemplateUsage(body.querySelector("#templateUsage"), item);
   const features = featureList(item.manifest?.spec?.features);
-  bindFeaturePicker(body, "packageFeatures", features, (flags) => { const code = body.querySelector("#installCommand"); if (code) code.textContent = installCommand(item, info, flags); });
-  let files = null, usageLoaded = false;
+  bindFeaturePicker(body, "packageFeatures", features, (flags) => {
+    const code = body.querySelector("#installCommand");
+    if (code) code.textContent = installCommand(item, info, flags);
+  });
+  let files = null,
+    usageLoaded = false;
   bindTabs(body, async (tab) => {
     if (tab === "usage" && !usageLoaded) {
       usageLoaded = true;
       try {
         const { projects } = await get("/packages/usage?name=" + encodeURIComponent(name));
-        mount(body.querySelector("#packageUsage"), projects.length
-          ? html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col">Proyecto</th><th scope="col">Versión</th><th scope="col" class="hide-sm">Cómo</th><th scope="col" class="hide-sm">Reportado</th></tr></thead>
-            <tbody>${projects.map((project) => html`<tr><td><b>${project.projectName}</b><div class="muted small"><code>${project.projectId}</code></div></td>
+        mount(
+          body.querySelector("#packageUsage"),
+          projects.length
+            ? html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col">Proyecto</th><th scope="col">Versión</th><th scope="col" class="hide-sm">Cómo</th><th scope="col" class="hide-sm">Reportado</th></tr></thead>
+            <tbody>${projects.map(
+              (
+                project,
+              ) => html`<tr><td><b>${project.projectName}</b><div class="muted small"><code>${project.projectId}</code></div></td>
               <td>${project.version}${versions[0] && project.version !== versions[0].version ? html` <span class="badge tone-warning" title="Hay una versión más nueva">desactualizado</span>` : ""}</td>
-              <td class="hide-sm">${project.direct ? "Directa" : "Dependencia"}</td><td class="hide-sm">${timeTag(project.reportedAt)}</td></tr>`)}</tbody></table></div>
+              <td class="hide-sm">${project.direct ? "Directa" : "Dependencia"}</td><td class="hide-sm">${timeTag(project.reportedAt)}</td></tr>`,
+            )}</tbody></table></div>
             <p class="hint">Cada proyecto vinculado a este servidor (modai init --project) informa lo que instala al sincronizar. Solo ves los proyectos a los que tienes acceso.</p>`
-          : emptyState({ iconName: "folder", title: "Ningún proyecto lo usa", text: "O los proyectos que lo instalan no están vinculados a este servidor con modai init --project." }));
+            : emptyState({
+                iconName: "folder",
+                title: "Ningún proyecto lo usa",
+                text: "O los proyectos que lo instalan no están vinculados a este servidor con modai init --project.",
+              }),
+        );
       } catch (error) {
         mount(body.querySelector("#packageUsage"), errorState(error));
       }
@@ -198,11 +257,14 @@ export async function openPackage(name, version, onChange, onPublished = onChang
     if (tab !== "files" || files) return;
     try {
       files = (await get("/artifacts/" + encodeURIComponent(item.artifactId))).files;
-      mount(body.querySelector("#packageFiles"), files.length
-        ? html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col">Archivo</th><th scope="col" class="hide-sm">Tamaño</th></tr></thead>
+      mount(
+        body.querySelector("#packageFiles"),
+        files.length
+          ? html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col">Archivo</th><th scope="col" class="hide-sm">Tamaño</th></tr></thead>
           <tbody>${files.map((file) => html`<tr><td><button type="button" class="link-button" data-action="showFile" data-path="${file.path}"><code>${file.path}</code></button></td><td class="hide-sm">${formatBytes(base64ToBytes(file.content).length)}</td></tr>`)}</tbody></table></div>
           <div id="fileViewer"></div>`
-        : html`<p class="muted small">El paquete no contiene archivos.</p>`);
+          : html`<p class="muted small">El paquete no contiene archivos.</p>`,
+      );
     } catch (error) {
       mount(body.querySelector("#packageFiles"), errorState(error));
     }
@@ -217,33 +279,43 @@ export async function openPackage(name, version, onChange, onPublished = onChang
       const file = files?.find((entry) => entry.path === button.dataset.path);
       if (!file) return;
       const text = bytesToText(base64ToBytes(file.content));
-      mount(body.querySelector("#fileViewer"), html`<h4><code>${file.path}</code></h4>${text === null ? html`<p class="muted small">Archivo binario.</p>` : html`<pre class="pre-wrap document">${text}</pre>`}`);
+      mount(
+        body.querySelector("#fileViewer"),
+        html`<h4><code>${file.path}</code></h4>${text === null ? html`<p class="muted small">Archivo binario.</p>` : html`<pre class="pre-wrap document">${text}</pre>`}`,
+      );
       body.querySelector("#fileViewer").scrollIntoView({ block: "nearest" });
     },
-    newVersion: () => (template ? openTemplateEditor({ base: item, onPublished }) : openPackageEditor({ base: item, onPublished })),
+    newVersion: () =>
+      template ? openTemplateEditor({ base: item, onPublished }) : openPackageEditor({ base: item, onPublished }),
     useAgent: async (button) => {
       const entry = collectAgents([item])[Number(button.dataset.index)];
       const projects = await store.projects().catch(() => []);
       // Same as a #/runs link: the router listens to history changes.
-      openAgent(entry, projects, (id, { params } = {}) => { history.pushState(null, "", "#/" + id + (params ? "?" + new URLSearchParams(params) : "")); dispatchEvent(new PopStateEvent("popstate")); });
+      openAgent(entry, projects, (id, { params } = {}) => {
+        history.pushState(null, "", "#/" + id + (params ? "?" + new URLSearchParams(params) : ""));
+        dispatchEvent(new PopStateEvent("popstate"));
+      });
     },
-    deprecate: (button) => promptDialog({
-      title: "Deprecar " + name + "@" + button.dataset.version,
-      message: "La versión seguirá instalable, pero la CLI mostrará este aviso.",
-      label: "Mensaje para quien la use",
-      placeholder: "Usa la versión 2.x, que corrige…",
-      confirmLabel: "Deprecar versión",
-      action: (message) => post("/admin/packages/deprecate", { name, version: button.dataset.version, message }),
-    }).then((value) => value !== null && changed("Versión deprecada")),
-    yank: (button) => promptDialog({
-      title: "Retirar " + name + "@" + button.dataset.version,
-      message: "Una versión retirada deja de resolverse para instalaciones nuevas. Los proyectos que ya la fijaron conservan su copia.",
-      label: "Motivo",
-      placeholder: "Vulnerabilidad, publicación errónea…",
-      confirmLabel: "Retirar versión",
-      danger: true,
-      action: (reason) => post("/admin/packages/yank", { name, version: button.dataset.version, reason }),
-    }).then((value) => value !== null && changed("Versión retirada")),
+    deprecate: (button) =>
+      promptDialog({
+        title: "Deprecar " + name + "@" + button.dataset.version,
+        message: "La versión seguirá instalable, pero la CLI mostrará este aviso.",
+        label: "Mensaje para quien la use",
+        placeholder: "Usa la versión 2.x, que corrige…",
+        confirmLabel: "Deprecar versión",
+        action: (message) => post("/admin/packages/deprecate", { name, version: button.dataset.version, message }),
+      }).then((value) => value !== null && changed("Versión deprecada")),
+    yank: (button) =>
+      promptDialog({
+        title: "Retirar " + name + "@" + button.dataset.version,
+        message:
+          "Una versión retirada deja de resolverse para instalaciones nuevas. Los proyectos que ya la fijaron conservan su copia.",
+        label: "Motivo",
+        placeholder: "Vulnerabilidad, publicación errónea…",
+        confirmLabel: "Retirar versión",
+        danger: true,
+        action: (reason) => post("/admin/packages/yank", { name, version: button.dataset.version, reason }),
+      }).then((value) => value !== null && changed("Versión retirada")),
     hardDelete: (button) => {
       const spec = name + "@" + button.dataset.version;
       confirmDialog({
@@ -273,10 +345,14 @@ export default {
   label: "Paquetes",
   icon: "package",
   title: "Paquetes",
-  subtitle: "Todo lo que se publica y versiona bajo un namespace: componentes, harnesses, skills, herramientas, agentes, conocimiento, perfiles, adaptadores y templates de proyecto.",
+  subtitle:
+    "Todo lo que se publica y versiona bajo un namespace: componentes, harnesses, skills, herramientas, agentes, conocimiento, perfiles, adaptadores y templates de proyecto.",
   async render(root, { params, isCurrent, actions }) {
-    if (can.publish()) mount(actions, html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>`);
-    mount(root, html`
+    if (can.publish())
+      mount(actions, html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>`);
+    mount(
+      root,
+      html`
       <div class="toolbar">
         <div class="search-field">${icon("search")}<label class="sr-only" for="packageSearch">Buscar paquetes</label><input id="packageSearch" type="search" placeholder="Buscar por nombre, descripción o capacidad…" value="${filters.q}"></div>
         <label class="sr-only" for="packageCategory">Categoría</label><select id="packageCategory"><option value="">Todas las categorías</option></select>
@@ -287,16 +363,25 @@ export default {
         ${Object.entries(TYPES).map(([id, type]) => html`<button type="button" data-action="type" data-type="${id}" aria-pressed="false">${icon(type.icon, 16)}${type.label}</button>`)}
       </div>
       <p class="results-meta" id="packageMeta" aria-live="polite"></p>
-      <div id="packageResults">${skeletonCards()}</div>`);
+      <div id="packageResults">${skeletonCards()}</div>`,
+    );
     // Links from other views (#/packages?type=agents, ?category=backend, ?q=@equipo/) open with that filter.
     if (params.has("type")) filters.type = TYPES[params.get("type")] ? params.get("type") : "";
     if (params.has("q")) filters.q = params.get("q");
     let wantedCategory = params.get("category");
-    const drawTypes = () => root.querySelectorAll("#packageTypes [data-type]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.type === filters.type)));
+    const drawTypes = () =>
+      root
+        .querySelectorAll("#packageTypes [data-type]")
+        .forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.type === filters.type)));
     drawTypes();
-    const $q = root.querySelector("#packageSearch"), $category = root.querySelector("#packageCategory"), $status = root.querySelector("#packageStatus");
+    const $q = root.querySelector("#packageSearch"),
+      $category = root.querySelector("#packageCategory"),
+      $status = root.querySelector("#packageStatus");
     $status.value = filters.status;
-    let page = 1, request = 0, items = [], total = 0;
+    let page = 1,
+      request = 0,
+      items = [],
+      total = 0;
     // The server filters and paginates: the browser only receives the page it shows.
     const load = async () => {
       filters.q = $q.value.trim();
@@ -304,7 +389,11 @@ export default {
       wantedCategory = null;
       filters.status = $status.value;
       const token = ++request;
-      const query = new URLSearchParams({ status: filters.status, limit: String(PAGE_SIZE), offset: String((page - 1) * PAGE_SIZE) });
+      const query = new URLSearchParams({
+        status: filters.status,
+        limit: String(PAGE_SIZE),
+        offset: String((page - 1) * PAGE_SIZE),
+      });
       for (const key of ["q", "type", "category"]) if (filters[key]) query.set(key, filters[key]);
       let result;
       try {
@@ -316,19 +405,46 @@ export default {
       if (!isCurrent() || token !== request) return;
       ({ items, total } = result);
       const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-      if (page > pages) { page = pages; return load(); }
+      if (page > pages) {
+        page = pages;
+        return load();
+      }
       const selected = filters.category;
-      mount($category, html`<option value="">Todas las categorías</option>${result.categories.map((category) => html`<option value="${category}">${category}</option>`)}`);
+      mount(
+        $category,
+        html`<option value="">Todas las categorías</option>${result.categories.map((category) => html`<option value="${category}">${category}</option>`)}`,
+      );
       $category.value = result.categories.includes(selected) ? selected : "";
       const filtered = Boolean(filters.q || filters.type || filters.category || filters.status !== "latest");
-      root.querySelector("#packageMeta").textContent = total + (total === 1 ? " paquete" : " paquetes") + (filters.status === "latest" ? " · última versión activa de cada uno" : "");
-      mount(root.querySelector("#packageResults"), items.length
-        ? html`<div class="card-grid">${items.map(card)}</div>${pager(page, pages)}`
-        : filtered
-          ? emptyState({ iconName: "search", title: "Sin resultados", text: "Prueba con otra búsqueda o cambia los filtros.", action: html`<button class="btn" data-action="clear">Limpiar filtros</button>` })
-          : emptyState({ iconName: "package", title: "Aún no hay paquetes", text: "Publica con la CLI (modai package publish ./mi-paquete, modai template publish ./proyecto) o créalos aquí: componentes, harnesses, skills, conocimiento, perfiles y templates de proyecto.", action: can.publish() ? html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>` : "" }));
+      root.querySelector("#packageMeta").textContent =
+        total +
+        (total === 1 ? " paquete" : " paquetes") +
+        (filters.status === "latest" ? " · última versión activa de cada uno" : "");
+      mount(
+        root.querySelector("#packageResults"),
+        items.length
+          ? html`<div class="card-grid">${items.map(card)}</div>${pager(page, pages)}`
+          : filtered
+            ? emptyState({
+                iconName: "search",
+                title: "Sin resultados",
+                text: "Prueba con otra búsqueda o cambia los filtros.",
+                action: html`<button class="btn" data-action="clear">Limpiar filtros</button>`,
+              })
+            : emptyState({
+                iconName: "package",
+                title: "Aún no hay paquetes",
+                text: "Publica con la CLI (modai package publish ./mi-paquete, modai template publish ./proyecto) o créalos aquí: componentes, harnesses, skills, conocimiento, perfiles y templates de proyecto.",
+                action: can.publish()
+                  ? html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>`
+                  : "",
+              }),
+      );
     };
-    const reload = () => { page = 1; return load(); };
+    const reload = () => {
+      page = 1;
+      return load();
+    };
     $q.addEventListener("input", debounce(reload, 250));
     [$category, $status].forEach((select) => select.addEventListener("change", reload));
     const published = async (record) => {
@@ -337,13 +453,23 @@ export default {
       if (isCurrent()) openPackage(record.name, record.version, load, published);
     };
     // Creating from a type tab starts with that type already chosen.
-    const create = () => (filters.type === "templates" ? openTemplateEditor({ onPublished: published }) : openPackageEditor({ template: TYPES[filters.type]?.create || "component", onPublished: published }));
+    const create = () =>
+      filters.type === "templates"
+        ? openTemplateEditor({ onPublished: published })
+        : openPackageEditor({ template: TYPES[filters.type]?.create || "component", onPublished: published });
     delegate(actions, { create });
     delegate(root, {
       create,
       open: (button) => openPackage(button.dataset.name, button.dataset.version, load, published),
-      type: (button) => { filters.type = button.dataset.type; drawTypes(); reload(); },
-      page: (button) => { page = Number(button.dataset.page); load().then(() => root.querySelector("#packageResults")?.scrollIntoView({ block: "start" })); },
+      type: (button) => {
+        filters.type = button.dataset.type;
+        drawTypes();
+        reload();
+      },
+      page: (button) => {
+        page = Number(button.dataset.page);
+        load().then(() => root.querySelector("#packageResults")?.scrollIntoView({ block: "start" }));
+      },
       clear: () => {
         $q.value = "";
         filters.type = "";

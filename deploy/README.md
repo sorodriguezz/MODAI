@@ -2,21 +2,21 @@
 
 Todos los archivos de infraestructura viven aquí:
 
-| Archivo | Responsabilidad |
-|---|---|
-| `Dockerfile` | Build, pruebas y runtime Node 26.13.0; el contexto es la raíz del repositorio. |
-| `Dockerfile.dockerignore` | Exclusiones del contexto para este Dockerfile, incluidos secretos y datos locales. |
-| `compose.yaml` | Servidor, volúmenes persistentes y carga opcional de ejemplos. |
-| `compose.lan.yaml` | Overlay para HTTPS interno con Caddy. |
-| `compose.public.yaml` | Overlay con dominio y certificado público para acceso por Internet. |
-| `Caddyfile.public` | Proxy HTTPS con emisión pública de certificados. |
-| `Caddyfile` | Proxy inverso, TLS interno y cabeceras HTTP. |
-| `.env.example` | Plantilla; copia a `.env` en esta carpeta y cambia el token. |
-| `compose.raspberry.yaml` | Overlay para Raspberry Pi: reinicio, límite de memoria, heap de Node, logs rotados e imagen opcional ya construida. |
-| `fly/fly.toml` | Fly.io: una máquina, un volumen en `/app/data`, healthcheck y HTTPS. |
-| `railway/railway.json`, `railway/variables.example` | Railway: build con este Dockerfile, healthcheck y variables. |
-| `backup.sh` | Respaldo en caliente de SQLite y artefactos para instalaciones Compose. |
-| `../.dockerignore` | Copia de `Dockerfile.dockerignore` para plataformas que construyen desde la raíz. |
+| Archivo                                             | Responsabilidad                                                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `Dockerfile`                                        | Build, pruebas y runtime Node 26.13.0; el contexto es la raíz del repositorio.                                      |
+| `Dockerfile.dockerignore`                           | Exclusiones del contexto para este Dockerfile, incluidos secretos y datos locales.                                  |
+| `compose.yaml`                                      | Servidor, volúmenes persistentes y carga opcional de ejemplos.                                                      |
+| `compose.lan.yaml`                                  | Overlay para HTTPS interno con Caddy.                                                                               |
+| `compose.public.yaml`                               | Overlay con dominio y certificado público para acceso por Internet.                                                 |
+| `Caddyfile.public`                                  | Proxy HTTPS con emisión pública de certificados.                                                                    |
+| `Caddyfile`                                         | Proxy inverso, TLS interno y cabeceras HTTP.                                                                        |
+| `.env.example`                                      | Plantilla; copia a `.env` en esta carpeta y cambia el token.                                                        |
+| `compose.raspberry.yaml`                            | Overlay para Raspberry Pi: reinicio, límite de memoria, heap de Node, logs rotados e imagen opcional ya construida. |
+| `fly/fly.toml`                                      | Fly.io: una máquina, un volumen en `/app/data`, healthcheck y HTTPS.                                                |
+| `railway/railway.json`, `railway/variables.example` | Railway: build con este Dockerfile, healthcheck y variables.                                                        |
+| `backup.sh`                                         | Respaldo en caliente de SQLite y artefactos para instalaciones Compose.                                             |
+| `../.dockerignore`                                  | Copia de `Dockerfile.dockerignore` para plataformas que construyen desde la raíz.                                   |
 
 Desde la raíz:
 

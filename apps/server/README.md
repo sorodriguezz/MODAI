@@ -6,14 +6,14 @@ La [CLI](../../packages/cli) funciona sin servidor. Lo levantas cuando quieres q
 
 ## Qué trae
 
-| | |
-|---|---|
-| **Registry privado** | Paquetes versionados e inmutables con integridad SHA-256, firma Ed25519 opcional, deprecación y retiro de versiones, y resolución de dependencias por contrato. |
-| **Panel web** (`/admin`) | Catálogo paginado con filtros por tipo, detalle, archivos, calidad y **qué proyectos usan cada paquete** (y en qué versión). Desde aquí se **crean y publican paquetes** (componentes de código, harnesses, skills, conocimiento) y sus nuevas versiones, con edición de archivos y carpetas. |
-| **Conocimiento y memoria** | Documentos que los agentes consultan con búsqueda y memoria por proyecto u organización, compartida por todo el equipo. |
-| **Proyectos y accesos** | Proyectos que se crean y se eliminan desde el panel o la CLI, usuarios con contraseña, roles (`reader`, `publisher`, `worker`, `admin`), API keys por persona limitadas a proyectos y namespaces, y organizaciones. |
-| **Agentes y ejecuciones** | Composición de agentes desde paquetes y una cola de tareas que procesan workers (`modai agent worker`). |
-| **Operación** | Auditoría, métricas Prometheus (`/metrics`), healthcheck (`/health`), export/import de backups y cuotas de almacenamiento. |
+|                            |                                                                                                                                                                                                                                                                                               |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Registry privado**       | Paquetes versionados e inmutables con integridad SHA-256, firma Ed25519 opcional, deprecación y retiro de versiones, y resolución de dependencias por contrato.                                                                                                                               |
+| **Panel web** (`/admin`)   | Catálogo paginado con filtros por tipo, detalle, archivos, calidad y **qué proyectos usan cada paquete** (y en qué versión). Desde aquí se **crean y publican paquetes** (componentes de código, harnesses, skills, conocimiento) y sus nuevas versiones, con edición de archivos y carpetas. |
+| **Conocimiento y memoria** | Documentos que los agentes consultan con búsqueda y memoria por proyecto u organización, compartida por todo el equipo.                                                                                                                                                                       |
+| **Proyectos y accesos**    | Proyectos que se crean y se eliminan desde el panel o la CLI, usuarios con contraseña, roles (`reader`, `publisher`, `worker`, `admin`), API keys por persona limitadas a proyectos y namespaces, y organizaciones.                                                                           |
+| **Agentes y ejecuciones**  | Composición de agentes desde paquetes y una cola de tareas que procesan workers (`modai agent worker`).                                                                                                                                                                                       |
+| **Operación**              | Auditoría, métricas Prometheus (`/metrics`), healthcheck (`/health`), export/import de backups y cuotas de almacenamiento.                                                                                                                                                                    |
 
 ## Levantarlo con Docker
 
@@ -81,30 +81,30 @@ modai package publish ./mi-paquete
 
 ## Configuración
 
-| Variable | Por defecto | Para qué sirve |
-|---|---|---|
-| `MODAI_API_TOKEN` | — | Código para crear el primer administrador y credencial de recuperación. Obligatoria con Docker Compose y recomendada siempre. |
-| `MODAI_ADMIN_USERNAME`, `MODAI_ADMIN_PASSWORD` | — | Crean el primer administrador al arrancar, solo si todavía no hay usuarios. |
-| `MODAI_PORT` (o `PORT`) | `8787` | Puerto HTTP. |
-| `MODAI_HOST` | `0.0.0.0` | Interfaz de escucha dentro del proceso. Con Compose, la IP publicada se fija con `MODAI_BIND_IP` (por defecto `127.0.0.1`). |
-| `MODAI_PUBLIC_URL` | — | URL que el panel muestra a los clientes (por ejemplo, `https://modai.tu-equipo.cl`). |
-| `MODAI_TRUST_PROXY` | `false` | Actívalo detrás de un proxy inverso, Cloudflare Tunnel o Tailscale (`true`, número de saltos o IP/CIDR). |
-| `MODAI_SIGNATURE_POLICY` | `optional` | `optional`, `signed` (exige firma) o `trusted` (solo publicadores de confianza). `signed` comprueba integridad, pero acepta cualquier clave, incluida una recién generada: solo `trusted` garantiza **quién** publica. |
-| `MODAI_ARTIFACT_QUOTA_BYTES` | `1073741824` | Espacio máximo para artefactos de paquetes (1 GiB). |
-| `MODAI_DATABASE_PATH`, `MODAI_ARTIFACT_DIR` | `var/data/modularai.db`, `var/artifacts` | Dónde se guardan los datos. En Docker son volúmenes. |
+| Variable                                       | Por defecto                              | Para qué sirve                                                                                                                                                                                                         |
+| ---------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MODAI_API_TOKEN`                              | —                                        | Código para crear el primer administrador y credencial de recuperación. Obligatoria con Docker Compose y recomendada siempre.                                                                                          |
+| `MODAI_ADMIN_USERNAME`, `MODAI_ADMIN_PASSWORD` | —                                        | Crean el primer administrador al arrancar, solo si todavía no hay usuarios.                                                                                                                                            |
+| `MODAI_PORT` (o `PORT`)                        | `8787`                                   | Puerto HTTP.                                                                                                                                                                                                           |
+| `MODAI_HOST`                                   | `0.0.0.0`                                | Interfaz de escucha dentro del proceso. Con Compose, la IP publicada se fija con `MODAI_BIND_IP` (por defecto `127.0.0.1`).                                                                                            |
+| `MODAI_PUBLIC_URL`                             | —                                        | URL que el panel muestra a los clientes (por ejemplo, `https://modai.tu-equipo.cl`).                                                                                                                                   |
+| `MODAI_TRUST_PROXY`                            | `false`                                  | Actívalo detrás de un proxy inverso, Cloudflare Tunnel o Tailscale (`true`, número de saltos o IP/CIDR).                                                                                                               |
+| `MODAI_SIGNATURE_POLICY`                       | `optional`                               | `optional`, `signed` (exige firma) o `trusted` (solo publicadores de confianza). `signed` comprueba integridad, pero acepta cualquier clave, incluida una recién generada: solo `trusted` garantiza **quién** publica. |
+| `MODAI_ARTIFACT_QUOTA_BYTES`                   | `1073741824`                             | Espacio máximo para artefactos de paquetes (1 GiB).                                                                                                                                                                    |
+| `MODAI_DATABASE_PATH`, `MODAI_ARTIFACT_DIR`    | `var/data/modularai.db`, `var/artifacts` | Dónde se guardan los datos. En Docker son volúmenes.                                                                                                                                                                   |
 
 Todos los datos están en una base SQLite y una carpeta de artefactos. Para respaldarlos usa `deploy/backup.sh` (en caliente, con Compose) o `modai admin export backup.json`. Para restaurarlos usa `modai admin import backup.json`.
 
 ## Despliegue
 
-| Dónde | Cómo |
-|---|---|
-| Tu equipo o un VPS | `docker compose -f deploy/compose.yaml up -d --build` |
-| Red local con HTTPS | `npm run docker:lan` (Caddy con certificado interno) |
+| Dónde                | Cómo                                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| Tu equipo o un VPS   | `docker compose -f deploy/compose.yaml up -d --build`                                        |
+| Red local con HTTPS  | `npm run docker:lan` (Caddy con certificado interno)                                         |
 | Internet con dominio | `npm run docker:public` (Caddy con certificado público; requiere DNS y los puertos 80 y 443) |
-| Raspberry Pi | `npm run docker:pi` |
-| Fly.io | `npm run deploy:fly` |
-| Railway | `deploy/railway/` |
+| Raspberry Pi         | `npm run docker:pi`                                                                          |
+| Fly.io               | `npm run deploy:fly`                                                                         |
+| Railway              | `deploy/railway/`                                                                            |
 
 Los detalles de cada opción están en la [guía de despliegue](../../docs/guides/DEPLOY.md) y en la [guía del servidor central](../../docs/guides/CENTRAL-SERVER.md).
 

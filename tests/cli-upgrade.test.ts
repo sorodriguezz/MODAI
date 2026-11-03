@@ -12,19 +12,33 @@ let server: Server;
 let registry = "";
 before(async () => {
   server = createServer((request, response) => {
-    if (request.url === "/-/package/@sorodriguez%2fmodai/dist-tags") return void response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ latest: "99.0.0", next: "100.0.0-beta.1" }));
+    if (request.url === "/-/package/@sorodriguez%2fmodai/dist-tags")
+      return void response
+        .writeHead(200, { "content-type": "application/json" })
+        .end(JSON.stringify({ latest: "99.0.0", next: "100.0.0-beta.1" }));
     response.writeHead(404).end();
   });
-  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   registry = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 });
-after(() => { server.close(); rmSync(config, { recursive: true, force: true }); });
+after(() => {
+  server.close();
+  rmSync(config, { recursive: true, force: true });
+});
 
 // Asynchronous on purpose: the fake registry runs in this same process and must keep answering.
 function cli(...args: string[]): Promise<{ status: number; stdout: string; stderr: string }> {
-  return new Promise(resolve => execFile(process.execPath, ["--import", "tsx", "packages/cli/src/cli/index.ts", ...args], {
-    encoding: "utf8", env: { ...process.env, MODAI_NPM_REGISTRY: registry, MODAI_CONFIG_DIR: config, MODAI_NO_UPDATE_NOTIFIER: "1" },
-  }, (error, stdout, stderr) => resolve({ status: error ? Number(error.code ?? 1) : 0, stdout, stderr })));
+  return new Promise((resolve) =>
+    execFile(
+      process.execPath,
+      ["--import", "tsx", "packages/cli/src/cli/index.ts", ...args],
+      {
+        encoding: "utf8",
+        env: { ...process.env, MODAI_NPM_REGISTRY: registry, MODAI_CONFIG_DIR: config, MODAI_NO_UPDATE_NOTIFIER: "1" },
+      },
+      (error, stdout, stderr) => resolve({ status: error ? Number(error.code ?? 1) : 0, stdout, stderr }),
+    ),
+  );
 }
 
 test("modai upgrade consulta la etiqueta de npm y no instala sobre una CLI que no es global", async () => {
@@ -52,7 +66,11 @@ test("detecta cómo se instaló la CLI para usar el gestor correcto", () => {
   assert.equal(detectInstall(entry("/home/u/.local/share/pnpm/global/5"), npmRoot).kind, "pnpm");
   assert.equal(detectInstall(entry("/home/u/.bun/install/global"), npmRoot).kind, "bun");
   assert.equal(detectInstall(entry("/home/u/proyecto"), npmRoot).kind, "source", "dependencia de un proyecto");
-  assert.equal(detectInstall("/home/u/MODAI/packages/cli/dist/cli/index.js", npmRoot).kind, "source", "npm link desde el repositorio");
+  assert.equal(
+    detectInstall("/home/u/MODAI/packages/cli/dist/cli/index.js", npmRoot).kind,
+    "source",
+    "npm link desde el repositorio",
+  );
 });
 
 test("el aviso de versión nueva se desactiva en CI, en scripts y con MODAI_NO_UPDATE_NOTIFIER", () => {

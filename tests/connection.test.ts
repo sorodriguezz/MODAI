@@ -10,9 +10,17 @@ process.env.MODAI_CONFIG_DIR = config;
 const { effectiveConnection, insecureTransport } = await import("../packages/cli/src/cli/connection.ts");
 
 const withEnv = (vars: Record<string, string | undefined>, run: () => void) => {
-  const previous = Object.fromEntries(Object.keys(vars).map(key => [key, process.env[key]]));
-  for (const [key, value] of Object.entries(vars)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
-  try { run(); } finally { for (const [key, value] of Object.entries(previous)) if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(vars))
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  try {
+    run();
+  } finally {
+    for (const [key, value] of Object.entries(previous))
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+  }
 };
 
 test("MODAI_API_TOKEN solo viaja a su servidor, nunca a un registry de un modai.yaml ajeno", () => {
@@ -41,9 +49,12 @@ test("no se envían credenciales por http salvo a este equipo o con permiso expl
   assert.equal(insecureTransport("http://127.0.0.1:8787"), false);
   assert.equal(insecureTransport("https://modai.empresa.dev"), false);
   assert.equal(insecureTransport("http://modai.interno:8787"), true);
-  withEnv({ MODAI_SERVER: "http://modai.interno:8787", MODAI_API_TOKEN: "x", MODAI_ALLOW_INSECURE_HTTP: undefined }, () => {
-    assert.throws(() => effectiveConnection(), /No se envían credenciales por http/);
-  });
+  withEnv(
+    { MODAI_SERVER: "http://modai.interno:8787", MODAI_API_TOKEN: "x", MODAI_ALLOW_INSECURE_HTTP: undefined },
+    () => {
+      assert.throws(() => effectiveConnection(), /No se envían credenciales por http/);
+    },
+  );
   withEnv({ MODAI_SERVER: "http://modai.interno:8787", MODAI_API_TOKEN: "x", MODAI_ALLOW_INSECURE_HTTP: "1" }, () => {
     assert.equal(effectiveConnection().token, "x");
   });

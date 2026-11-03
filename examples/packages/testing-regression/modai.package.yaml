@@ -48,7 +48,8 @@ spec:
                       title: { type: string, maxLength: 1000 }
                       status: { type: string, maxLength: 20 }
                       file: { type: string, maxLength: 1000 }
-            baselinePath: { type: string, maxLength: 500, description: "Ruta relativa; por defecto .regression/baseline.json" }
+            baselinePath:
+              { type: string, maxLength: 500, description: "Ruta relativa; por defecto .regression/baseline.json" }
           additionalProperties: false
   entrypoints:
     skills: skills

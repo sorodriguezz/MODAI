@@ -1,32 +1,51 @@
+import { get, health, post } from "./lib/api.js";
 import { $, html, mount } from "./lib/html.js";
-import { iconMarkup, icon } from "./lib/icons.js";
-import { get, post, health } from "./lib/api.js";
-import { initDialog, closeDialog, toast, toastError, roleLabels, initials } from "./lib/ui.js";
+import { icon, iconMarkup } from "./lib/icons.js";
+import { closeDialog, initDialog, initials, roleLabels, toast, toastError } from "./lib/ui.js";
 import { state, store } from "./state.js";
-import { renderLogin, renderSetup } from "./views/auth.js";
+import access from "./views/access.js";
 import { openChangePassword } from "./views/account.js";
+import audit from "./views/audit.js";
+import { renderLogin, renderSetup } from "./views/auth.js";
+import categories from "./views/categories.js";
+import connect from "./views/connect.js";
 import dashboard from "./views/dashboard.js";
-import packages from "./views/packages.js";
 import knowledge from "./views/knowledge.js";
-import projects from "./views/projects.js";
 import memories from "./views/memories.js";
+import myKeys from "./views/my-keys.js";
+import namespaces from "./views/namespaces.js";
+import organizations from "./views/organizations.js";
+import packages from "./views/packages.js";
+import projects from "./views/projects.js";
 import runs from "./views/runs.js";
 import users from "./views/users.js";
-import access from "./views/access.js";
-import audit from "./views/audit.js";
-import connect from "./views/connect.js";
-import organizations from "./views/organizations.js";
-import namespaces from "./views/namespaces.js";
-import categories from "./views/categories.js";
-import myKeys from "./views/my-keys.js";
 
-const views = [dashboard, packages, knowledge, projects, memories, runs, connect, myKeys, organizations, namespaces, categories, users, access, audit];
+const views = [
+  dashboard,
+  packages,
+  knowledge,
+  projects,
+  memories,
+  runs,
+  connect,
+  myKeys,
+  organizations,
+  namespaces,
+  categories,
+  users,
+  access,
+  audit,
+];
 // Biblioteca is what gets published and versioned under a namespace (every kind lives in Paquetes);
 // Proyectos is what gets used: runs, memories and the searchable knowledge base agents read.
 const sections = [
   { id: "library", label: "Biblioteca", views: ["dashboard", "packages"] },
   { id: "work", label: "Proyectos", views: ["projects", "runs", "memories", "knowledge", "connect", "my-keys"] },
-  { id: "admin", label: "Administración", views: ["organizations", "namespaces", "categories", "users", "access", "audit"] },
+  {
+    id: "admin",
+    label: "Administración",
+    views: ["organizations", "namespaces", "categories", "users", "access", "audit"],
+  },
 ];
 /** Former menus that are now a type tab of Paquetes: old links and bookmarks still land there. */
 const MOVED = { agents: { type: "agents" }, templates: { type: "templates" } };
@@ -65,7 +84,10 @@ async function boot(notice) {
     await enterApp(status);
   } catch (error) {
     show("auth");
-    mount($("authScreen"), html`<div class="auth-layout single"><section class="auth-main"><div class="auth-card"><div class="empty-state error"><span class="empty-icon">${icon("alert", 26)}</span><h3>No se pudo contactar con el servidor</h3><p>${error.message}</p><button class="btn primary" id="retryBoot">${icon("refresh")}Reintentar</button></div></div></section></div>`);
+    mount(
+      $("authScreen"),
+      html`<div class="auth-layout single"><section class="auth-main"><div class="auth-card"><div class="empty-state error"><span class="empty-icon">${icon("alert", 26)}</span><h3>No se pudo contactar con el servidor</h3><p>${error.message}</p><button class="btn primary" id="retryBoot">${icon("refresh")}Reintentar</button></div></div></section></div>`,
+    );
     $("retryBoot").addEventListener("click", () => boot());
   }
 }
@@ -97,7 +119,10 @@ async function enterApp(status) {
   renderServerStatus();
   show("app");
   const target = parseHash();
-  await navigate(target && (isVisible(byId[target]) || MOVED[target]) ? target : "dashboard", { params: MOVED[target] ? Object.fromEntries(hashParams()) : undefined, replace: true });
+  await navigate(target && (isVisible(byId[target]) || MOVED[target]) ? target : "dashboard", {
+    params: MOVED[target] ? Object.fromEntries(hashParams()) : undefined,
+    replace: true,
+  });
 }
 
 window.addEventListener("modai:unauthorized", () => {
@@ -122,24 +147,33 @@ function renderUser() {
   $("userAvatar").textContent = initials(name);
   $("userName").textContent = name;
   $("userRole").textContent = roleLabels[state.identity?.role] || "";
-  mount($("userMenuHeader"), html`<span class="avatar large" aria-hidden="true">${initials(name)}</span><div><b>${name}</b><span class="muted">@${user?.username || ""} · ${roleLabels[state.identity?.role] || ""}</span></div>`);
+  mount(
+    $("userMenuHeader"),
+    html`<span class="avatar large" aria-hidden="true">${initials(name)}</span><div><b>${name}</b><span class="muted">@${user?.username || ""} · ${roleLabels[state.identity?.role] || ""}</span></div>`,
+  );
   $("brandVersion").textContent = state.health?.version ? "v" + state.health.version : "";
 }
 
 function renderNav() {
-  mount($("nav"), sections.map((section) => {
-    const items = section.views.map((id) => byId[id]).filter(isVisible);
-    if (!items.length) return "";
-    return html`<div class="nav-section"><p class="nav-label" id="nav-${section.id}">${section.label}</p>
+  mount(
+    $("nav"),
+    sections.map((section) => {
+      const items = section.views.map((id) => byId[id]).filter(isVisible);
+      if (!items.length) return "";
+      return html`<div class="nav-section"><p class="nav-label" id="nav-${section.id}">${section.label}</p>
       <ul aria-labelledby="nav-${section.id}">${items.map((view) => html`<li><a href="#/${view.id}" data-view="${view.id}">${icon(view.icon)}<span>${view.label}</span></a></li>`)}</ul></div>`;
-  }));
+    }),
+  );
 }
 
 function renderServerStatus() {
   const h = state.health;
-  mount($("serverStatus"), h
-    ? html`<span class="status-dot ok" aria-hidden="true"></span><div><b>Servidor en línea</b><span>${h.publicUrl || location.host} · firmas ${h.signaturePolicy}</span></div>`
-    : html`<span class="status-dot warn" aria-hidden="true"></span><div><b>Estado desconocido</b><span>No se pudo leer /health</span></div>`);
+  mount(
+    $("serverStatus"),
+    h
+      ? html`<span class="status-dot ok" aria-hidden="true"></span><div><b>Servidor en línea</b><span>${h.publicUrl || location.host} · firmas ${h.signaturePolicy}</span></div>`
+      : html`<span class="status-dot warn" aria-hidden="true"></span><div><b>Estado desconocido</b><span>No se pudo leer /health</span></div>`,
+  );
 }
 
 function toggleMenu(open) {
@@ -148,16 +182,19 @@ function toggleMenu(open) {
   if (open) $("nav").querySelector("a")?.focus();
 }
 $("menuToggle").addEventListener("click", () => toggleMenu(true));
-document.querySelectorAll("[data-close-menu]").forEach((element) => element.addEventListener("click", () => {
-  toggleMenu(false);
-  $("menuToggle").focus();
-}));
+document.querySelectorAll("[data-close-menu]").forEach((element) =>
+  element.addEventListener("click", () => {
+    toggleMenu(false);
+    $("menuToggle").focus();
+  }),
+);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && document.body.classList.contains("menu-open")) toggleMenu(false);
 });
 
 // User menu (button + role=menu, arrow-key navigation, Escape to close).
-const userButton = $("userButton"), userMenu = $("userMenu");
+const userButton = $("userButton"),
+  userMenu = $("userMenu");
 function setUserMenu(open) {
   userMenu.hidden = !open;
   userButton.setAttribute("aria-expanded", String(open));
@@ -170,9 +207,18 @@ document.addEventListener("click", (event) => {
 userMenu.addEventListener("keydown", (event) => {
   const items = [...userMenu.querySelectorAll("[role=menuitem]")];
   const index = items.indexOf(document.activeElement);
-  if (event.key === "Escape") { setUserMenu(false); userButton.focus(); }
-  if (event.key === "ArrowDown") { event.preventDefault(); items[(index + 1) % items.length].focus(); }
-  if (event.key === "ArrowUp") { event.preventDefault(); items[(index - 1 + items.length) % items.length].focus(); }
+  if (event.key === "Escape") {
+    setUserMenu(false);
+    userButton.focus();
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    items[(index + 1) % items.length].focus();
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    items[(index - 1 + items.length) % items.length].focus();
+  }
   if (event.key === "Tab") setUserMenu(false);
 });
 userMenu.addEventListener("click", async (event) => {
@@ -217,7 +263,11 @@ export function hashParams() {
 }
 
 export async function navigate(id, { params, replace = false } = {}) {
-  if (MOVED[id]) { params = { ...MOVED[id], ...params }; id = "packages"; replace = true; }
+  if (MOVED[id]) {
+    params = { ...MOVED[id], ...params };
+    id = "packages";
+    replace = true;
+  }
   const view = isVisible(byId[id]) ? byId[id] : byId.dashboard;
   const query = params ? "?" + new URLSearchParams(params).toString() : "";
   const hash = "#/" + view.id + query;
@@ -265,7 +315,10 @@ async function renderView(view, { keepFocus = false } = {}) {
     await view.render(root, { actions, params: hashParams(), navigate, isCurrent: () => token === renderToken });
   } catch (error) {
     if (token !== renderToken) return;
-    mount(root, html`<div class="panel"><div class="empty-state error"><span class="empty-icon">${icon("alert", 26)}</span><h3>No se pudo mostrar esta sección</h3><p>${error.message}</p></div></div>`);
+    mount(
+      root,
+      html`<div class="panel"><div class="empty-state error"><span class="empty-icon">${icon("alert", 26)}</span><h3>No se pudo mostrar esta sección</h3><p>${error.message}</p></div></div>`,
+    );
   }
 }
 

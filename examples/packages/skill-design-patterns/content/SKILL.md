@@ -1,4 +1,5 @@
 ---
+
 name: design-patterns
 description: Diagnostica y aplica patrones de diseño cuando una presión concreta de creación, estructura o colaboración lo justifica. Úsala para elegir, comparar, implementar o revisar patrones; no para imponer patrones a código simple ni sustituir decisiones de arquitectura de dominio.
 ---

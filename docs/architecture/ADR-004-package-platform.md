@@ -8,7 +8,7 @@ Aceptado. Sustituye el modelo de tipos cerrados de ADR-001 y convierte a ADR-003
 
 Una plataforma de paquetes no puede exigir cambios en el Core por cada capacidad nueva. Por eso:
 
-- La categoría de un paquete es informativa: la calidad, el empaquetado y la composición de agentes no hacen `switch` por tipo, así que un paquete de *testing*, *frontend* o *IoT* encaja sin modificar código.
+- La categoría de un paquete es informativa: la calidad, el empaquetado y la composición de agentes no hacen `switch` por tipo, así que un paquete de _testing_, _frontend_ o _IoT_ encaja sin modificar código.
 - Los destinos de instalación no están codificados para agentes concretos: soportar otro agente es publicar un adaptador.
 - Los paquetes dependen de contratos de capacidades ("algo que automatice un navegador"), no solo de otros paquetes por nombre.
 - El resolvedor vive en el Core, no en el servidor: sin la instancia central también se puede instalar.
@@ -21,13 +21,13 @@ Una plataforma de paquetes no puede exigir cambios en el Core por cada capacidad
 
 El Core (`packages/core`, `@modai/core`) es una biblioteca sin dependencia de servidor con cinco responsabilidades permanentes:
 
-| Responsabilidad | Implementación |
-|---|---|
-| Package Manager | `syncWorkspace`, store verificable `.modai/store`, `installer.ts` (archivos, bloques y entradas JSON administrados) |
-| Dependency Resolver | `resolver.ts`: backtracking SemVer, overrides, preferencia por el lock, compatibilidad de SO y de versión del Core |
+| Responsabilidad     | Implementación                                                                                                              |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Package Manager     | `syncWorkspace`, store verificable `.modai/store`, `installer.ts` (archivos, bloques y entradas JSON administrados)         |
+| Dependency Resolver | `resolver.ts`: backtracking SemVer, overrides, preferencia por el lock, compatibilidad de SO y de versión del Core          |
 | Capability Registry | `provides`/`requires`/`optional`/`conflicts` versionados; selección y fijación de proveedores (`providers` en `modai.yaml`) |
-| Context Gateway | `context.ts` (BM25 local con procedencia y lectura por fragmentos) y `memory.ts` (memoria local por ámbito o remota) |
-| Adapter System | `adapters.ts`: adaptadores **declarativos**; los integrados son datos con el mismo esquema que un paquete `kind: Adapter` |
+| Context Gateway     | `context.ts` (BM25 local con procedencia y lectura por fragmentos) y `memory.ts` (memoria local por ámbito o remota)        |
+| Adapter System      | `adapters.ts`: adaptadores **declarativos**; los integrados son datos con el mismo esquema que un paquete `kind: Adapter`   |
 
 Todo lo demás es instalable. El Core no conoce React, NestJS, SDD, Playwright, OpenCode ni Cursor: solo contratos.
 
@@ -35,7 +35,7 @@ Las decisiones concretas:
 
 1. **Especificación de paquetes v1** (`apiVersion: modai.dev/v1`, [especificación](../spec/PACKAGE-SPEC-v1.md)). `category` es informativa; el comportamiento depende de `contributes` (skills, rules, knowledge, tools, mcpServers, agents, files) y de los contratos de capacidades.
 2. **Contratos de capacidades.** `@testing/regression` requiere `browser.automation@^1`; `@testing/playwright` la proporciona. Mañana otro paquete puede proporcionarla sin cambiar ni el Core ni `@testing/regression`. Las herramientas declaran `implements` para que el agente las descubra por contrato.
-3. **Registries intercambiables.** `LocalRegistry` (carpeta), `HttpRegistry` (servidor MODAI) y dependencias `file:`. Un paquete se sirve completo desde el primer registry que lo conoce (sin mezclar versiones: evita *dependency confusion*). La Raspberry pasa a ser un registry privado opcional, no un requisito.
+3. **Registries intercambiables.** `LocalRegistry` (carpeta), `HttpRegistry` (servidor MODAI) y dependencias `file:`. Un paquete se sirve completo desde el primer registry que lo conoce (sin mezclar versiones: evita _dependency confusion_). La Raspberry pasa a ser un registry privado opcional, no un requisito.
 4. **`modai.yaml` + `modai.lock`** en la raíz del proyecto. El lock es determinista (sin marcas de tiempo) y guarda `integrity` (`sha256` del manifiesto publicado y de cada archivo), fuente, firmante, capacidades resueltas y cada archivo/bloque/entrada JSON administrado con su hash.
 5. **Adaptadores declarativos.** `agent-skills`, `agents-md`, `claude-code` y `mcp` vienen integrados como datos; `@adapters/cursor` y `@adapters/opencode` son paquetes de ejemplo. Un adaptador solo describe destinos con plantillas (`{skill}`, `{package}`, `{rule}`): nunca ejecuta código.
 6. **Gateway MCP único** (`modai-mcp`). Expone conocimiento por fragmentos, memoria, skills como recursos y las herramientas autorizadas de los paquetes. Es la frontera donde se aplican los permisos.

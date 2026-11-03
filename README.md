@@ -25,13 +25,13 @@ El Core conoce contratos, no frameworks. `@testing/regression` declara `requires
 
 ## Qué incluye
 
-| Componente | Qué hace | Dónde |
-|---|---|---|
-| **CLI** `modai` + gateway `modai-mcp` | Instala, actualiza, retira, autoriza y conecta paquetes; funciona sin servidor | `packages/cli` · npm [`@sorodriguez/modai`](https://www.npmjs.com/package/@sorodriguez/modai) |
-| **Core** | Especificación v1, resolvedor de dependencias y capacidades, registries, adaptadores, installer reversible, búsqueda de conocimiento, memoria, ejecución de herramientas | `packages/core` (incluido en la CLI y el servidor) |
-| **Servidor central** (opcional) | Registry privado, memoria compartida por equipo, API keys, auditoría, backups, agentes y workers. No ejecuta modelos | `apps/server` · Docker |
-| **Panel web** | Inicio de sesión con usuario y contraseña, paquetes y sus contratos, conocimiento, memorias, proyectos, agentes, ejecuciones, usuarios, accesos y auditoría | `apps/admin`, servido en `/admin` |
-| **Catálogo de ejemplo** | Frontend, arquitectura, Playwright, regresión, perfil fullstack, adaptadores Cursor/OpenCode, harnesses, skills, conocimiento y un agente de ejemplo | `examples/packages` |
+| Componente                            | Qué hace                                                                                                                                                                 | Dónde                                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| **CLI** `modai` + gateway `modai-mcp` | Instala, actualiza, retira, autoriza y conecta paquetes; funciona sin servidor                                                                                           | `packages/cli` · npm [`@sorodriguez/modai`](https://www.npmjs.com/package/@sorodriguez/modai) |
+| **Core**                              | Especificación v1, resolvedor de dependencias y capacidades, registries, adaptadores, installer reversible, búsqueda de conocimiento, memoria, ejecución de herramientas | `packages/core` (incluido en la CLI y el servidor)                                            |
+| **Servidor central** (opcional)       | Registry privado, memoria compartida por equipo, API keys, auditoría, backups, agentes y workers. No ejecuta modelos                                                     | `apps/server` · Docker                                                                        |
+| **Panel web**                         | Inicio de sesión con usuario y contraseña, paquetes y sus contratos, conocimiento, memorias, proyectos, agentes, ejecuciones, usuarios, accesos y auditoría              | `apps/admin`, servido en `/admin`                                                             |
+| **Catálogo de ejemplo**               | Frontend, arquitectura, Playwright, regresión, perfil fullstack, adaptadores Cursor/OpenCode, harnesses, skills, conocimiento y un agente de ejemplo                     | `examples/packages`                                                                           |
 
 Principios garantizados por el código y los tests:
 
@@ -170,24 +170,24 @@ Guía completa: [crear, publicar e instalar paquetes](docs/guides/AUTHORING-PACK
 
 ## Comandos de la CLI
 
-| Comando | Uso |
-|---|---|
-| `modai init` | Crea `modai.yaml`: registries, adaptadores y memoria (`--registry`, `--adapter`, `--profile`, `--project`) |
-| `modai add` / `remove` / `update` / `outdated` / `sync [--frozen]` / `status` | Ciclo de vida reproducible y reversible |
-| `modai add <paquete> --<feature>` / `--help` · `modai feature list\|enable\|disable\|reset` | Partes opcionales de un paquete: elegirlas al instalar, ver cuáles ofrece y cambiarlas después |
-| `modai capability list` / `providers <capacidad>` / `provider <capacidad> <paquete>` | Contratos instalados, proveedores disponibles y elección de proveedor |
-| `modai permissions grant` / `revoke` / `permissions` | Autorización local de herramientas y servidores MCP |
-| `modai capability tools` / `tools run` | Herramientas aportadas por paquetes |
-| `modai context search` / `context show` / `remember` / `recall` / `memories` / `forget` | Context Gateway y memoria |
-| `modai adapter list` / `adapter add` / `adapter remove` | Conectar con otros agentes |
-| `modai registry list` / `add` / `remove` / `packages` | Registries del proyecto |
-| `modai package scaffold` / `validate` / `keygen`, `modai package publish` | Autoría y publicación (firma Ed25519 opcional) |
-| `modai server connect` / `whoami` / `admin …` / `project …` | Servidor central |
-| `modai agent …` / `runs …` / `worker` | Agentes compuestos por el servidor (proyectos vinculados con `modai init --project`) |
-| `modai workspace add/remove/update/sync/list` | La misma operación en muchos repositorios bajo una raíz, con plan previo y confirmación |
-| `modai server ping` | Comprueba si el servidor está arriba: latencia, versión y credencial |
-| `modai client doctor` / `setup` / `embed …` | Modelos y embeddings locales con Ollama |
-| `modai harness init` / `audit` | Harness de cinco subsistemas para agentes de programación |
+| Comando                                                                                     | Uso                                                                                                        |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `modai init`                                                                                | Crea `modai.yaml`: registries, adaptadores y memoria (`--registry`, `--adapter`, `--profile`, `--project`) |
+| `modai add` / `remove` / `update` / `outdated` / `sync [--frozen]` / `status`               | Ciclo de vida reproducible y reversible                                                                    |
+| `modai add <paquete> --<feature>` / `--help` · `modai feature list\|enable\|disable\|reset` | Partes opcionales de un paquete: elegirlas al instalar, ver cuáles ofrece y cambiarlas después             |
+| `modai capability list` / `providers <capacidad>` / `provider <capacidad> <paquete>`        | Contratos instalados, proveedores disponibles y elección de proveedor                                      |
+| `modai permissions grant` / `revoke` / `permissions`                                        | Autorización local de herramientas y servidores MCP                                                        |
+| `modai capability tools` / `tools run`                                                      | Herramientas aportadas por paquetes                                                                        |
+| `modai context search` / `context show` / `remember` / `recall` / `memories` / `forget`     | Context Gateway y memoria                                                                                  |
+| `modai adapter list` / `adapter add` / `adapter remove`                                     | Conectar con otros agentes                                                                                 |
+| `modai registry list` / `add` / `remove` / `packages`                                       | Registries del proyecto                                                                                    |
+| `modai package scaffold` / `validate` / `keygen`, `modai package publish`                   | Autoría y publicación (firma Ed25519 opcional)                                                             |
+| `modai server connect` / `whoami` / `admin …` / `project …`                                 | Servidor central                                                                                           |
+| `modai agent …` / `runs …` / `worker`                                                       | Agentes compuestos por el servidor (proyectos vinculados con `modai init --project`)                       |
+| `modai workspace add/remove/update/sync/list`                                               | La misma operación en muchos repositorios bajo una raíz, con plan previo y confirmación                    |
+| `modai server ping`                                                                         | Comprueba si el servidor está arriba: latencia, versión y credencial                                       |
+| `modai client doctor` / `setup` / `embed …`                                                 | Modelos y embeddings locales con Ollama                                                                    |
+| `modai harness init` / `audit`                                                              | Harness de cinco subsistemas para agentes de programación                                                  |
 
 `modai <comando> --help` muestra todas las opciones.
 
@@ -217,14 +217,14 @@ MODAI/
 
 ## Operación del servidor con Docker
 
-| Acción | Comando |
-|---|---|
-| Ver estado | `docker compose -f deploy/compose.yaml ps` |
-| Seguir logs | `docker compose -f deploy/compose.yaml logs -f server` |
-| Reconstruir tras cambios | `docker compose -f deploy/compose.yaml up -d --build` |
-| Aplicar cambios de `deploy/.env` | `docker compose -f deploy/compose.yaml up -d --force-recreate` |
-| Detener conservando datos | `docker compose -f deploy/compose.yaml down` |
-| Exportar backup | `modai admin export ./modai-backup.json` (o desde **Auditoría** en el panel) |
+| Acción                           | Comando                                                                      |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| Ver estado                       | `docker compose -f deploy/compose.yaml ps`                                   |
+| Seguir logs                      | `docker compose -f deploy/compose.yaml logs -f server`                       |
+| Reconstruir tras cambios         | `docker compose -f deploy/compose.yaml up -d --build`                        |
+| Aplicar cambios de `deploy/.env` | `docker compose -f deploy/compose.yaml up -d --force-recreate`               |
+| Detener conservando datos        | `docker compose -f deploy/compose.yaml down`                                 |
+| Exportar backup                  | `modai admin export ./modai-backup.json` (o desde **Auditoría** en el panel) |
 
 Los datos viven en los volúmenes `modularai_modai-data` y `modularai_modai-artifacts`. **No uses `down -v` si quieres conservarlos.** Con Node instalado, `npm run docker:up`, `docker:down`, `docker:logs`, `docker:ps` y `docker:seed` ejecutan los mismos flujos.
 
@@ -234,28 +234,28 @@ Para la red local con HTTPS (CA interna de Caddy): `docker compose -f deploy/com
 
 El servidor necesita un proceso permanente y disco persistente (SQLite y artefactos), por eso no funciona en plataformas serverless como Vercel. Hay configuraciones listas para:
 
-| Entorno | Arranque |
-|---|---|
+| Entorno                    | Arranque                                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | **Raspberry Pi** (64 bits) | `docker compose -f deploy/compose.yaml -f deploy/compose.raspberry.yaml up -d --build` o `npm run docker:pi` |
-| **Fly.io** | `npm run deploy:fly` con `deploy/fly/fly.toml` |
-| **Railway** | Repositorio de GitHub + `deploy/railway/railway.json` + volumen en `/app/data` |
-| **VPS con dominio** | `npm run docker:public` |
+| **Fly.io**                 | `npm run deploy:fly` con `deploy/fly/fly.toml`                                                               |
+| **Railway**                | Repositorio de GitHub + `deploy/railway/railway.json` + volumen en `/app/data`                               |
+| **VPS con dominio**        | `npm run docker:public`                                                                                      |
 
 Paso a paso, respaldos (`deploy/backup.sh`) e imagen multi-arquitectura en GHCR: [guía de despliegue](docs/guides/DEPLOY.md).
 
 ## Si algo no funciona
 
-| Síntoma | Qué revisar |
-|---|---|
-| `CAPABILITY_UNSATISFIED` al instalar | Falta un proveedor del contrato; el mensaje sugiere qué paquete añadir (`modai capability providers <capacidad>`) |
-| `PERMISSION_REQUIRED … project.instructions` | Un adaptador escribe instrucciones del agente: repite con `--allow project.instructions` |
-| Una herramienta no aparece en el agente | Autorízala con `modai permissions grant <paquete>`; revisa `modai capability list` y vuelve a iniciar el cliente MCP |
-| `MANAGED_CONFLICT` | Editaste un archivo o bloque administrado: integra tus cambios o usa `--force` |
-| `LOCK_INTEGRITY_MISMATCH` | El registry sirve contenido distinto para la misma versión: no se instala, por seguridad |
-| El panel no abre o no inicia sesión | ¿El servidor responde en `/health`? Con usuarios ya creados, `MODAI_ADMIN_*` se ignora. Ver la [guía del panel](docs/guides/ADMIN-PANEL.md) |
-| El puerto 8787 está ocupado | Detén Docker o usa `MODAI_PORT=8790 npm run dev` |
-| Error de versión de Node | Usa Node 26.13.0 (`nvm use`) |
-| Cambiaste `deploy/.env` y no se aplica | Recrea el contenedor (`up -d --force-recreate`); `restart` no relee las variables |
+| Síntoma                                      | Qué revisar                                                                                                                                 |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CAPABILITY_UNSATISFIED` al instalar         | Falta un proveedor del contrato; el mensaje sugiere qué paquete añadir (`modai capability providers <capacidad>`)                           |
+| `PERMISSION_REQUIRED … project.instructions` | Un adaptador escribe instrucciones del agente: repite con `--allow project.instructions`                                                    |
+| Una herramienta no aparece en el agente      | Autorízala con `modai permissions grant <paquete>`; revisa `modai capability list` y vuelve a iniciar el cliente MCP                        |
+| `MANAGED_CONFLICT`                           | Editaste un archivo o bloque administrado: integra tus cambios o usa `--force`                                                              |
+| `LOCK_INTEGRITY_MISMATCH`                    | El registry sirve contenido distinto para la misma versión: no se instala, por seguridad                                                    |
+| El panel no abre o no inicia sesión          | ¿El servidor responde en `/health`? Con usuarios ya creados, `MODAI_ADMIN_*` se ignora. Ver la [guía del panel](docs/guides/ADMIN-PANEL.md) |
+| El puerto 8787 está ocupado                  | Detén Docker o usa `MODAI_PORT=8790 npm run dev`                                                                                            |
+| Error de versión de Node                     | Usa Node 26.13.0 (`nvm use`)                                                                                                                |
+| Cambiaste `deploy/.env` y no se aplica       | Recrea el contenedor (`up -d --force-recreate`); `restart` no relee las variables                                                           |
 
 ## Documentación
 

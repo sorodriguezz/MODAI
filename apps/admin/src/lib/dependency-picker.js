@@ -1,18 +1,34 @@
 // Dependency picker shared by the package editor (dependencies, per-feature packages) and the template editor:
 // one row per package, chosen by namespace → package → published version, plus how strictly to follow it.
+
+import { get } from "./api.js";
 import { html, mount } from "./html.js";
 import { icon } from "./icons.js";
-import { get } from "./api.js";
 import { compareVersions } from "./versions.js";
 
-const RANGE_OPS = [["^", "Compatible (^)"], ["~", "Solo parches (~)"], ["=", "Exacta"], ["*", "Cualquiera"], ["custom", "Personalizado"]];
+const RANGE_OPS = [
+  ["^", "Compatible (^)"],
+  ["~", "Solo parches (~)"],
+  ["=", "Exacta"],
+  ["*", "Cualquiera"],
+  ["custom", "Personalizado"],
+];
 const splitRange = (range) => {
   const match = /^([\^~]?)(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/.exec(range);
   if (match) return { op: match[1] || "=", version: match[2], custom: "" };
   return range === "*" ? { op: "*", version: "", custom: "" } : { op: "custom", version: "", custom: range };
 };
 /** The SemVer range a row stands for ("" while it is incomplete). */
-const rangeOf = (row) => row.op === "custom" ? row.custom.trim() : row.op === "*" ? "*" : !row.version ? "" : row.op === "=" ? row.version : row.op + row.version;
+const rangeOf = (row) =>
+  row.op === "custom"
+    ? row.custom.trim()
+    : row.op === "*"
+      ? "*"
+      : !row.version
+        ? ""
+        : row.op === "="
+          ? row.version
+          : row.op + row.version;
 
 // One catalog per page load: every picker in every dialog shares it. Templates are not installable, so they never appear.
 let catalogPromise = null;
@@ -26,34 +42,51 @@ function loadCatalog() {
       if (offset + 100 >= page.total) break;
     }
     return items.filter((item) => item.manifest?.kind !== "Template");
-  })().catch((error) => { catalogPromise = null; throw error; });
+  })().catch((error) => {
+    catalogPromise = null;
+    throw error;
+  });
   return catalogPromise;
 }
 async function loadVersions(name) {
   if (!name || versionCache.has(name)) return;
   try {
     const { packages } = await get("/packages?name=" + encodeURIComponent(name));
-    versionCache.set(name, packages.map((item) => item.version).sort((a, b) => compareVersions(b, a)));
-  } catch { versionCache.set(name, []); }
+    versionCache.set(
+      name,
+      packages.map((item) => item.version).sort((a, b) => compareVersions(b, a)),
+    );
+  } catch {
+    versionCache.set(name, []);
+  }
 }
 /** Forget what was loaded (after publishing, the new package must show up). */
-export function resetDependencyCatalog() { catalogPromise = null; versionCache.clear(); }
+export function resetDependencyCatalog() {
+  catalogPromise = null;
+  versionCache.clear();
+}
 
 /**
  * @param {HTMLElement} container
  * @param {{ id: string, initial?: Record<string, string>, exclude?: () => string, emptyText?: () => string, onChange?: () => void }} options
  *   `exclude()` is the package being edited (never offered); `onChange` runs after every edit.
  */
-export function dependencyPicker(container, { id, initial = {}, exclude = () => "", emptyText = () => "Sin dependencias.", onChange = () => {} }) {
+export function dependencyPicker(
+  container,
+  { id, initial = {}, exclude = () => "", emptyText = () => "Sin dependencias.", onChange = () => {} },
+) {
   const rows = Object.entries(initial).map(([pkg, range]) => ({ ns: pkg.split("/")[0], pkg, ...splitRange(range) }));
   let catalog = [];
   let status = "loading";
   let touched = false;
 
-  const namespaces = (row) => [...new Set([...catalog.map((item) => item.name.split("/")[0]), ...(row.ns ? [row.ns] : [])])].sort();
+  const namespaces = (row) =>
+    [...new Set([...catalog.map((item) => item.name.split("/")[0]), ...(row.ns ? [row.ns] : [])])].sort();
   const packagesIn = (row, index) => {
     const taken = new Set(rows.filter((other, i) => i !== index && other.pkg).map((other) => other.pkg));
-    const names = catalog.filter((item) => item.name.startsWith(row.ns + "/") && item.name !== exclude() && !taken.has(item.name)).map((item) => item.name);
+    const names = catalog
+      .filter((item) => item.name.startsWith(row.ns + "/") && item.name !== exclude() && !taken.has(item.name))
+      .map((item) => item.name);
     return row.pkg && !names.includes(row.pkg) ? [row.pkg, ...names] : names;
   };
   const rowMarkup = (row, index) => {
@@ -74,11 +107,18 @@ export function dependencyPicker(container, { id, initial = {}, exclude = () => 
     </div>`;
   };
   const draw = (focus) => {
-    mount(container, rows.length ? rows.map(rowMarkup)
-      : html`<p class="muted small">${status === "loading" ? "Cargando paquetes…" : status === "error" ? "No se pudo cargar el catálogo." : emptyText()}</p>`);
+    mount(
+      container,
+      rows.length
+        ? rows.map(rowMarkup)
+        : html`<p class="muted small">${status === "loading" ? "Cargando paquetes…" : status === "error" ? "No se pudo cargar el catálogo." : emptyText()}</p>`,
+    );
     if (focus) container.querySelector(`[data-index="${focus.index}"] ${focus.selector}`)?.focus();
   };
-  const changed = () => { touched = true; onChange(); };
+  const changed = () => {
+    touched = true;
+    onChange();
+  };
 
   container.addEventListener("change", async (event) => {
     const el = event.target;
@@ -86,15 +126,21 @@ export function dependencyPicker(container, { id, initial = {}, exclude = () => 
     const row = rows[index];
     if (!row) return;
     let selector = "select";
-    if (el.matches("[data-dep-ns]")) { Object.assign(row, { ns: el.value, pkg: "", version: "" }); selector = "[data-dep-pkg]"; }
-    else if (el.matches("[data-dep-pkg]")) {
+    if (el.matches("[data-dep-ns]")) {
+      Object.assign(row, { ns: el.value, pkg: "", version: "" });
+      selector = "[data-dep-pkg]";
+    } else if (el.matches("[data-dep-pkg]")) {
       row.pkg = el.value;
       await loadVersions(row.pkg);
       row.version = versionCache.get(row.pkg)?.[0] || "";
       selector = "[data-dep-op]";
-    } else if (el.matches("[data-dep-version]")) { row.version = el.value; selector = "[data-dep-version]"; }
-    else if (el.matches("[data-dep-op]")) { row.op = el.value; selector = row.op === "custom" ? "[data-dep-custom]" : "[data-dep-op]"; }
-    else return;
+    } else if (el.matches("[data-dep-version]")) {
+      row.version = el.value;
+      selector = "[data-dep-version]";
+    } else if (el.matches("[data-dep-op]")) {
+      row.op = el.value;
+      selector = row.op === "custom" ? "[data-dep-custom]" : "[data-dep-op]";
+    } else return;
     draw({ index, selector });
     changed();
   });
@@ -112,16 +158,37 @@ export function dependencyPicker(container, { id, initial = {}, exclude = () => 
   });
 
   draw();
-  loadCatalog().then((items) => { catalog = items; status = "ready"; }, () => { status = "error"; })
+  loadCatalog()
+    .then(
+      (items) => {
+        catalog = items;
+        status = "ready";
+      },
+      () => {
+        status = "error";
+      },
+    )
     .then(() => Promise.all(rows.map((row) => loadVersions(row.pkg))))
-    .then(() => { if (document.contains(container)) draw(); });
+    .then(() => {
+      if (document.contains(container)) draw();
+    });
 
   return {
     /** The chosen packages as { "@scope/name": range }, leaving out incomplete rows. */
-    get value() { return Object.fromEntries(rows.filter((row) => row.pkg && rangeOf(row)).map((row) => [row.pkg, rangeOf(row)])); },
-    get touched() { return touched; },
-    get size() { return rows.length; },
-    add() { rows.push({ ns: "", pkg: "", op: "^", version: "", custom: "" }); draw({ index: rows.length - 1, selector: "[data-dep-ns]" }); changed(); },
+    get value() {
+      return Object.fromEntries(rows.filter((row) => row.pkg && rangeOf(row)).map((row) => [row.pkg, rangeOf(row)]));
+    },
+    get touched() {
+      return touched;
+    },
+    get size() {
+      return rows.length;
+    },
+    add() {
+      rows.push({ ns: "", pkg: "", op: "^", version: "", custom: "" });
+      draw({ index: rows.length - 1, selector: "[data-dep-ns]" });
+      changed();
+    },
     draw,
     /** What blocks the step, or "". */
     issue() {

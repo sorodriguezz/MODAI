@@ -43,7 +43,9 @@ export async function api(path, { method = "GET", body, signal } = {}) {
     const message =
       response.status >= 500
         ? "El servidor tuvo un problema. Inténtalo de nuevo en unos segundos."
-        : payload.error?.message || fallback[response.status] || "No se pudo completar la solicitud (HTTP " + response.status + ").";
+        : payload.error?.message ||
+          fallback[response.status] ||
+          "No se pudo completar la solicitud (HTTP " + response.status + ").";
     throw new ApiError(response.status, code, message);
   }
   if (response.status === 204) return null;

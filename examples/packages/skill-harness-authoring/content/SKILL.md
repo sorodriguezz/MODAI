@@ -1,4 +1,5 @@
 ---
+
 name: harness-authoring
 description: Crea o audita harnesses para agentes de programación cuando haya deriva, pérdida de contexto, sobrealcance o cierres sin verificar. No sustituye arquitectura de producto, selección de modelos ni un simple prompt de tarea.
 ---

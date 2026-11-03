@@ -1,6 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
-import { UI } from "../../playwright.config.ts";
+import { expect, type Page, test } from "@playwright/test";
 import { writeZip } from "../../packages/core/src/archive.ts";
+import { UI } from "../../playwright.config.ts";
 
 const auth = { authorization: `Bearer ${UI.token}` };
 
@@ -14,11 +14,24 @@ async function login(page: Page) {
 
 test.describe.configure({ mode: "serial" });
 
-test("crea un usuario paso a paso eligiendo organización, proyectos y namespaces por nombre", async ({ page, request }) => {
-  const org = (await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Logística" } })).json()).organization;
-  const other = (await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Otra" } })).json()).organization;
-  await request.post("/api/v1/projects", { headers: auth, data: { id: "ui-rutas", name: "Rutas", organizationId: org.id } });
-  await request.post("/api/v1/projects", { headers: auth, data: { id: "ui-ajeno", name: "Ajeno", organizationId: other.id } });
+test("crea un usuario paso a paso eligiendo organización, proyectos y namespaces por nombre", async ({
+  page,
+  request,
+}) => {
+  const org = (
+    await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Logística" } })).json()
+  ).organization;
+  const other = (
+    await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Otra" } })).json()
+  ).organization;
+  await request.post("/api/v1/projects", {
+    headers: auth,
+    data: { id: "ui-rutas", name: "Rutas", organizationId: org.id },
+  });
+  await request.post("/api/v1/projects", {
+    headers: auth,
+    data: { id: "ui-ajeno", name: "Ajeno", organizationId: other.id },
+  });
   await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-logistica", organizationId: org.id } });
 
   await login(page);
@@ -47,7 +60,12 @@ test("crea un usuario paso a paso eligiendo organización, proyectos y namespace
   await expect(dialog.getByRole("heading", { name: "Usuario creado" })).toBeVisible();
   const users = (await (await request.get("/api/v1/admin/users", { headers: auth })).json()).users;
   const created = users.find((u: { username: string }) => u.username === "ui.logistica");
-  expect(created).toMatchObject({ role: "publisher", organizationIds: [org.id], projectIds: ["ui-rutas"], packageScopes: ["@ui-logistica"] });
+  expect(created).toMatchObject({
+    role: "publisher",
+    organizationIds: [org.id],
+    projectIds: ["ui-rutas"],
+    packageScopes: ["@ui-logistica"],
+  });
 });
 
 test("importa un .skill con vista previa y lo publica", async ({ page }) => {
@@ -60,8 +78,17 @@ test("importa un .skill con vista previa y lo publica", async ({ page }) => {
   await dialog.getByRole("radio", { name: /Subir un archivo \.skill/ }).check();
   await dialog.getByRole("button", { name: "Siguiente" }).click();
   await expect(dialog.getByRole("heading", { name: "Subir skill (.skill)" })).toBeVisible();
-  const zip = writeZip([{ path: "pr-review/SKILL.md", bytes: Buffer.from("---\nname: pr-review\ndescription: Revisa pull requests con foco en regresiones y pruebas.\n---\n\n# PR review\n") }]);
-  await dialog.getByLabel("Archivo .skill o .zip").setInputFiles({ name: "pr-review.skill", mimeType: "application/zip", buffer: zip });
+  const zip = writeZip([
+    {
+      path: "pr-review/SKILL.md",
+      bytes: Buffer.from(
+        "---\nname: pr-review\ndescription: Revisa pull requests con foco en regresiones y pruebas.\n---\n\n# PR review\n",
+      ),
+    },
+  ]);
+  await dialog
+    .getByLabel("Archivo .skill o .zip")
+    .setInputFiles({ name: "pr-review.skill", mimeType: "application/zip", buffer: zip });
   await dialog.getByRole("button", { name: "Siguiente" }).click();
   await dialog.getByLabel("Namespace").fill("@ui-skills");
   await dialog.getByRole("button", { name: "Siguiente" }).click();
@@ -79,7 +106,10 @@ test("sube un template desde un .zip y muestra cómo usarlo", async ({ page, req
   await expect(page).toHaveURL(/#\/packages\?type=templates/);
   await page.getByRole("button", { name: "Crear paquete" }).first().click();
   const dialog = page.getByRole("dialog");
-  const zip = writeZip([{ path: "nest/package.json", bytes: Buffer.from('{ "name": "{{projectName}}" }\n') }, { path: "nest/node_modules/x.js", bytes: Buffer.from("x") }]);
+  const zip = writeZip([
+    { path: "nest/package.json", bytes: Buffer.from('{ "name": "{{projectName}}" }\n') },
+    { path: "nest/node_modules/x.js", bytes: Buffer.from("x") },
+  ]);
   await dialog.locator("#tplZip").setInputFiles({ name: "nest.zip", mimeType: "application/zip", buffer: zip });
   await expect(dialog.locator("#tplSourceSummary")).toContainText("nest.zip");
   await dialog.getByRole("button", { name: "Siguiente" }).click();
@@ -120,11 +150,19 @@ test("conectar un cliente guía por objetivo y crea una API key acotada al proye
   await next();
   await expect(form.locator("#verifyStep")).toContainText("Esperando");
   const keys = (await (await request.get("/api/v1/admin/api-keys", { headers: auth })).json()).keys;
-  expect(keys.find((k: { label: string }) => k.label === "Worker CI")).toMatchObject({ role: "worker", projectIds: ["ui-conectar"], ownerName: UI.username, inherit: false });
+  expect(keys.find((k: { label: string }) => k.label === "Worker CI")).toMatchObject({
+    role: "worker",
+    projectIds: ["ui-conectar"],
+    ownerName: UI.username,
+    inherit: false,
+  });
 });
 
 test("una persona sin rol de administración crea y revoca sus propias API keys", async ({ page, request }) => {
-  await request.post("/api/v1/admin/users", { headers: auth, data: { username: "ui.lectora", password: "ui-lectora-password", role: "reader" } });
+  await request.post("/api/v1/admin/users", {
+    headers: auth,
+    data: { username: "ui.lectora", password: "ui-lectora-password", role: "reader" },
+  });
   await page.goto("/admin");
   await page.getByLabel("Usuario").fill("ui.lectora");
   await page.getByLabel("Contraseña", { exact: true }).fill("ui-lectora-password");
@@ -189,7 +227,11 @@ test("crea un template desde cero en el editor del panel y publica una versión 
   await dialog.getByRole("button", { name: "Siguiente" }).click();
   await dialog.getByRole("button", { name: "Publicar template" }).click();
   await expect(dialog.getByRole("heading", { name: "@ui-plantillas/desde-cero" })).toBeVisible();
-  const latest = (await (await request.get("/api/v1/package?name=" + encodeURIComponent("@ui-plantillas/desde-cero"), { headers: auth })).json()).package;
+  const latest = (
+    await (
+      await request.get("/api/v1/package?name=" + encodeURIComponent("@ui-plantillas/desde-cero"), { headers: auth })
+    ).json()
+  ).package;
   expect(latest.version).toBe("1.0.1");
   const files = (await (await request.get("/api/v1/artifacts/" + latest.artifactId, { headers: auth })).json()).files;
   const readme = files.find((f: { path: string }) => f.path === "README.md");
@@ -197,13 +239,39 @@ test("crea un template desde cero en el editor del panel y publica una versión 
 });
 
 test("una administración de organización ve Deprecar y Retirar solo en sus namespaces", async ({ page, request }) => {
-  const org = (await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Pagos" } })).json()).organization;
+  const org = (
+    await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Pagos" } })).json()
+  ).organization;
   await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-pagos", organizationId: org.id } });
   for (const name of ["@ui-pagos/cobro", "@ui-otro/cosa"]) {
     const content = "# Guía\n";
-    await request.post("/api/v1/packages", { headers: auth, data: { manifest: { apiVersion: "modai.dev/v1", kind: "Package", metadata: { name, version: "1.0.0", description: `${name}: paquete de prueba del panel con descripción suficiente` }, spec: { contributes: { knowledge: [{ path: "knowledge/README.md", title: "Guía" }] } } }, files: [{ path: "knowledge/README.md", content: Buffer.from(content).toString("base64"), sha256: (await import("node:crypto")).createHash("sha256").update(content).digest("hex") }] } });
+    await request.post("/api/v1/packages", {
+      headers: auth,
+      data: {
+        manifest: {
+          apiVersion: "modai.dev/v1",
+          kind: "Package",
+          metadata: {
+            name,
+            version: "1.0.0",
+            description: `${name}: paquete de prueba del panel con descripción suficiente`,
+          },
+          spec: { contributes: { knowledge: [{ path: "knowledge/README.md", title: "Guía" }] } },
+        },
+        files: [
+          {
+            path: "knowledge/README.md",
+            content: Buffer.from(content).toString("base64"),
+            sha256: (await import("node:crypto")).createHash("sha256").update(content).digest("hex"),
+          },
+        ],
+      },
+    });
   }
-  await request.post("/api/v1/admin/users", { headers: auth, data: { username: "ui.orgadmin", password: "ui-orgadmin-password", role: "org-admin", organizationIds: [org.id] } });
+  await request.post("/api/v1/admin/users", {
+    headers: auth,
+    data: { username: "ui.orgadmin", password: "ui-orgadmin-password", role: "org-admin", organizationIds: [org.id] },
+  });
   await page.goto("/admin");
   await page.getByLabel("Usuario").fill("ui.orgadmin");
   await page.getByLabel("Contraseña", { exact: true }).fill("ui-orgadmin-password");
@@ -219,7 +287,9 @@ test("una administración de organización ve Deprecar y Retirar solo en sus nam
   await expect(dialog.getByRole("button", { name: "Deprecar" })).toHaveCount(0);
 });
 
-test("un modal solo se cierra con sus botones: ni el fondo ni Escape descartan lo escrito, y la página de atrás no se desplaza", async ({ page }) => {
+test("un modal solo se cierra con sus botones: ni el fondo ni Escape descartan lo escrito, y la página de atrás no se desplaza", async ({
+  page,
+}) => {
   await login(page);
   await page.goto("/admin#/packages");
   await page.getByRole("button", { name: "Crear paquete" }).first().click();
@@ -236,12 +306,18 @@ test("un modal solo se cierra con sus botones: ni el fondo ni Escape descartan l
 
 test("el detalle de un template con features las lista y arma el comando al marcarlas", async ({ page, request }) => {
   await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-plantillas" } });
-  const yaml = "features:\n  sdd:\n    description: Spec-Driven Development\n    path: features/sdd\n  lombok:\n    description: Lombok\n    path: features/lombok\n    default: true\n";
+  const yaml =
+    "features:\n  sdd:\n    description: Spec-Driven Development\n    path: features/sdd\n  lombok:\n    description: Lombok\n    path: features/lombok\n    default: true\n";
   const archive = writeZip([
-    { path: "pom.xml", bytes: Buffer.from("<project/>") }, { path: "modai.template.yaml", bytes: Buffer.from(yaml) },
-    { path: "features/sdd/AGENTS.md", bytes: Buffer.from("sdd") }, { path: "features/lombok/lombok.config", bytes: Buffer.from("x") },
+    { path: "pom.xml", bytes: Buffer.from("<project/>") },
+    { path: "modai.template.yaml", bytes: Buffer.from(yaml) },
+    { path: "features/sdd/AGENTS.md", bytes: Buffer.from("sdd") },
+    { path: "features/lombok/lombok.config", bytes: Buffer.from("x") },
   ]).toString("base64");
-  const response = await request.post("/api/v1/packages/import-template", { headers: auth, data: { name: "@ui-plantillas/spring-flags", version: "1.0.0", description: "Spring con features", archive } });
+  const response = await request.post("/api/v1/packages/import-template", {
+    headers: auth,
+    data: { name: "@ui-plantillas/spring-flags", version: "1.0.0", description: "Spring con features", archive },
+  });
   expect(response.status(), await response.text()).toBe(201);
   await login(page);
   await page.goto("/admin#/packages?type=templates");
@@ -255,7 +331,10 @@ test("el detalle de un template con features las lista y arma el comando al marc
   await expect(dialog.locator("#tplUseCommand")).toContainText("--no-lombok");
 });
 
-test("las opciones (flags) se crean en el editor: un template con --sdd y un componente con --metrics", async ({ page, request }) => {
+test("las opciones (flags) se crean en el editor: un template con --sdd y un componente con --metrics", async ({
+  page,
+  request,
+}) => {
   await login(page);
   await page.goto("/admin#/packages?type=templates");
   await page.getByRole("button", { name: "Crear paquete" }).first().click();
@@ -287,8 +366,14 @@ test("las opciones (flags) se crean en el editor: un template con --sdd y un com
   await expect(dialog.getByRole("heading", { name: "@ui-plantillas/con-flags" })).toBeVisible();
   await dialog.locator('[data-feature="sdd"]').check();
   await expect(dialog.locator("#tplUseCommand")).toContainText("--sdd");
-  const info = await (await request.get("/api/v1/packages/template?name=" + encodeURIComponent("@ui-plantillas/con-flags"), { headers: auth })).json();
-  expect(info.features.map((f: { name: string; path?: string }) => [f.name, f.path])).toEqual([["sdd", "features/sdd"]]);
+  const info = await (
+    await request.get("/api/v1/packages/template?name=" + encodeURIComponent("@ui-plantillas/con-flags"), {
+      headers: auth,
+    })
+  ).json();
+  expect(info.features.map((f: { name: string; path?: string }) => [f.name, f.path])).toEqual([
+    ["sdd", "features/sdd"],
+  ]);
   await dialog.getByRole("button", { name: "Cerrar" }).first().click();
 
   // A component package: the option overlays a folder on the component.
@@ -313,7 +398,9 @@ test("las opciones (flags) se crean en el editor: un template con --sdd y un com
   await dialog.getByLabel(/Carpeta con sus archivos/).fill("features/metrics");
   await next();
   await next();
-  await expect(dialog.locator("#pkgManifest")).toHaveValue(/"metrics"[\s\S]*"component": "health"[\s\S]*"path": "features\/metrics"/);
+  await expect(dialog.locator("#pkgManifest")).toHaveValue(
+    /"metrics"[\s\S]*"component": "health"[\s\S]*"path": "features\/metrics"/,
+  );
   await dialog.getByRole("button", { name: "Publicar" }).click();
   await expect(dialog.getByRole("heading", { name: "@ui-plantillas/health-flags" })).toBeVisible();
   await dialog.locator('[data-feature="metrics"]').check();
@@ -371,5 +458,7 @@ test("el conocimiento manual se guarda para todo el servidor o para un namespace
   await dialog.getByRole("button", { name: "Guardar documento" }).click();
   await expect(page.locator("#docResults")).toContainText("@ui-docs/guias");
   const docs = (await (await request.get("/api/v1/knowledge/documents", { headers: auth })).json()).documents;
-  expect(docs.find((doc: { title: string }) => doc.title === "Guía de despliegue del equipo").packageName).toBe("@ui-docs/guias");
+  expect(docs.find((doc: { title: string }) => doc.title === "Guía de despliegue del equipo").packageName).toBe(
+    "@ui-docs/guias",
+  );
 });

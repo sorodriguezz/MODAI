@@ -1,12 +1,13 @@
 // Import a `.skill` file (a ZIP with SKILL.md): the server converts it into a package that contributes the skill.
+
+import { post } from "../lib/api.js";
+import { bytesToBase64, formatBytes } from "../lib/files.js";
 import { html, mount, toMarkup } from "../lib/html.js";
 import { icon } from "../lib/icons.js";
-import { post } from "../lib/api.js";
-import { openDialog, closeDialog, closeDialogAndWait, bindForm, toast } from "../lib/ui.js";
-import { bytesToBase64, formatBytes } from "../lib/files.js";
-import { wizard, reviewList } from "../lib/wizard.js";
-import { store, state } from "../state.js";
 import { qualityMarkup } from "../lib/quality.js";
+import { bindForm, closeDialog, closeDialogAndWait, openDialog, toast } from "../lib/ui.js";
+import { reviewList, wizard } from "../lib/wizard.js";
+import { state, store } from "../state.js";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -15,7 +16,8 @@ export async function openSkillImport({ onPublished } = {}) {
   const namespaces = publish.all ? (await store.namespaces().catch(() => [])).map((n) => n.name) : publish.namespaces;
   const body = openDialog({
     title: "Subir skill (.skill)",
-    description: "Un archivo .skill es un ZIP con SKILL.md (y sus referencias). Se publica como un paquete de tipo skill que cualquier proyecto puede instalar.",
+    description:
+      "Un archivo .skill es un ZIP con SKILL.md (y sus referencias). Se publica como un paquete de tipo skill que cualquier proyecto puede instalar.",
     size: "lg",
     body: html`<form class="stack wizard" novalidate>
       <section data-step="file" data-title="Archivo"><div class="stack">
@@ -38,12 +40,21 @@ export async function openSkillImport({ onPublished } = {}) {
   const form = body.querySelector("form");
   form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   let archive = "";
-  const request = (dryRun) => ({ archive, namespace: form.skillNamespace.value.trim(), ...(form.skillName.value.trim() ? { name: form.skillName.value.trim() } : {}), ...(form.skillVersion.value.trim() ? { version: form.skillVersion.value.trim() } : {}), ...(dryRun ? { dryRun: true } : {}) });
+  const request = (dryRun) => ({
+    archive,
+    namespace: form.skillNamespace.value.trim(),
+    ...(form.skillName.value.trim() ? { name: form.skillName.value.trim() } : {}),
+    ...(form.skillVersion.value.trim() ? { version: form.skillVersion.value.trim() } : {}),
+    ...(dryRun ? { dryRun: true } : {}),
+  });
   form.skillFile.addEventListener("change", async () => {
     const file = form.skillFile.files[0];
     archive = "";
     if (!file) return;
-    if (file.size > MAX_BYTES) { form.skillFile.setCustomValidity("El archivo supera 25 MiB"); return; }
+    if (file.size > MAX_BYTES) {
+      form.skillFile.setCustomValidity("El archivo supera 25 MiB");
+      return;
+    }
     form.skillFile.setCustomValidity("");
     archive = bytesToBase64(new Uint8Array(await file.arrayBuffer()));
   });
@@ -55,8 +66,17 @@ export async function openSkillImport({ onPublished } = {}) {
         mount(box, html`<p class="muted"><span class="spinner" aria-hidden="true"></span> Leyendo el archivo…</p>`);
         try {
           const preview = await post("/packages/import-skill", request(true));
-          box.innerHTML = reviewList([["Paquete", preview.name + "@" + preview.manifest.metadata.version], ["Skill", preview.skill.name], ["Descripción", preview.skill.description]]);
-          box.insertAdjacentHTML("beforeend", toMarkup(html`<h4>Archivos (${preview.files.length})</h4><ul class="file-summary">${preview.files.map((f) => html`<li><code>${f.path}</code> <span class="muted small">${formatBytes(f.size)}</span></li>`)}</ul>${qualityMarkup(preview.quality)}`));
+          box.innerHTML = reviewList([
+            ["Paquete", preview.name + "@" + preview.manifest.metadata.version],
+            ["Skill", preview.skill.name],
+            ["Descripción", preview.skill.description],
+          ]);
+          box.insertAdjacentHTML(
+            "beforeend",
+            toMarkup(
+              html`<h4>Archivos (${preview.files.length})</h4><ul class="file-summary">${preview.files.map((f) => html`<li><code>${f.path}</code> <span class="muted small">${formatBytes(f.size)}</span></li>`)}</ul>${qualityMarkup(preview.quality)}`,
+            ),
+          );
         } catch (error) {
           mount(box, html`<div class="callout tone-danger">${icon("alert")}<span>${error.message}</span></div>`);
         }

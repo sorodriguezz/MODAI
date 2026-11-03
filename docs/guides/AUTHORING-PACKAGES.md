@@ -27,7 +27,7 @@ Declara contratos en lugar de depender de herramientas concretas:
 spec:
   provides: [testing.regression.report@1.0.0]
   requires:
-    - capability: browser.automation   # cualquier paquete que la proporcione
+    - capability: browser.automation # cualquier paquete que la proporcione
       version: ^1.0.0
   permissions: [process.execute, filesystem.read]
   contributes:
@@ -37,7 +37,8 @@ spec:
         description: Compara resultados contra la línea base.
         command: node
         args: ["${packageDir}/tools/run.mjs"]
-        inputSchema: { type: object, properties: { results: { type: object } }, required: [results], additionalProperties: false }
+        inputSchema:
+          { type: object, properties: { results: { type: object } }, required: [results], additionalProperties: false }
   include: [tools]
 ```
 
@@ -114,13 +115,13 @@ modai capability run regression_compare --input '{"results":{"tests":[]}}'
 
 Los agentes compatibles con MCP leen el gateway desde `.mcp.json` (Claude Code), `.modai/mcp.json` (cualquier cliente) u otro archivo según el adaptador. El servidor MCP `modai` expone:
 
-| Herramienta / recurso | Uso |
-|---|---|
-| `modai_search_knowledge`, `modai_read_knowledge` | Conocimiento por fragmentos con paquete, versión y ruta |
-| `modai_recall`, `modai_remember` | Memoria del proyecto (local o del servidor) |
-| `modai_list_capabilities` | Qué paquete implementa cada contrato y qué herramientas están habilitadas |
-| herramientas de paquetes | Solo autorizadas y con integridad verificada |
-| `modai://skills/<nombre>` | Skills como recursos |
+| Herramienta / recurso                            | Uso                                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------------------- |
+| `modai_search_knowledge`, `modai_read_knowledge` | Conocimiento por fragmentos con paquete, versión y ruta                   |
+| `modai_recall`, `modai_remember`                 | Memoria del proyecto (local o del servidor)                               |
+| `modai_list_capabilities`                        | Qué paquete implementa cada contrato y qué herramientas están habilitadas |
+| herramientas de paquetes                         | Solo autorizadas y con integridad verificada                              |
+| `modai://skills/<nombre>`                        | Skills como recursos                                                      |
 
 ## 5. Mantener
 
@@ -144,11 +145,11 @@ modai adapter add cursor
 
 ## Paquetes de referencia
 
-| Paquete | Muestra |
-|---|---|
-| `@patterns/frontend-architecture` | Skill + conocimiento + regla; capacidad opcional `browser.automation` |
-| `@architecture/decision-records` | Procedimiento con `references/` y plantilla de ADR |
-| `@testing/playwright` | Proveedor ejecutable de `browser.automation` |
-| `@testing/regression` | Requiere `browser.automation`; herramienta de línea base que escribe dentro del proyecto |
-| `@profiles/fullstack-quality` | Perfil que compone los anteriores y una skill |
-| `@adapters/cursor`, `@adapters/opencode` | Adaptadores como datos |
+| Paquete                                  | Muestra                                                                                  |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `@patterns/frontend-architecture`        | Skill + conocimiento + regla; capacidad opcional `browser.automation`                    |
+| `@architecture/decision-records`         | Procedimiento con `references/` y plantilla de ADR                                       |
+| `@testing/playwright`                    | Proveedor ejecutable de `browser.automation`                                             |
+| `@testing/regression`                    | Requiere `browser.automation`; herramienta de línea base que escribe dentro del proyecto |
+| `@profiles/fullstack-quality`            | Perfil que compone los anteriores y una skill                                            |
+| `@adapters/cursor`, `@adapters/opencode` | Adaptadores como datos                                                                   |

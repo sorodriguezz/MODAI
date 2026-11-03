@@ -1,6 +1,6 @@
 import { AppError } from "@modai/contracts/errors";
+import { API_VERSION, type PackageManifestV1, packageManifestV1Schema } from "@modai/contracts/spec-v1";
 import type { PackageManifest } from "@modai/contracts/types";
-import { API_VERSION, packageManifestV1Schema, type PackageManifestV1 } from "@modai/contracts/spec-v1";
 
 /**
  * Validates a manifest and returns the canonical view used by the Core (defaults applied).
@@ -9,9 +9,19 @@ import { API_VERSION, packageManifestV1Schema, type PackageManifestV1 } from "@m
  */
 export function normalizeManifest(raw: unknown): PackageManifestV1 {
   const apiVersion = typeof raw === "object" && raw !== null ? (raw as { apiVersion?: unknown }).apiVersion : undefined;
-  if (apiVersion !== API_VERSION) throw new AppError(400, "INVALID_MANIFEST", `Manifiesto no admitido: usa apiVersion: ${API_VERSION} (docs/spec/PACKAGE-SPEC-v1.md)`);
+  if (apiVersion !== API_VERSION)
+    throw new AppError(
+      400,
+      "INVALID_MANIFEST",
+      `Manifiesto no admitido: usa apiVersion: ${API_VERSION} (docs/spec/PACKAGE-SPEC-v1.md)`,
+    );
   const parsed = packageManifestV1Schema.safeParse(raw);
-  if (!parsed.success) throw new AppError(400, "INVALID_MANIFEST", parsed.error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; "));
+  if (!parsed.success)
+    throw new AppError(
+      400,
+      "INVALID_MANIFEST",
+      parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "),
+    );
   return parsed.data;
 }
 

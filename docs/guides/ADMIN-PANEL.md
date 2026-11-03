@@ -2,10 +2,10 @@
 
 El panel de MODAI vive en `/admin`, en el mismo origen que la API (`/api/v1`). Las personas entran con **usuario y contraseña**; la sesión se guarda en una cookie `HttpOnly` que JavaScript no puede leer. Las **API keys** se siguen usando igual que antes para la CLI, el puente MCP y los workers.
 
-| Quién | Cómo se autentica | Dónde se gestiona |
-| --- | --- | --- |
-| Personas en el navegador | Usuario y contraseña → cookie de sesión | **Administración › Usuarios** |
-| CLI, MCP, workers, scripts | `Authorization: Bearer <API key>` | **Administración › Accesos** |
+| Quién                              | Cómo se autentica                        | Dónde se gestiona                      |
+| ---------------------------------- | ---------------------------------------- | -------------------------------------- |
+| Personas en el navegador           | Usuario y contraseña → cookie de sesión  | **Administración › Usuarios**          |
+| CLI, MCP, workers, scripts         | `Authorization: Bearer <API key>`        | **Administración › Accesos**           |
 | Instalación inicial y recuperación | `MODAI_API_TOKEN` (token de instalación) | Variables del servidor / `deploy/.env` |
 
 ## 1. Primer inicio
@@ -42,15 +42,15 @@ MODAI_ADMIN_PASSWORD='una frase larga y difícil de adivinar'
 
 Los usuarios usan los **mismos roles y permisos que las API keys**; todas las comprobaciones del servidor se aplican igual.
 
-| Rol | Puede |
-| --- | --- |
-| `reader` · Lectura | Consultar catálogo, conocimiento, agentes y la memoria y ejecuciones de sus proyectos. |
-| `publisher` · Publicación | Lo anterior y además publicar paquetes en sus namespaces, crear y editar conocimiento, crear proyectos, guardar memoria y enviar o cancelar tareas. |
-| `worker` · Worker | Pensado para workers: reclamar y completar ejecuciones y escribir memoria en sus proyectos. |
+| Rol                                          | Puede                                                                                                                                                                                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `reader` · Lectura                           | Consultar catálogo, conocimiento, agentes y la memoria y ejecuciones de sus proyectos.                                                                                                                                               |
+| `publisher` · Publicación                    | Lo anterior y además publicar paquetes en sus namespaces, crear y editar conocimiento, crear proyectos, guardar memoria y enviar o cancelar tareas.                                                                                  |
+| `worker` · Worker                            | Pensado para workers: reclamar y completar ejecuciones y escribir memoria en sus proyectos.                                                                                                                                          |
 | `org-admin` · Administración de organización | Gestiona usuarios, API keys, proyectos y namespaces **solo de sus organizaciones**, y publica en los namespaces que les pertenecen. No ve auditoría, backups ni publicadores, y no puede crear organizaciones ni dar el rol `admin`. |
-| `admin` · Administración global | Todo: organizaciones, usuarios, API keys, publicadores, auditoría, backups y retención. Accede a todos los proyectos. |
+| `admin` · Administración global              | Todo: organizaciones, usuarios, API keys, publicadores, auditoría, backups y retención. Accede a todos los proyectos.                                                                                                                |
 
-Los accesos siguen la jerarquía **organización → proyectos → namespaces**. Al crear o editar un usuario o una API key, el panel lo pide paso a paso (Cuenta, Rol, Organizaciones, Proyectos, Namespaces, Revisión) y solo ofrece los proyectos y namespaces de las organizaciones elegidas. Las organizaciones y namespaces se gestionan en **Administración → Organizaciones**: un namespace es *interno* (todos ven sus paquetes) o *restringido* (solo quien lo tenga asignado).
+Los accesos siguen la jerarquía **organización → proyectos → namespaces**. Al crear o editar un usuario o una API key, el panel lo pide paso a paso (Cuenta, Rol, Organizaciones, Proyectos, Namespaces, Revisión) y solo ofrece los proyectos y namespaces de las organizaciones elegidas. Las organizaciones y namespaces se gestionan en **Administración → Organizaciones**: un namespace es _interno_ (todos ven sus paquetes) o _restringido_ (solo quien lo tenga asignado).
 
 Cada usuario tiene además:
 
@@ -74,12 +74,12 @@ El panel oculta las secciones y acciones que tu rol no permite (por ejemplo, **O
 Una API key es la forma en que **un usuario** conecta la CLI, su editor (MCP) o un worker. No es una identidad aparte:
 
 - **Toda API key pertenece a un usuario** y actúa en su nombre. Lo que crea (por ejemplo, proyectos) queda a nombre de esa persona.
-- **Nunca tiene más permisos que su dueño.** Su rol es el del usuario o uno menor (una cuenta que publica también puede tener keys de `worker`). Sus accesos son *los mismos que la cuenta* (siguen sus cambios) o *una parte* (organizaciones, proyectos y namespaces dentro de los del usuario).
+- **Nunca tiene más permisos que su dueño.** Su rol es el del usuario o uno menor (una cuenta que publica también puede tener keys de `worker`). Sus accesos son _los mismos que la cuenta_ (siguen sus cambios) o _una parte_ (organizaciones, proyectos y namespaces dentro de los del usuario).
 - **Se evalúa en cada petición:** si al usuario le quitan un proyecto, sus keys también lo pierden; si su rol baja por debajo del de una key, esa key deja de funcionar; si la cuenta se desactiva, todas sus keys se apagan, y si se elimina quedan revocadas.
 - **Cada persona crea las suyas** en **Mis API keys** (también desde el menú de su cuenta) o en **Conectar un cliente**, que pregunta qué quieres hacer (usar MODAI en el editor, publicar paquetes, ejecutar un worker o explorar), crea tu key con el rol y alcance justos, muestra los comandos y la configuración MCP de tu editor (Claude Code, Cursor, VS Code) y **verifica en vivo** que el equipo se conectó. Si tu rol no alcanza (por ejemplo, un worker con cuenta de lectura), genera el mensaje para pedir el cambio.
 - Las keys solo se crean desde el panel con tu sesión: una key no puede crear otras. Desde la CLI, `modai server keys` las lista y `modai server revoke-key <id>` revoca una (por ejemplo, la de un equipo perdido).
-- **Accesos** muestra a quien administra las keys de las personas que gestiona, con su dueño; permite revocarlas, ajustar sus accesos o crear una a nombre de alguien. Para un worker o CI, crea un usuario para ese fin (por ejemplo `ci-bot`) y genera su key. En **Usuarios**, el botón *API keys* de cada persona filtra las suyas.
-- Las keys creadas sin dueño (con `MODAI_API_TOKEN` y `modai admin create-key --service`, para automatizar antes de que existan usuarios) aparecen como *Sin dueño*; desde Accesos se les puede asignar uno.
+- **Accesos** muestra a quien administra las keys de las personas que gestiona, con su dueño; permite revocarlas, ajustar sus accesos o crear una a nombre de alguien. Para un worker o CI, crea un usuario para ese fin (por ejemplo `ci-bot`) y genera su key. En **Usuarios**, el botón _API keys_ de cada persona filtra las suyas.
+- Las keys creadas sin dueño (con `MODAI_API_TOKEN` y `modai admin create-key --service`, para automatizar antes de que existan usuarios) aparecen como _Sin dueño_; desde Accesos se les puede asignar uno.
 - Si en una petición hay cabecera `Authorization: Bearer`, el servidor la usa y **ignora la cookie**. Un Bearer inválido no recurre a la sesión.
 - `MODAI_API_TOKEN` sigue siendo una credencial `admin` completa para la API. Úsala solo para instalación, automatización y recuperación; no la compartas.
 
@@ -104,17 +104,17 @@ curl -s -X PATCH -H "Authorization: Bearer $MODAI_API_TOKEN" -H "content-type: a
 
 ## 6. Rutas de la API
 
-| Método y ruta | Descripción |
-| --- | --- |
-| `GET /api/v1/auth/status` | `setupRequired`, identidad actual y política de contraseña. Sin autenticación. |
-| `POST /api/v1/auth/setup` | Crea el primer admin: `{ bootstrapToken, username, displayName?, password }`. |
-| `POST /api/v1/auth/login` | `{ username, password }` → cookie de sesión. |
-| `POST /api/v1/auth/logout` | Elimina la sesión y borra la cookie. |
-| `GET /api/v1/auth/me` | Identidad actual (usuario o API key). |
-| `POST /api/v1/auth/password` | `{ currentPassword, newPassword }`, solo para usuarios. |
-| `GET /api/v1/admin/users` | Lista de usuarios (admin). |
-| `POST /api/v1/admin/users` | `{ username, displayName?, password, role, projectIds?, organizationIds?, packageScopes? }`. |
-| `PATCH /api/v1/admin/users/:id` | Cualquier combinación de `displayName`, `role`, permisos, `disabled` y `password`. |
-| `DELETE /api/v1/admin/users/:id` | Elimina la cuenta y sus sesiones. |
+| Método y ruta                    | Descripción                                                                                  |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| `GET /api/v1/auth/status`        | `setupRequired`, identidad actual y política de contraseña. Sin autenticación.               |
+| `POST /api/v1/auth/setup`        | Crea el primer admin: `{ bootstrapToken, username, displayName?, password }`.                |
+| `POST /api/v1/auth/login`        | `{ username, password }` → cookie de sesión.                                                 |
+| `POST /api/v1/auth/logout`       | Elimina la sesión y borra la cookie.                                                         |
+| `GET /api/v1/auth/me`            | Identidad actual (usuario o API key).                                                        |
+| `POST /api/v1/auth/password`     | `{ currentPassword, newPassword }`, solo para usuarios.                                      |
+| `GET /api/v1/admin/users`        | Lista de usuarios (admin).                                                                   |
+| `POST /api/v1/admin/users`       | `{ username, displayName?, password, role, projectIds?, organizationIds?, packageScopes? }`. |
+| `PATCH /api/v1/admin/users/:id`  | Cualquier combinación de `displayName`, `role`, permisos, `disabled` y `password`.           |
+| `DELETE /api/v1/admin/users/:id` | Elimina la cuenta y sus sesiones.                                                            |
 
 Las rutas de escritura con cookie requieren `x-modai-csrf: 1`; con Bearer no hace falta.

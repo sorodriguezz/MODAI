@@ -4,7 +4,5 @@
     "rootDir": ".",
     "outDir": "../dist/scripts"
   },
-  "include": [
-    "seed-examples.ts"
-  ]
+  "include": ["seed-examples.ts"]
 }

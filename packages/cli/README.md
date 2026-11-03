@@ -13,15 +13,15 @@ Instala dos comandos: `modai` (la CLI) y `modai-mcp` (el servidor MCP al que se 
 
 ## Qué trae
 
-| | |
-|---|---|
-| **Componentes de código** | Empaqueta un módulo que ya escribiste y reutilízalo en otros proyectos con `modai add`. |
-| **Skills, reglas y conocimiento** | Instrucciones y documentación que el agente carga solo cuando las necesita. |
-| **Harnesses** | `AGENTS.md`, progreso, verificación y handoff para que el agente trabaje de forma ordenada entre sesiones. |
-| **Herramientas** | Comandos ejecutables que el agente invoca por MCP, solo después de que tú los autorizas. |
-| **Adaptadores** | Un mismo paquete funciona en Claude Code, Cursor, OpenCode, `AGENTS.md` o cualquier cliente MCP. |
-| **Memoria** | Decisiones y notas del proyecto que el agente recuerda, locales o compartidas con el equipo. |
-| **Reproducible y reversible** | `modai.yaml` + `modai.lock` reconstruyen lo mismo en otro equipo o en CI; `modai remove` conserva lo que editaste. |
+|                                   |                                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Componentes de código**         | Empaqueta un módulo que ya escribiste y reutilízalo en otros proyectos con `modai add`.                            |
+| **Skills, reglas y conocimiento** | Instrucciones y documentación que el agente carga solo cuando las necesita.                                        |
+| **Harnesses**                     | `AGENTS.md`, progreso, verificación y handoff para que el agente trabaje de forma ordenada entre sesiones.         |
+| **Herramientas**                  | Comandos ejecutables que el agente invoca por MCP, solo después de que tú los autorizas.                           |
+| **Adaptadores**                   | Un mismo paquete funciona en Claude Code, Cursor, OpenCode, `AGENTS.md` o cualquier cliente MCP.                   |
+| **Memoria**                       | Decisiones y notas del proyecto que el agente recuerda, locales o compartidas con el equipo.                       |
+| **Reproducible y reversible**     | `modai.yaml` + `modai.lock` reconstruyen lo mismo en otro equipo o en CI; `modai remove` conserva lo que editaste. |
 
 ## Ejemplo: reutilizar tu módulo de autenticación en otro proyecto
 
@@ -129,12 +129,12 @@ Con `--keep-mine` la decisión queda registrada en `modai.lock`: los `sync` sigu
 
 Según los adaptadores activos, `modai init` y `modai add` escriben la configuración de cada agente:
 
-| Adaptador | Qué escribe |
-|---|---|
-| `claude-code` | `.claude/skills/`, `CLAUDE.md` y `.mcp.json` |
-| `agents-md` | Un bloque con reglas e índice en `AGENTS.md` |
-| `agent-skills` | `.agents/skills/` (formato abierto de Agent Skills) |
-| `mcp` | `.modai/mcp.json` para cualquier cliente MCP |
+| Adaptador         | Qué escribe                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| `claude-code`     | `.claude/skills/`, `CLAUDE.md` y `.mcp.json`                                              |
+| `agents-md`       | Un bloque con reglas e índice en `AGENTS.md`                                              |
+| `agent-skills`    | `.agents/skills/` (formato abierto de Agent Skills)                                       |
+| `mcp`             | `.modai/mcp.json` para cualquier cliente MCP                                              |
 | Cursor, OpenCode… | Paquetes `kind: Adapter`: `modai add @adapters/cursor` y luego `modai adapter add cursor` |
 
 Para cualquier otro cliente MCP, el servidor es `modai-mcp --project <ruta-del-proyecto>`.
@@ -185,15 +185,15 @@ Con un proyecto vinculado también puedes usar **agentes** compuestos por el ser
 
 Los comandos del día a día del proyecto van sueltos; el resto está agrupado por tema.
 
-| Grupo | Comandos |
-|---|---|
-| Proyecto | `init`, `template init/list/use/info/publish/download`, `feature list/enable/disable/reset/define/undefine`, `add`, `remove`, `update [--keep-mine]`, `outdated`, `sync [--frozen]`, `status`, `list [tipo] [--available]` (`ls`), `override` |
-| Muchos repositorios | `workspace list/add/remove/update/sync` (`ws`) |
-| Lo que instalan los paquetes | `component create/list`, `harness init/audit`, `adapter list/add/remove`, `capability list/tools/run/providers/use`, `permissions list/grant/revoke/trust/signatures` |
-| Contexto y memoria | `context search/show`, `memory add/search/list/update/remove` |
-| Publicar paquetes | `package scaffold/validate/keygen/publish/usage/download/deprecate/yank/unpublish`, `category list/create/update/delete`, `registry list/add/remove/packages` |
-| Servidor | `server connect/ping/whoami/logout`, `project list/create/update/delete`, `agent list/compose/activate/deactivate/run/submit/runs/worker`, `admin …` |
-| Este equipo | `client doctor/setup/benchmark/embed`, `upgrade [--check] [--tag next]` |
+| Grupo                        | Comandos                                                                                                                                                                                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Proyecto                     | `init`, `template init/list/use/info/publish/download`, `feature list/enable/disable/reset/define/undefine`, `add`, `remove`, `update [--keep-mine]`, `outdated`, `sync [--frozen]`, `status`, `list [tipo] [--available]` (`ls`), `override` |
+| Muchos repositorios          | `workspace list/add/remove/update/sync` (`ws`)                                                                                                                                                                                                |
+| Lo que instalan los paquetes | `component create/list`, `harness init/audit`, `adapter list/add/remove`, `capability list/tools/run/providers/use`, `permissions list/grant/revoke/trust/signatures`                                                                         |
+| Contexto y memoria           | `context search/show`, `memory add/search/list/update/remove`                                                                                                                                                                                 |
+| Publicar paquetes            | `package scaffold/validate/keygen/publish/usage/download/deprecate/yank/unpublish`, `category list/create/update/delete`, `registry list/add/remove/packages`                                                                                 |
+| Servidor                     | `server connect/ping/whoami/logout`, `project list/create/update/delete`, `agent list/compose/activate/deactivate/run/submit/runs/worker`, `admin …`                                                                                          |
+| Este equipo                  | `client doctor/setup/benchmark/embed`, `upgrade [--check] [--tag next]`                                                                                                                                                                       |
 
 `modai <comando> --help` muestra las opciones de cada uno. Todas las salidas son tablas legibles; añade `--json` a cualquier comando para usarlo en scripts. `modai list templates --available` lista los templates publicados; `modai admin publishers` y `admin untrust-publisher <huella>` gestionan los publicadores de confianza.
 

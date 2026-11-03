@@ -55,11 +55,11 @@ Los volúmenes Docker conservan SQLite y los artefactos. Mantén una sola instan
 
 El formulario asigna exclusivamente ese proyecto y ningún namespace publicable. Los roles disponibles son:
 
-| Uso | Rol | Permisos |
-|---|---|---|
+| Uso                  | Rol         | Permisos                                                                                                                    |
+| -------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Trabajar con agentes | `publisher` | Consultar el catálogo, guardar memoria y enviar tareas de proyectos autorizados; también puede registrar proyectos propios. |
-| Consultar | `reader` | Catálogo y lectura del contexto autorizado. |
-| Ejecutar la cola | `worker` | Reclamar tareas y trabajar con el contexto autorizado. |
+| Consultar            | `reader`    | Catálogo y lectura del contexto autorizado.                                                                                 |
+| Ejecutar la cola     | `worker`    | Reclamar tareas y trabajar con el contexto autorizado.                                                                      |
 
 La publicación de paquetes exige además un namespace, por ejemplo `@skills`. **Accesos y API keys** permite gestionar esos permisos y revocar credenciales. `admin` tiene acceso completo y no se entrega como credencial habitual.
 

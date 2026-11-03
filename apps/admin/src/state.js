@@ -51,7 +51,8 @@ export const store = {
 // ---------------------------------------------------------------- permissions (from the server)
 
 export const role = () => state.identity?.role;
-const perm = () => state.permissions || { manage: {}, publish: { all: false, namespaces: [] }, organizations: [], assignableRoles: [] };
+const perm = () =>
+  state.permissions || { manage: {}, publish: { all: false, namespaces: [] }, organizations: [], assignableRoles: [] };
 export const can = {
   /** Global administration (audit, backups, publishers, every organization). */
   admin: () => Boolean(perm().global),
@@ -62,7 +63,11 @@ export const can = {
   manageOrganizations: () => Boolean(perm().manage.organizations),
   createOrganizations: () => Boolean(perm().manage.createOrganizations),
   /** Deprecate or yank: global admins, or the admin of the package's namespace organization. */
-  managePackages: (name) => Boolean(perm().manage.packages) || (name ? (perm().packages?.namespaces || []).includes(String(name).split("/")[0]) : (perm().packages?.namespaces || []).length > 0),
+  managePackages: (name) =>
+    Boolean(perm().manage.packages) ||
+    (name
+      ? (perm().packages?.namespaces || []).includes(String(name).split("/")[0])
+      : (perm().packages?.namespaces || []).length > 0),
   /** Permanent deletion stays with global administration. */
   deletePackages: () => Boolean(perm().manage.packages),
   publish: () => perm().publish.all || perm().publish.namespaces.length > 0,
@@ -70,7 +75,8 @@ export const can = {
   /** Manual knowledge documents follow the publisher role, not namespaces. */
   // Manual knowledge: shared with the whole server only by who may publish everywhere; tied to a package, by who may
   // publish in its namespace (same rule as the server).
-  writeKnowledge: (packageName) => packageName ? can.publishTo(String(packageName).split("/")[0]) : Boolean(perm().writeKnowledge),
+  writeKnowledge: (packageName) =>
+    packageName ? can.publishTo(String(packageName).split("/")[0]) : Boolean(perm().writeKnowledge),
   createKnowledge: () => Boolean(perm().publish?.all || perm().publish?.namespaces?.length),
   writeMemory: () => Boolean(perm().writeMemory),
   submitRuns: () => Boolean(perm().submitRuns),
@@ -94,7 +100,12 @@ export function describeManifest(record) {
       const at = item.indexOf("@");
       return { capability: at < 0 ? item : item.slice(0, at), version: at < 0 ? fallbackVersion : item.slice(at + 1) };
     }
-    if (item && typeof item === "object") return { capability: String(item.capability ?? item.name ?? "?"), version: String(item.version ?? fallbackVersion), description: item.description };
+    if (item && typeof item === "object")
+      return {
+        capability: String(item.capability ?? item.name ?? "?"),
+        version: String(item.version ?? fallbackVersion),
+        description: item.description,
+      };
     return { capability: String(item), version: fallbackVersion };
   };
   const spec = manifest.spec || {};

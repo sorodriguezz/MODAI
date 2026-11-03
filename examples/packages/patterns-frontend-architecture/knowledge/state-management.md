@@ -1,13 +1,13 @@
 # Dónde vive el estado
 
-| Tipo de estado | Ejemplo | Ubicación recomendada |
-|---|---|---|
-| Efímero de UI | menú abierto, input sin enviar | componente local |
-| Compartido entre hermanos | filtro que afecta lista y contador | ancestro común |
-| De módulo | asistente de varios pasos | contexto/servicio del módulo |
-| Global de cliente | sesión, tema, permisos | store global pequeño |
-| De servidor | listas, detalles remotos | caché de peticiones (React Query, SWR, servicios con caché) |
-| De URL | página, filtros compartibles | parámetros de ruta/búsqueda |
+| Tipo de estado            | Ejemplo                            | Ubicación recomendada                                       |
+| ------------------------- | ---------------------------------- | ----------------------------------------------------------- |
+| Efímero de UI             | menú abierto, input sin enviar     | componente local                                            |
+| Compartido entre hermanos | filtro que afecta lista y contador | ancestro común                                              |
+| De módulo                 | asistente de varios pasos          | contexto/servicio del módulo                                |
+| Global de cliente         | sesión, tema, permisos             | store global pequeño                                        |
+| De servidor               | listas, detalles remotos           | caché de peticiones (React Query, SWR, servicios con caché) |
+| De URL                    | página, filtros compartibles       | parámetros de ruta/búsqueda                                 |
 
 ## Señales de mala ubicación
 

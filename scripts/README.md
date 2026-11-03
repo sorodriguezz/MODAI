@@ -2,10 +2,10 @@
 
 Ejecuta los comandos desde la raíz del repositorio.
 
-| Script | Uso |
-|---|---|
-| `deploy.mjs` | Wrapper multiplataforma de Docker Compose; resuelve siempre los archivos de `deploy/`. |
-| `pack-client.mjs` | Genera el único paquete npm del CLI y retira los artefactos de la antigua distribución triple. |
+| Script             | Uso                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| `deploy.mjs`       | Wrapper multiplataforma de Docker Compose; resuelve siempre los archivos de `deploy/`.             |
+| `pack-client.mjs`  | Genera el único paquete npm del CLI y retira los artefactos de la antigua distribución triple.     |
 | `smoke-client.mjs` | Instala ese paquete fuera del monorepo y verifica clientes con credenciales propias, MCP y worker. |
 | `seed-examples.ts` | Publica los paquetes de `examples/packages/` mediante la API. No sobrescribe versiones existentes. |
 

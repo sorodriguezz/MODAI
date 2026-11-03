@@ -1,13 +1,20 @@
 import { AppError, invariant } from "@modai/contracts/errors";
 import { normalizeManifest } from "@modai/core";
-import { Database } from "./database.js";
+import type { Database } from "./database.js";
 
 /**
  * Catalog categories. A category stays informative (the Core never changes behaviour on it and a manifest may
  * declare any valid one), but the panel offers the registered ones so the catalog does not fill with typos.
  * Categories that packages use without being registered are listed too, so an admin can register them.
  */
-export interface CategoryRecord { name: string; description: string; registered: boolean; packages: number; createdAt?: string; updatedAt?: string }
+export interface CategoryRecord {
+  name: string;
+  description: string;
+  registered: boolean;
+  packages: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 const CATEGORY = /^[a-z][a-z0-9-]{0,63}$/;
 
@@ -31,12 +38,16 @@ const DEFAULTS: Array<[string, string]> = [
 
 export class CategoryService {
   constructor(private readonly db: Database) {
-    const fresh = !db.connection.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'categories'").get();
+    const fresh = !db.connection
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'categories'")
+      .get();
     db.connection.exec(`CREATE TABLE IF NOT EXISTS categories (
       name TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`);
     if (fresh) {
       const now = new Date().toISOString();
-      const insert = db.connection.prepare("INSERT OR IGNORE INTO categories (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)");
+      const insert = db.connection.prepare(
+        "INSERT OR IGNORE INTO categories (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)",
+      );
       for (const [name, description] of DEFAULTS) insert.run(name, description, now, now);
     }
   }
@@ -44,31 +55,79 @@ export class CategoryService {
   /** Registered categories plus the ones in use, with how many packages (latest version of each) use them. */
   list(visible: (name: string) => boolean): CategoryRecord[] {
     const usage = new Map<string, Set<string>>();
-    const rows = this.db.connection.prepare("SELECT name, manifest_json FROM packages WHERE status <> 'yanked'").all() as Array<{ name: string; manifest_json: string }>;
+    const rows = this.db.connection
+      .prepare("SELECT name, manifest_json FROM packages WHERE status <> 'yanked'")
+      .all() as Array<{ name: string; manifest_json: string }>;
     for (const row of rows) {
       if (!visible(row.name)) continue;
       let category: string;
-      try { category = normalizeManifest(JSON.parse(row.manifest_json)).spec.category; } catch { continue; }
+      try {
+        category = normalizeManifest(JSON.parse(row.manifest_json)).spec.category;
+      } catch {
+        continue;
+      }
       usage.set(category, (usage.get(category) ?? new Set()).add(row.name));
     }
-    const registered = (this.db.connection.prepare("SELECT name, description, created_at, updated_at FROM categories").all() as Array<{ name: string; description: string; created_at: string; updated_at: string }>)
-      .map(row => ({ name: row.name, description: row.description, registered: true, packages: usage.get(row.name)?.size ?? 0, createdAt: row.created_at, updatedAt: row.updated_at }));
-    const known = new Set(registered.map(item => item.name));
-    const unregistered = [...usage.entries()].filter(([name]) => !known.has(name)).map(([name, names]) => ({ name, description: "", registered: false, packages: names.size }));
+    const registered = (
+      this.db.connection.prepare("SELECT name, description, created_at, updated_at FROM categories").all() as Array<{
+        name: string;
+        description: string;
+        created_at: string;
+        updated_at: string;
+      }>
+    ).map((row) => ({
+      name: row.name,
+      description: row.description,
+      registered: true,
+      packages: usage.get(row.name)?.size ?? 0,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+    const known = new Set(registered.map((item) => item.name));
+    const unregistered = [...usage.entries()]
+      .filter(([name]) => !known.has(name))
+      .map(([name, names]) => ({ name, description: "", registered: false, packages: names.size }));
     return [...registered, ...unregistered].sort((a, b) => a.name.localeCompare(b.name));
   }
 
   create(input: { name: string; description?: string }): CategoryRecord {
     const name = String(input.name ?? "").trim();
-    invariant(CATEGORY.test(name), 400, "INVALID_CATEGORY", "La categoría usa minúsculas, números y guiones, empezando por letra (máx. 64)");
-    invariant(!this.db.connection.prepare("SELECT 1 FROM categories WHERE name = ?").get(name), 409, "CATEGORY_EXISTS", `La categoría ${name} ya existe`);
+    invariant(
+      CATEGORY.test(name),
+      400,
+      "INVALID_CATEGORY",
+      "La categoría usa minúsculas, números y guiones, empezando por letra (máx. 64)",
+    );
+    invariant(
+      !this.db.connection.prepare("SELECT 1 FROM categories WHERE name = ?").get(name),
+      409,
+      "CATEGORY_EXISTS",
+      `La categoría ${name} ya existe`,
+    );
     const now = new Date().toISOString();
-    this.db.connection.prepare("INSERT INTO categories (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)").run(name, String(input.description ?? "").trim().slice(0, 500), now, now);
+    this.db.connection
+      .prepare("INSERT INTO categories (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)")
+      .run(
+        name,
+        String(input.description ?? "")
+          .trim()
+          .slice(0, 500),
+        now,
+        now,
+      );
     return this.get(name);
   }
 
   update(name: string, input: { description?: string }): CategoryRecord {
-    const changed = this.db.connection.prepare("UPDATE categories SET description = ?, updated_at = ? WHERE name = ?").run(String(input.description ?? "").trim().slice(0, 500), new Date().toISOString(), name);
+    const changed = this.db.connection
+      .prepare("UPDATE categories SET description = ?, updated_at = ? WHERE name = ?")
+      .run(
+        String(input.description ?? "")
+          .trim()
+          .slice(0, 500),
+        new Date().toISOString(),
+        name,
+      );
     if (!changed.changes) throw new AppError(404, "CATEGORY_NOT_FOUND", `No existe la categoría ${name}`);
     return this.get(name);
   }
@@ -80,7 +139,7 @@ export class CategoryService {
   }
 
   private get(name: string): CategoryRecord {
-    const found = this.list(() => true).find(item => item.name === name && item.registered);
+    const found = this.list(() => true).find((item) => item.name === name && item.registered);
     if (!found) throw new AppError(404, "CATEGORY_NOT_FOUND", `No existe la categoría ${name}`);
     return found;
   }

@@ -17,7 +17,9 @@ export class MetricsService {
     ];
     for (const [key, value] of this.requests) {
       const [method, route, status] = key.split("|");
-      lines.push(`modai_http_requests_total{method="${method}",route="${route.replaceAll('"', '\\"')}",status="${status}"} ${value}`);
+      lines.push(
+        `modai_http_requests_total{method="${method}",route="${route.replaceAll('"', '\\"')}",status="${status}"} ${value}`,
+      );
     }
     return `${lines.join("\n")}\n`;
   }

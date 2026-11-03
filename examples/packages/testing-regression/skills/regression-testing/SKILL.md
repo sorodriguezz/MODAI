@@ -1,4 +1,5 @@
 ---
+
 name: regression-testing
 description: Planifica, ejecuta y reporta pruebas de regresión comparando contra una línea base aprobada, usando cualquier herramienta que implemente browser.automation. Úsala antes de entregar cambios que afecten flujos de usuario.
 ---

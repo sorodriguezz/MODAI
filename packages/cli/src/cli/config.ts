@@ -1,7 +1,7 @@
-import type { SignaturePolicy } from "@modai/contracts/types";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import type { SignaturePolicy } from "@modai/contracts/types";
 import YAML from "yaml";
 
 export interface ClientConfig {

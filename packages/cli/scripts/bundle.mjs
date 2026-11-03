@@ -1,19 +1,12 @@
 // Internal workspaces are compiled into the release. Only public third-party packages remain external.
-import { build } from "esbuild";
-import {
-  globSync,
-  readFileSync,
-  chmodSync,
-  mkdirSync,
-  writeFileSync,
-  copyFileSync,
-} from "node:fs";
+
+import { chmodSync, copyFileSync, globSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolve, relative, dirname } from "node:path";
+import { build } from "esbuild";
+
 const root = fileURLToPath(new URL("../", import.meta.url));
-const manifest = JSON.parse(
-  readFileSync(resolve(root, "package.json"), "utf8"),
-);
+const manifest = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 await build({
   absWorkingDir: root,
   entryPoints: globSync("src/**/*.ts", { cwd: root }),
@@ -34,31 +27,26 @@ await build({
     "@modai/contracts/errors": resolve(root, "../contracts/src/errors.ts"),
     "@modai/contracts/security": resolve(root, "../contracts/src/security.ts"),
     "@modai/contracts/schemas": resolve(root, "../contracts/src/schemas.ts"),
-    "@modai/contracts/package-quality": resolve(
-      root,
-      "../contracts/src/package-quality.ts",
-    ),
+    "@modai/contracts/package-quality": resolve(root, "../contracts/src/package-quality.ts"),
     "@modai/contracts/spec-v1": resolve(root, "../contracts/src/spec-v1.ts"),
     "@modai/contracts/base-schemas": resolve(root, "../contracts/src/base-schemas.ts"),
     "@modai/contracts/agent-tools": resolve(root, "../contracts/src/agent-tools.ts"),
     "@modai/sdk": resolve(root, "../sdk/src/index.ts"),
     "@modai/core": resolve(root, "../core/src/index.ts"),
-    ...Object.fromEntries(globSync("../core/src/*.ts", { cwd: root }).map((file) => ["@modai/core/" + file.split("/").pop().replace(/\.ts$/, ""), resolve(root, file)])),
+    ...Object.fromEntries(
+      globSync("../core/src/*.ts", { cwd: root }).map((file) => [
+        "@modai/core/" + file.split("/").pop().replace(/\.ts$/, ""),
+        resolve(root, file),
+      ]),
+    ),
   },
 });
-for (const file of ["dist/cli/index.js", "dist/mcp.js"])
-  chmodSync(resolve(root, file), 0o755);
+for (const file of ["dist/cli/index.js", "dist/mcp.js"]) chmodSync(resolve(root, file), 0o755);
 
 // Keep the authoring export's declarations usable without installing private workspaces.
 mkdirSync(resolve(root, "dist/internal"), { recursive: true });
-copyFileSync(
-  resolve(root, "../contracts/dist/types.d.ts"),
-  resolve(root, "dist/internal/contracts-types.d.ts"),
-);
-copyFileSync(
-  resolve(root, "../sdk/dist/index.d.ts"),
-  resolve(root, "dist/internal/sdk.d.ts"),
-);
+copyFileSync(resolve(root, "../contracts/dist/types.d.ts"), resolve(root, "dist/internal/contracts-types.d.ts"));
+copyFileSync(resolve(root, "../sdk/dist/index.d.ts"), resolve(root, "dist/internal/sdk.d.ts"));
 for (const file of globSync("dist/**/*.d.ts", { cwd: root })) {
   const declaration = resolve(root, file);
   let content = readFileSync(declaration, "utf8");
@@ -66,10 +54,7 @@ for (const file of globSync("dist/**/*.d.ts", { cwd: root })) {
     ["@modai/contracts/types", "contracts-types.js"],
     ["@modai/sdk", "sdk.js"],
   ]) {
-    let destination = relative(
-      dirname(declaration),
-      resolve(root, "dist/internal", target),
-    ).replaceAll("\\", "/");
+    let destination = relative(dirname(declaration), resolve(root, "dist/internal", target)).replaceAll("\\", "/");
     if (!destination.startsWith(".")) destination = "./" + destination;
     content = content.replaceAll('"' + name + '"', '"' + destination + '"');
   }

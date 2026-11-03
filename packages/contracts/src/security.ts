@@ -10,7 +10,8 @@ export function assertSafeRelativePath(value: string, label = "path"): void {
   if (typeof value !== "string") throw new AppError(400, "UNSAFE_PATH", `${label} inválido`);
   const normalized = value.replaceAll("\\", "/");
   if (
-    typeof value !== "string" || !value ||
+    typeof value !== "string" ||
+    !value ||
     value.includes("\0") ||
     isAbsolute(value) ||
     win32.isAbsolute(value) ||
@@ -37,7 +38,9 @@ export function publicKeyFingerprint(publicKey: string): string {
 export function signaturePayload(manifest: unknown, files: Array<{ path: string; sha256: string }>): Buffer {
   const normalized = {
     manifest,
-    files: [...files].map(({ path, sha256: hash }) => ({ path, sha256: hash })).sort((a, b) => a.path.localeCompare(b.path)),
+    files: [...files]
+      .map(({ path, sha256: hash }) => ({ path, sha256: hash }))
+      .sort((a, b) => a.path.localeCompare(b.path)),
   };
   return Buffer.from(JSON.stringify(normalized), "utf8");
 }
@@ -56,10 +59,24 @@ export function requiredTargetPermission(target: string): "project.instructions"
   const normalized = target.replaceAll("\\", "/");
   const segments = normalized.split("/");
   const blocked = new Set([".git", ".github", ".vscode", ".idea", "node_modules", ".ssh"]);
-  if (segments.some(segment => !segment || segment === "." || /[:\x00-\x1f]/.test(segment) || /[. ]$/.test(segment) || blocked.has(segment.toLowerCase()) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment))) {
+  if (
+    segments.some(
+      (segment) =>
+        !segment ||
+        segment === "." ||
+        /[:\x00-\x1f]/.test(segment) ||
+        /[. ]$/.test(segment) ||
+        blocked.has(segment.toLowerCase()) ||
+        /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment),
+    )
+  ) {
     throw new AppError(400, "UNSAFE_TARGET", `Destino reservado: ${target}`);
   }
-  if (/^(?:\.agents\/(?:skills|harness)\/|\.modai\/(?:packages|adapters|integrations)\/)/.test(normalized) || /^\.modai\/[a-z0-9-]+\.md$/i.test(normalized)) return undefined;
+  if (
+    /^(?:\.agents\/(?:skills|harness)\/|\.modai\/(?:packages|adapters|integrations)\/)/.test(normalized) ||
+    /^\.modai\/[a-z0-9-]+\.md$/i.test(normalized)
+  )
+    return undefined;
   if (/^(?:AGENTS\.md|CLAUDE\.md|\.agent\/|\.opencode\/agents\/)/.test(normalized)) return "project.instructions";
   if (/^docs\//.test(normalized)) return "project.files";
   throw new AppError(400, "UNSAFE_TARGET", `Destino no permitido: ${target}`);

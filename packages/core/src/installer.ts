@@ -2,8 +2,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { AppError } from "@modai/contracts/errors";
 import { sha256 } from "@modai/contracts/security";
-import type { PackageManifest, ArtifactFile } from "@modai/contracts/types";
-import { UNSAFE_JSON_KEYS, type ManagedEntry } from "@modai/contracts/spec-v1";
+import { type ManagedEntry, UNSAFE_JSON_KEYS } from "@modai/contracts/spec-v1";
+import type { ArtifactFile, PackageManifest } from "@modai/contracts/types";
 import type { DesiredBlock, DesiredJson, DesiredState } from "./adapters.js";
 import { removeProjectDirectory, removeProjectFile, safeProjectPath, writeProjectFile } from "./fs.js";
 import { computeIntegrity } from "./integrity.js";
@@ -40,9 +40,18 @@ export function findBlock(content: string, id: string): { start: number; end: nu
   if (start < 0 && endMarker < 0) return undefined;
   if (start < 0 || endMarker < start) throw new AppError(409, "BLOCK_CORRUPT", `Bloque MODAI '${id}' incompleto`);
   const end = endMarker + END(id).length;
-  return { start, end, body: content.slice(start + BEGIN(id).length, endMarker).replace(/^\n/, "").replace(/\n$/, "") };
+  return {
+    start,
+    end,
+    body: content
+      .slice(start + BEGIN(id).length, endMarker)
+      .replace(/^\n/, "")
+      .replace(/\n$/, ""),
+  };
 }
-function renderBlock(id: string, body: string): string { return `${BEGIN(id)}\n${body}\n${END(id)}`; }
+function renderBlock(id: string, body: string): string {
+  return `${BEGIN(id)}\n${body}\n${END(id)}`;
+}
 function upsertBlock(content: string, id: string, body: string): string {
   const block = findBlock(content, id);
   if (block) return content.slice(0, block.start) + renderBlock(id, body) + content.slice(block.end);
@@ -51,17 +60,25 @@ function upsertBlock(content: string, id: string, body: string): string {
 function removeBlock(content: string, id: string): string {
   const block = findBlock(content, id);
   if (!block) return content;
-  return (content.slice(0, block.start).replace(/\n+$/, "\n") + content.slice(block.end).replace(/^\n+/, "")).replace(/^\n+/, "");
+  return (content.slice(0, block.start).replace(/\n+$/, "\n") + content.slice(block.end).replace(/^\n+/, "")).replace(
+    /^\n+/,
+    "",
+  );
 }
 
 /** Defense in depth: never walk or create a prototype key, whatever validated the pointer before. */
 function pointerKeys(pointer: string): string[] {
   const keys = pointer.split(".");
-  if (keys.some(key => UNSAFE_JSON_KEYS.has(key))) throw new AppError(400, "UNSAFE_POINTER", `Puntero JSON no permitido: ${pointer}`);
+  if (keys.some((key) => UNSAFE_JSON_KEYS.has(key)))
+    throw new AppError(400, "UNSAFE_POINTER", `Puntero JSON no permitido: ${pointer}`);
   return keys;
 }
 function getPointer(value: unknown, pointer: string): unknown {
-  return pointerKeys(pointer).reduce<unknown>((node, key) => (node && typeof node === "object" && Object.hasOwn(node, key) ? (node as Record<string, unknown>)[key] : undefined), value);
+  return pointerKeys(pointer).reduce<unknown>(
+    (node, key) =>
+      node && typeof node === "object" && Object.hasOwn(node, key) ? (node as Record<string, unknown>)[key] : undefined,
+    value,
+  );
 }
 function setPointer(value: Record<string, unknown>, pointer: string, next: unknown): void {
   const keys = pointerKeys(pointer);
@@ -70,7 +87,8 @@ function setPointer(value: Record<string, unknown>, pointer: string, next: unkno
     if (!node[key] || typeof node[key] !== "object" || Array.isArray(node[key])) node[key] = {};
     node = node[key] as Record<string, unknown>;
   }
-  if (next === undefined) delete node[keys.at(-1)!]; else node[keys.at(-1)!] = next;
+  if (next === undefined) delete node[keys.at(-1)!];
+  else node[keys.at(-1)!] = next;
 }
 function readJson(root: string, path: string): Record<string, unknown> {
   const text = readText(root, path);
@@ -79,16 +97,28 @@ function readJson(root: string, path: string): Record<string, unknown> {
     const parsed = JSON.parse(text);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
     return parsed;
-  } catch { throw new AppError(409, "JSON_CONFLICT", `${path} no es un objeto JSON válido; corrígelo antes de sincronizar`); }
+  } catch {
+    throw new AppError(409, "JSON_CONFLICT", `${path} no es un objeto JSON válido; corrígelo antes de sincronizar`);
+  }
 }
 const jsonHash = (value: unknown) => sha256(JSON.stringify(value ?? null));
 
 export interface ApplyOptions {
-  root: string; previous: ManagedEntry[]; desired: DesiredState; grants: string[]; force?: boolean;
+  root: string;
+  previous: ManagedEntry[];
+  desired: DesiredState;
+  grants: string[];
+  force?: boolean;
   /** On a conflicting file, keep the user's version and write MODAI's next to it as <file>.modai-new. */
   keepMine?: boolean;
 }
-export interface ApplyResult { managed: ManagedEntry[]; written: string[]; removed: string[]; preserved: string[]; sideBySide: string[] }
+export interface ApplyResult {
+  managed: ManagedEntry[];
+  written: string[];
+  removed: string[];
+  preserved: string[];
+  sideBySide: string[];
+}
 export const SIDE_BY_SIDE_SUFFIX = ".modai-new";
 
 /**
@@ -99,14 +129,31 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
   const { root, previous, desired, force } = options;
   const granted = new Set(options.grants);
   const missing = new Set<string>();
-  for (const entry of [...desired.files, ...desired.blocks, ...desired.json]) if (entry.permission && !granted.has(entry.permission)) missing.add(`${entry.permission} (${entry.path})`);
+  for (const entry of [...desired.files, ...desired.blocks, ...desired.json])
+    if (entry.permission && !granted.has(entry.permission)) missing.add(`${entry.permission} (${entry.path})`);
   // Writing an executable file is consent to run code later: it needs the same explicit grant.
-  for (const file of desired.files) if (file.executable && !granted.has("process.execute")) missing.add(`process.execute (${file.path})`);
-  if (missing.size) throw new AppError(403, "PERMISSION_REQUIRED", `La instalación requiere conceder ${[...missing].join(", ")}. Repite con --allow ${[...new Set([...missing].map(item => item.split(" ")[0]))].join(",")}`);
+  for (const file of desired.files)
+    if (file.executable && !granted.has("process.execute")) missing.add(`process.execute (${file.path})`);
+  if (missing.size)
+    throw new AppError(
+      403,
+      "PERMISSION_REQUIRED",
+      `La instalación requiere conceder ${[...missing].join(", ")}. Repite con --allow ${[...new Set([...missing].map((item) => item.split(" ")[0]))].join(",")}`,
+    );
 
-  const previousFiles = new Map(previous.filter(entry => entry.type === "file").map(entry => [entry.path.toLowerCase(), entry]));
-  const previousBlocks = new Map(previous.filter(entry => entry.type === "block").map(entry => [`${entry.path.toLowerCase()}#${entry.id}`, entry]));
-  const previousJson = new Map(previous.filter(entry => entry.type === "json").map(entry => [`${entry.path.toLowerCase()}#${entry.pointer}`, entry]));
+  const previousFiles = new Map(
+    previous.filter((entry) => entry.type === "file").map((entry) => [entry.path.toLowerCase(), entry]),
+  );
+  const previousBlocks = new Map(
+    previous
+      .filter((entry) => entry.type === "block")
+      .map((entry) => [`${entry.path.toLowerCase()}#${entry.id}`, entry]),
+  );
+  const previousJson = new Map(
+    previous
+      .filter((entry) => entry.type === "json")
+      .map((entry) => [`${entry.path.toLowerCase()}#${entry.pointer}`, entry]),
+  );
 
   // 1. Detect conflicts before touching anything.
   const conflicts: string[] = [];
@@ -117,7 +164,10 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
     const old = previousFiles.get(file.path.toLowerCase());
     if (!existing || existing === desiredHash || existing === old?.sha256) continue;
     // The user already kept their version of this exact content: nothing new to decide.
-    if (old?.type === "file" && old.userSha256 === existing && old.sha256 === desiredHash) { keep.add(file.path.toLowerCase()); continue; }
+    if (old?.type === "file" && old.userSha256 === existing && old.sha256 === desiredHash) {
+      keep.add(file.path.toLowerCase());
+      continue;
+    }
     if (options.keepMine && !force) keep.add(file.path.toLowerCase());
     else conflicts.push(`${file.path} contiene cambios tuyos`);
   }
@@ -125,27 +175,39 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
     const text = readText(root, block.path);
     const found = text ? findBlock(text, block.id) : undefined;
     const old = previousBlocks.get(`${block.path.toLowerCase()}#${block.id}`);
-    if (found && sha256(found.body) !== sha256(block.content) && sha256(found.body) !== old?.sha256) conflicts.push(`el bloque MODAI '${block.id}' de ${block.path} fue editado a mano`);
+    if (found && sha256(found.body) !== sha256(block.content) && sha256(found.body) !== old?.sha256)
+      conflicts.push(`el bloque MODAI '${block.id}' de ${block.path} fue editado a mano`);
   }
   for (const entry of desired.json) {
     const current = getPointer(readJson(root, entry.path), entry.pointer);
     const old = previousJson.get(`${entry.path.toLowerCase()}#${entry.pointer}`);
-    if (current !== undefined && jsonHash(current) !== jsonHash(entry.value) && jsonHash(current) !== old?.sha256) conflicts.push(`${entry.path}:${entry.pointer} fue modificado a mano`);
+    if (current !== undefined && jsonHash(current) !== jsonHash(entry.value) && jsonHash(current) !== old?.sha256)
+      conflicts.push(`${entry.path}:${entry.pointer} fue modificado a mano`);
   }
-  if (conflicts.length && !force) throw new AppError(409, "MANAGED_CONFLICT", `Conflicto: ${conflicts.join("; ")}. Repite con --keep-mine para conservar tus archivos (la versión nueva queda al lado como${SIDE_BY_SIDE_SUFFIX}) o con --force para reemplazarlos.`);
+  if (conflicts.length && !force)
+    throw new AppError(
+      409,
+      "MANAGED_CONFLICT",
+      `Conflicto: ${conflicts.join("; ")}. Repite con --keep-mine para conservar tus archivos (la versión nueva queda al lado como${SIDE_BY_SIDE_SUFFIX}) o con --force para reemplazarlos.`,
+    );
 
-  const written: string[] = [], removed: string[] = [], preserved: string[] = [], sideBySide: string[] = [];
-  const desiredFileKeys = new Set(desired.files.map(file => file.path.toLowerCase()));
-  const desiredBlockKeys = new Set(desired.blocks.map(block => `${block.path.toLowerCase()}#${block.id}`));
-  const desiredJsonKeys = new Set(desired.json.map(entry => `${entry.path.toLowerCase()}#${entry.pointer}`));
+  const written: string[] = [],
+    removed: string[] = [],
+    preserved: string[] = [],
+    sideBySide: string[] = [];
+  const desiredFileKeys = new Set(desired.files.map((file) => file.path.toLowerCase()));
+  const desiredBlockKeys = new Set(desired.blocks.map((block) => `${block.path.toLowerCase()}#${block.id}`));
+  const desiredJsonKeys = new Set(desired.json.map((entry) => `${entry.path.toLowerCase()}#${entry.pointer}`));
 
   // 2. Retire what is no longer desired, preserving user modifications.
   for (const [key, old] of previousFiles) {
     if (desiredFileKeys.has(key) || old.type !== "file") continue;
     const existing = managedHash(root, old.path);
     if (!existing) continue;
-    if (existing === old.sha256) { removeProjectFile(root, old.path); removed.push(old.path); }
-    else preserved.push(`${old.path} (modificado; pertenecía a ${old.owner})`);
+    if (existing === old.sha256) {
+      removeProjectFile(root, old.path);
+      removed.push(old.path);
+    } else preserved.push(`${old.path} (modificado; pertenecía a ${old.owner})`);
     removeStaleSideBySide(root, old.path, old.sha256);
   }
   for (const [key, old] of previousBlocks) {
@@ -153,9 +215,13 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
     const text = readText(root, old.path);
     const found = text ? findBlock(text, old.id) : undefined;
     if (!text || !found) continue;
-    if (sha256(found.body) !== old.sha256) { preserved.push(`${old.path}#${old.id} (bloque editado)`); continue; }
+    if (sha256(found.body) !== old.sha256) {
+      preserved.push(`${old.path}#${old.id} (bloque editado)`);
+      continue;
+    }
     const next = removeBlock(text, old.id);
-    if (next.trim()) writeProjectFile(root, old.path, next); else removeProjectFile(root, old.path);
+    if (next.trim()) writeProjectFile(root, old.path, next);
+    else removeProjectFile(root, old.path);
     removed.push(`${old.path}#${old.id}`);
   }
   for (const [key, old] of previousJson) {
@@ -163,10 +229,14 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
     const data = readJson(root, old.path);
     const current = getPointer(data, old.pointer);
     if (current === undefined) continue;
-    if (jsonHash(current) !== old.sha256) { preserved.push(`${old.path}:${old.pointer} (modificado)`); continue; }
+    if (jsonHash(current) !== old.sha256) {
+      preserved.push(`${old.path}:${old.pointer} (modificado)`);
+      continue;
+    }
     setPointer(data, old.pointer, undefined);
     pruneEmpty(data);
-    if (Object.keys(data).length) writeProjectFile(root, old.path, `${JSON.stringify(data, null, 2)}\n`); else removeProjectFile(root, old.path);
+    if (Object.keys(data).length) writeProjectFile(root, old.path, `${JSON.stringify(data, null, 2)}\n`);
+    else removeProjectFile(root, old.path);
     removed.push(`${old.path}:${old.pointer}`);
   }
 
@@ -174,7 +244,13 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
   const managed: ManagedEntry[] = [];
   for (const file of desired.files) {
     const hash = managedContentHash(file.content);
-    const entry: ManagedEntry = { type: "file", path: file.path, sha256: hash, owner: file.owner, ...(file.adapter ? { adapter: file.adapter } : {}) };
+    const entry: ManagedEntry = {
+      type: "file",
+      path: file.path,
+      sha256: hash,
+      owner: file.owner,
+      ...(file.adapter ? { adapter: file.adapter } : {}),
+    };
     if (keep.has(file.path.toLowerCase())) {
       const mine = managedHash(root, file.path)!;
       const old = previousFiles.get(file.path.toLowerCase());
@@ -186,7 +262,10 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
       managed.push({ ...entry, userSha256: mine });
       continue;
     }
-    if (managedHash(root, file.path) !== hash) { writeProjectFile(root, file.path, file.content, file.executable); written.push(file.path); }
+    if (managedHash(root, file.path) !== hash) {
+      writeProjectFile(root, file.path, file.content, file.executable);
+      written.push(file.path);
+    }
     removeStaleSideBySide(root, file.path, hash);
     managed.push(entry);
   }
@@ -197,9 +276,19 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
     let text = before;
     for (const block of list) {
       text = upsertBlock(text, block.id, block.content);
-      managed.push({ type: "block", path, id: block.id, sha256: sha256(block.content), owners: block.owners, adapter: block.adapter });
+      managed.push({
+        type: "block",
+        path,
+        id: block.id,
+        sha256: sha256(block.content),
+        owners: block.owners,
+        adapter: block.adapter,
+      });
     }
-    if (text !== before) { writeProjectFile(root, path, text); written.push(path); }
+    if (text !== before) {
+      writeProjectFile(root, path, text);
+      written.push(path);
+    }
   }
   const jsonByFile = new Map<string, DesiredJson[]>();
   for (const entry of desired.json) jsonByFile.set(entry.path, [...(jsonByFile.get(entry.path) ?? []), entry]);
@@ -208,9 +297,18 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
     const before = JSON.stringify(data);
     for (const entry of list) {
       setPointer(data, entry.pointer, entry.value);
-      managed.push({ type: "json", path, pointer: entry.pointer, sha256: jsonHash(entry.value), adapter: entry.adapter });
+      managed.push({
+        type: "json",
+        path,
+        pointer: entry.pointer,
+        sha256: jsonHash(entry.value),
+        adapter: entry.adapter,
+      });
     }
-    if (JSON.stringify(data) !== before || !readText(root, path)) { writeProjectFile(root, path, `${JSON.stringify(data, null, 2)}\n`); written.push(path); }
+    if (JSON.stringify(data) !== before || !readText(root, path)) {
+      writeProjectFile(root, path, `${JSON.stringify(data, null, 2)}\n`);
+      written.push(path);
+    }
   }
   managed.sort((a, b) => `${a.path}#${a.type}`.localeCompare(`${b.path}#${b.type}`));
   return { managed, written, removed, preserved, sideBySide };
@@ -242,22 +340,42 @@ export const STORE_DIRECTORY = ".modai/store";
  * manifest (its `files` is a list of { path, sha256 }, not npm's list of globs). A store with the old name is rebuilt.
  */
 const STORE_RECORD = "modai-store.json";
-export function storePath(name: string): string { return `${STORE_DIRECTORY}/${name}`; }
-export function storePackageDir(root: string, name: string): string { return join(dirname(safeProjectPath(root, `${storePath(name)}/${STORE_RECORD}`)), "files"); }
+export function storePath(name: string): string {
+  return `${STORE_DIRECTORY}/${name}`;
+}
+export function storePackageDir(root: string, name: string): string {
+  return join(dirname(safeProjectPath(root, `${storePath(name)}/${STORE_RECORD}`)), "files");
+}
 
-interface StoreRecord { name: string; version: string; integrity: string; manifest: PackageManifest; files: Array<{ path: string; sha256: string }> }
+interface StoreRecord {
+  name: string;
+  version: string;
+  integrity: string;
+  manifest: PackageManifest;
+  files: Array<{ path: string; sha256: string }>;
+}
 
 export function readStoreRecord(root: string, name: string): StoreRecord | undefined {
   const text = readText(root, `${storePath(name)}/${STORE_RECORD}`);
-  return text ? JSON.parse(text) as StoreRecord : undefined;
+  return text ? (JSON.parse(text) as StoreRecord) : undefined;
 }
 
-export function writeStore(root: string, artifact: { name: string; version: string; integrity: string; manifest: PackageManifest; files: ArtifactFile[] }): void {
+export function writeStore(
+  root: string,
+  artifact: { name: string; version: string; integrity: string; manifest: PackageManifest; files: ArtifactFile[] },
+): void {
   const existing = readStoreRecord(root, artifact.name);
   if (existing?.integrity === artifact.integrity && verifyStore(root, artifact.name, artifact.integrity)) return;
   removeProjectDirectory(root, storePath(artifact.name));
-  for (const file of artifact.files) writeProjectFile(root, `${storePath(artifact.name)}/files/${file.path}`, Buffer.from(file.content, "base64"));
-  const record: StoreRecord = { name: artifact.name, version: artifact.version, integrity: artifact.integrity, manifest: artifact.manifest, files: artifact.files.map(({ path, sha256: hash }) => ({ path, sha256: hash })) };
+  for (const file of artifact.files)
+    writeProjectFile(root, `${storePath(artifact.name)}/files/${file.path}`, Buffer.from(file.content, "base64"));
+  const record: StoreRecord = {
+    name: artifact.name,
+    version: artifact.version,
+    integrity: artifact.integrity,
+    manifest: artifact.manifest,
+    files: artifact.files.map(({ path, sha256: hash }) => ({ path, sha256: hash })),
+  };
   writeProjectFile(root, `${storePath(artifact.name)}/${STORE_RECORD}`, `${JSON.stringify(record, null, 2)}\n`);
 }
 
@@ -266,10 +384,15 @@ export function verifyStore(root: string, name: string, integrity: string): bool
   const record = readStoreRecord(root, name);
   if (!record || record.integrity !== integrity) return false;
   try {
-    const files = record.files.map(file => ({ path: file.path, sha256: currentHash(root, `${storePath(name)}/files/${file.path}`) ?? "" }));
+    const files = record.files.map((file) => ({
+      path: file.path,
+      sha256: currentHash(root, `${storePath(name)}/files/${file.path}`) ?? "",
+    }));
     if (files.some((file, index) => file.sha256 !== record.files[index].sha256)) return false;
     return computeIntegrity(record.manifest, files) === integrity;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 export function readStoreFile(root: string, name: string, path: string): Buffer {
@@ -280,10 +403,13 @@ export function pruneStore(root: string, keep: Set<string>): string[] {
   const base = dirname(safeProjectPath(root, `${STORE_DIRECTORY}/.keep`));
   if (!existsSync(base)) return [];
   const removed: string[] = [];
-  for (const scope of readdirSync(base).filter(entry => entry.startsWith("@"))) {
+  for (const scope of readdirSync(base).filter((entry) => entry.startsWith("@"))) {
     for (const short of readdirSync(join(base, scope))) {
       const name = `${scope}/${short}`;
-      if (!keep.has(name)) { removeProjectDirectory(root, storePath(name)); removed.push(name); }
+      if (!keep.has(name)) {
+        removeProjectDirectory(root, storePath(name));
+        removed.push(name);
+      }
     }
   }
   return removed;

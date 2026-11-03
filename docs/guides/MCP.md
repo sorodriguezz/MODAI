@@ -32,15 +32,15 @@ El agente activo también expone el recurso Markdown `modai://agent/active` y el
 
 En proyectos v1, `modai-mcp --project <ruta>` funciona **sin servidor**: lee `modai.lock`, el store verificado y el índice local. Los adaptadores escriben la configuración por ti (`.mcp.json` con `claude-code`, `.modai/mcp.json` con `mcp`, `.cursor/mcp.json` con `@adapters/cursor`, `opencode.json` con `@adapters/opencode`).
 
-| Herramienta / recurso | Descripción |
-|---|---|
-| `modai_search_knowledge` | Fragmentos relevantes con paquete, versión y ruta; filtros `packages` y `limit` |
-| `modai_read_knowledge` | Texto completo de un fragmento por id |
-| `modai_list_capabilities` | Contratos instalados, proveedor elegido, skills y estado de autorización de herramientas |
-| `modai_project_status` | Dependencias y versiones fijadas |
-| `modai_recall`, `modai_remember` | Memoria local o remota según `context.memory` |
-| herramientas de paquetes | Solo las autorizadas con `modai permissions grant` y cuya copia local coincide con `modai.lock` |
-| `<servidor>__<herramienta>` | Herramientas de `mcpServers` de paquetes autorizados, proxied por el gateway |
-| `modai://skills/<nombre>[/<archivo>]` | Skills instaladas como recursos |
+| Herramienta / recurso                 | Descripción                                                                                     |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `modai_search_knowledge`              | Fragmentos relevantes con paquete, versión y ruta; filtros `packages` y `limit`                 |
+| `modai_read_knowledge`                | Texto completo de un fragmento por id                                                           |
+| `modai_list_capabilities`             | Contratos instalados, proveedor elegido, skills y estado de autorización de herramientas        |
+| `modai_project_status`                | Dependencias y versiones fijadas                                                                |
+| `modai_recall`, `modai_remember`      | Memoria local o remota según `context.memory`                                                   |
+| herramientas de paquetes              | Solo las autorizadas con `modai permissions grant` y cuya copia local coincide con `modai.lock` |
+| `<servidor>__<herramienta>`           | Herramientas de `mcpServers` de paquetes autorizados, proxied por el gateway                    |
+| `modai://skills/<nombre>[/<archivo>]` | Skills instaladas como recursos                                                                 |
 
 Los resultados de herramientas son datos: nunca amplían permisos.

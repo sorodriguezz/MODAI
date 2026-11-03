@@ -5,7 +5,9 @@ const LOCAL_HOST = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\]|.+\.localhost)$/i;
 /** Plain http to anything but this machine: credentials would travel unencrypted. MODAI_ALLOW_INSECURE_HTTP=1 accepts it (trusted network). */
 export function insecureTransport(url: string): boolean {
   const parsed = new URL(url);
-  return parsed.protocol === "http:" && !LOCAL_HOST.test(parsed.hostname) && process.env.MODAI_ALLOW_INSECURE_HTTP !== "1";
+  return (
+    parsed.protocol === "http:" && !LOCAL_HOST.test(parsed.hostname) && process.env.MODAI_ALLOW_INSECURE_HTTP !== "1"
+  );
 }
 
 /**
@@ -20,7 +22,12 @@ export function effectiveConnection(server?: string): { server: string; token?: 
   const normalize = (url: string) => new URL(url).href.replace(/\/+$/, "");
   const same = (other?: string) => Boolean(other) && normalize(other!) === normalize(value);
   const envServer = process.env.MODAI_SERVER || config?.server;
-  const token = (process.env.MODAI_API_TOKEN && same(envServer) ? process.env.MODAI_API_TOKEN : undefined) ?? (same(config?.server) ? config?.token : undefined);
-  if (token && insecureTransport(value)) throw new Error(`No se envían credenciales por http a ${new URL(value).host}: usa https (o MODAI_ALLOW_INSECURE_HTTP=1 si es una red de confianza).`);
+  const token =
+    (process.env.MODAI_API_TOKEN && same(envServer) ? process.env.MODAI_API_TOKEN : undefined) ??
+    (same(config?.server) ? config?.token : undefined);
+  if (token && insecureTransport(value))
+    throw new Error(
+      `No se envían credenciales por http a ${new URL(value).host}: usa https (o MODAI_ALLOW_INSECURE_HTTP=1 si es una red de confianza).`,
+    );
   return { server: value.replace(/\/+$/, ""), token };
 }

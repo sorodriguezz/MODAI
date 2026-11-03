@@ -8,58 +8,58 @@ Esta especificación define qué es un paquete, cómo declara lo que ofrece y lo
 
 ```yaml
 apiVersion: modai.dev/v1
-kind: Package                 # Package | Profile | Adapter | Template
+kind: Package # Package | Profile | Adapter | Template
 metadata:
   name: "@testing/regression" # @scope/nombre
-  version: 1.0.0              # SemVer exacta; una versión publicada es inmutable
+  version: 1.0.0 # SemVer exacta; una versión publicada es inmutable
   description: Qué aporta y cuándo usarlo.
-  license: MIT                # opcional; también authors, homepage, keywords
+  license: MIT # opcional; también authors, homepage, keywords
 spec:
-  category: testing           # informativa (búsqueda, panel); el Core no la interpreta
-  dependencies:               # paquetes concretos (SemVer)
+  category: testing # informativa (búsqueda, panel); el Core no la interpreta
+  dependencies: # paquetes concretos (SemVer)
     "@skills/design-patterns": ^1.0.0
-  provides:                   # contratos que implementa
+  provides: # contratos que implementa
     - testing.regression.plan@1.0.0
-  requires:                   # contratos que necesita, de cualquier proveedor
+  requires: # contratos que necesita, de cualquier proveedor
     - capability: browser.automation
       version: ^1.0.0
-  optional:                   # se usan si existen; su ausencia se informa
+  optional: # se usan si existen; su ausencia se informa
     - capability: ai.code-review
-  conflicts:                  # incompatibilidades explícitas
+  conflicts: # incompatibilidades explícitas
     - package: "@x/otro"
     - capability: otro.runner
   permissions: [process.execute, filesystem.read, filesystem.write]
-  contributes: { ... }        # ver §3
-  entrypoints:                # atajo de autoría; la CLI lo expande a contributes al publicar
-    skills: ./skills          # cada subcarpeta con SKILL.md es una skill
-    knowledge: ./knowledge    # cada .md/.txt es un documento de conocimiento
-    rules: ./rules            # cada .md es una regla
-  include: [tools]            # archivos extra del artefacto (scripts de herramientas)
+  contributes: { ... } # ver §3
+  entrypoints: # atajo de autoría; la CLI lo expande a contributes al publicar
+    skills: ./skills # cada subcarpeta con SKILL.md es una skill
+    knowledge: ./knowledge # cada .md/.txt es un documento de conocimiento
+    rules: ./rules # cada .md es una regla
+  include: [tools] # archivos extra del artefacto (scripts de herramientas)
   compatibility:
-    modai: ">=0.8.1"          # versión del Core
+    modai: ">=0.8.1" # versión del Core
     os: [linux, darwin, win32]
 ```
 
 ### Tipos (`kind`)
 
-| kind | Uso |
-|---|---|
-| `Package` | Conocimiento, procedimientos, reglas, herramientas o combinaciones de ellos. |
-| `Profile` | Compone otros paquetes mediante `dependencies`. No puede aportar herramientas propias. |
-| `Adapter` | Describe con datos cómo materializar contribuciones para un agente (§5). Requiere `spec.adapter`. |
+| kind       | Uso                                                                                                                                                                                                                                                                                                        |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Package`  | Conocimiento, procedimientos, reglas, herramientas o combinaciones de ellos.                                                                                                                                                                                                                               |
+| `Profile`  | Compone otros paquetes mediante `dependencies`. No puede aportar herramientas propias.                                                                                                                                                                                                                     |
+| `Adapter`  | Describe con datos cómo materializar contribuciones para un agente (§5). Requiere `spec.adapter`.                                                                                                                                                                                                          |
 | `Template` | Un proyecto completo para empezar (ver [TEMPLATES.md](../guides/TEMPLATES.md)). No se instala: lo usa `modai template use`, y resolverlo como dependencia falla con `TEMPLATE_NOT_INSTALLABLE`. Sin `contributes`, `dependencies`, `features` ni `permissions`; sus opciones van en `modai.template.yaml`. |
 
 Naturaleza de un paquete según lo que contribuye (no según su categoría):
 
-| Naturaleza | Ejemplo | Uso |
-|---|---|---|
-| Declarativo | reglas de TypeScript | `rules` / `files` |
-| Conocimiento | arquitectura hexagonal | `knowledge`, recuperado bajo demanda |
-| Procedimiento | skill de code review | `skills`, activada cuando corresponde |
-| Ejecutable | regresión con Playwright | `tools` / `mcpServers`, con permisos |
-| Composición | perfil fullstack | `kind: Profile` |
-| Adaptador | Cursor, OpenCode | `kind: Adapter` |
-| Proyecto inicial | NestJS con SDD | `kind: Template` |
+| Naturaleza       | Ejemplo                  | Uso                                   |
+| ---------------- | ------------------------ | ------------------------------------- |
+| Declarativo      | reglas de TypeScript     | `rules` / `files`                     |
+| Conocimiento     | arquitectura hexagonal   | `knowledge`, recuperado bajo demanda  |
+| Procedimiento    | skill de code review     | `skills`, activada cuando corresponde |
+| Ejecutable       | regresión con Playwright | `tools` / `mcpServers`, con permisos  |
+| Composición      | perfil fullstack         | `kind: Profile`                       |
+| Adaptador        | Cursor, OpenCode         | `kind: Adapter`                       |
+| Proyecto inicial | NestJS con SDD           | `kind: Template`                      |
 
 ## 2. Capacidades
 
@@ -79,16 +79,16 @@ El resolvedor **no instala proveedores implícitamente**: la decisión de qué i
 
 ## 3. Contribuciones (`spec.contributes`)
 
-| Campo | Contenido | Materialización |
-|---|---|---|
-| `skills[]` | `{ name, path, files? }`; `path` es una carpeta con `SKILL.md` ([Agent Skills](https://agentskills.io)) | Adaptadores con destino `skills`; recurso MCP `modai://skills/<name>` |
-| `rules[]` | `{ name, path, description? }`; fragmento breve de instrucciones | Bloque administrado o un archivo por regla, según el adaptador |
-| `knowledge[]` | `{ path, title, tags[] }` | Índice local del Context Gateway; nunca se carga entero en un prompt |
-| `tools[]` | `{ name, description, inputSchema, command, args, envKeys, timeoutMs, readOnly, implements? }` | Herramienta del gateway MCP y `modai capability run`, solo si está autorizada |
-| `mcpServers[]` | `{ name, description, command, args, envKeys }` | Proceso MCP proxied por el gateway, solo si está autorizado |
-| `agents[]` | definición de agente (instrucciones, skills, capacidades, memoria) | Composición por el servidor (ADR-003) |
+| Campo          | Contenido                                                                                                                                                     | Materialización                                                                                                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `skills[]`     | `{ name, path, files? }`; `path` es una carpeta con `SKILL.md` ([Agent Skills](https://agentskills.io))                                                       | Adaptadores con destino `skills`; recurso MCP `modai://skills/<name>`                                                                                                          |
+| `rules[]`      | `{ name, path, description? }`; fragmento breve de instrucciones                                                                                              | Bloque administrado o un archivo por regla, según el adaptador                                                                                                                 |
+| `knowledge[]`  | `{ path, title, tags[] }`                                                                                                                                     | Índice local del Context Gateway; nunca se carga entero en un prompt                                                                                                           |
+| `tools[]`      | `{ name, description, inputSchema, command, args, envKeys, timeoutMs, readOnly, implements? }`                                                                | Herramienta del gateway MCP y `modai capability run`, solo si está autorizada                                                                                                  |
+| `mcpServers[]` | `{ name, description, command, args, envKeys }`                                                                                                               | Proceso MCP proxied por el gateway, solo si está autorizado                                                                                                                    |
+| `agents[]`     | definición de agente (instrucciones, skills, capacidades, memoria)                                                                                            | Composición por el servidor (ADR-003)                                                                                                                                          |
 | `components[]` | `{ name, path, target, description?, language?, tags[] }`; código reutilizable (módulos de backend, componentes de UI, servicios…). Requiere `project.source` | Cada archivo de `path` se copia bajo `target` (marcadores `{component}`, `{package}`). Archivos administrados: `modai remove` retira solo los intactos y conserva los editados |
-| `files[]` | `{ source, target, executable? }` | Copia literal a destinos seguros (`.agents/`, `.modai/…`, `docs/` con `project.files`, archivos de instrucciones con `project.instructions`) |
+| `files[]`      | `{ source, target, executable? }`                                                                                                                             | Copia literal a destinos seguros (`.agents/`, `.modai/…`, `docs/` con `project.files`, archivos de instrucciones con `project.instructions`)                                   |
 
 ### Contrato de herramientas
 
@@ -110,9 +110,9 @@ spec:
       - { name: health, path: component, target: "src/modules/{component}" }
   features:
     nestjs:
-      description: Controlador y módulo de NestJS     # lo que se ve en --help
-      conflicts: [express]                            # no se combina con express
-      overlays:                                       # añade o reemplaza archivos del componente health
+      description: Controlador y módulo de NestJS # lo que se ve en --help
+      conflicts: [express] # no se combina con express
+      overlays: # añade o reemplaza archivos del componente health
         - { component: health, path: features/nestjs }
     express:
       description: Router de Express
@@ -120,23 +120,23 @@ spec:
       overlays: [{ component: health, path: features/express }]
     metrics:
       description: Métricas Prometheus
-      default: true                                   # activa salvo --no-metrics
-      contributes:                                    # mismas claves que spec.contributes (sin agents)
+      default: true # activa salvo --no-metrics
+      contributes: # mismas claves que spec.contributes (sin agents)
         knowledge: [{ path: features/metrics/METRICS.md, title: Métricas }]
     tls:
       description: TLS en el endpoint
-      requires: [metrics]                             # se activa junto con metrics
-      dependencies: { "@acme/certs": ^1.0.0 }         # paquetes extra mientras esté activa
+      requires: [metrics] # se activa junto con metrics
+      dependencies: { "@acme/certs": ^1.0.0 } # paquetes extra mientras esté activa
 ```
 
-| Campo | Significado |
-|---|---|
-| `description` | Obligatoria. Es lo que muestran `modai add <paquete> --help`, `modai feature list` y el panel. |
-| `default` | `true`: activa salvo que se quite (`--no-<feature>`). Por defecto `false`. |
-| `requires` / `conflicts` | Features que se activan con esta / que no se pueden combinar con esta. |
-| `dependencies` | Paquetes que se instalan solo con la feature activa. Entran en la resolución como las del paquete. |
-| `contributes` | Skills, reglas, conocimiento, herramientas, servidores MCP, componentes o archivos que se suman a los del paquete. |
-| `overlays[]` | `{ component, path }`: los archivos de `path` se añaden al componente `component` (del paquete o de una feature requerida) y reemplazan los que tengan la misma ruta relativa. Varias features se aplican en el orden del manifiesto. |
+| Campo                    | Significado                                                                                                                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `description`            | Obligatoria. Es lo que muestran `modai add <paquete> --help`, `modai feature list` y el panel.                                                                                                                                        |
+| `default`                | `true`: activa salvo que se quite (`--no-<feature>`). Por defecto `false`.                                                                                                                                                            |
+| `requires` / `conflicts` | Features que se activan con esta / que no se pueden combinar con esta.                                                                                                                                                                |
+| `dependencies`           | Paquetes que se instalan solo con la feature activa. Entran en la resolución como las del paquete.                                                                                                                                    |
+| `contributes`            | Skills, reglas, conocimiento, herramientas, servidores MCP, componentes o archivos que se suman a los del paquete.                                                                                                                    |
+| `overlays[]`             | `{ component, path }`: los archivos de `path` se añaden al componente `component` (del paquete o de una feature requerida) y reemplazan los que tengan la misma ruta relativa. Varias features se aplican en el orden del manifiesto. |
 
 Reglas, comprobadas al publicar:
 
@@ -160,15 +160,15 @@ Al instalar, el Core trabaja con el **paquete efectivo** (base + features activa
 
 ## 4. Permisos
 
-| Permiso | Qué autoriza |
-|---|---|
-| `project.instructions` | Escribir fuera de `.modai/` y `.agents/` (archivos de instrucciones de agentes: `AGENTS.md`, `CLAUDE.md`, `.cursor/…`). Se concede al instalar (`--allow`). |
-| `project.files` | Instalar archivos literales bajo `docs/`. Se concede al instalar. |
-| `project.source` | Instalar `components` en el árbol de código (`src/`, `lib/`, `app/`…). Nunca en carpetas ocultas, en archivos de la raíz (`package.json`, `Makefile`…) ni en rutas reservadas. Se concede al instalar. |
-| `process.execute` | Ejecutar `tools`. Obligatorio para declarar herramientas. |
-| `mcp.connect` | Iniciar `mcpServers`. |
-| `filesystem.read`, `filesystem.write`, `network` | Intención declarada de la herramienta; se muestra al autorizar. |
-| `env.read` | Reenviar las variables declaradas en `envKeys`. |
+| Permiso                                          | Qué autoriza                                                                                                                                                                                           |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `project.instructions`                           | Escribir fuera de `.modai/` y `.agents/` (archivos de instrucciones de agentes: `AGENTS.md`, `CLAUDE.md`, `.cursor/…`). Se concede al instalar (`--allow`).                                            |
+| `project.files`                                  | Instalar archivos literales bajo `docs/`. Se concede al instalar.                                                                                                                                      |
+| `project.source`                                 | Instalar `components` en el árbol de código (`src/`, `lib/`, `app/`…). Nunca en carpetas ocultas, en archivos de la raíz (`package.json`, `Makefile`…) ni en rutas reservadas. Se concede al instalar. |
+| `process.execute`                                | Ejecutar `tools`. Obligatorio para declarar herramientas.                                                                                                                                              |
+| `mcp.connect`                                    | Iniciar `mcpServers`.                                                                                                                                                                                  |
+| `filesystem.read`, `filesystem.write`, `network` | Intención declarada de la herramienta; se muestra al autorizar.                                                                                                                                        |
+| `env.read`                                       | Reenviar las variables declaradas en `envKeys`.                                                                                                                                                        |
 
 Las contribuciones ejecutables se habilitan con `modai permissions grant <paquete>`, que muestra comandos y permisos y concede **todos** los declarados, por equipo, ligados a la `integrity` exacta. MODAI no es un sandbox: un proceso autorizado corre con los permisos del usuario.
 
@@ -182,10 +182,10 @@ spec:
     id: cursor
     description: Reglas .mdc y gateway MCP.
     targets:
-      skills: { path: ".cursor/skills/{skill}" }                     # opcional
-      rules:  { mode: file, path: ".cursor/rules/{package}-{rule}.mdc", header: "---\ndescription: {description}\n---" }
-      index:  { mode: block, file: AGENTS.md }                       # resumen de skills, herramientas y conocimiento
-      mcp:    { file: .cursor/mcp.json, pointer: mcpServers.modai, value: { command: modai-mcp, args: [--project, .] } }
+      skills: { path: ".cursor/skills/{skill}" } # opcional
+      rules: { mode: file, path: ".cursor/rules/{package}-{rule}.mdc", header: "---\ndescription: {description}\n---" }
+      index: { mode: block, file: AGENTS.md } # resumen de skills, herramientas y conocimiento
+      mcp: { file: .cursor/mcp.json, pointer: mcpServers.modai, value: { command: modai-mcp, args: [--project, .] } }
 ```
 
 - `mcp` solo registra el **gateway de MODAI**: el comando de `value` (`command`, `cmd`, `executable`, `program` o `bin`, como lo llame el cliente) debe ser `modai-mcp` o una lista que empiece por él; no admite `env` ni las claves `__proto__`, `constructor` o `prototype` (tampoco en `pointer`). Así un adaptador no puede hacer que el agente ejecute otro programa con solo el permiso `project.instructions`.
@@ -202,22 +202,22 @@ Integrados (mismo esquema, definidos como datos en el Core): `agent-skills` (`.a
 apiVersion: modai.dev/v1
 kind: Project
 name: shop
-registries:                     # en orden; un paquete se sirve entero desde el primero que lo conoce
+registries: # en orden; un paquete se sirve entero desde el primero que lo conoce
   - { name: team, path: ../modai-registry }
   - { name: central, url: https://modai.example.com }
 dependencies:
   "@profiles/fullstack-quality": ^1.0.0
   "@acme/mi-paquete": file:../mi-paquete
   "@components/health-module": ^1.1.0
-features:                       # elección por paquete: true activa, false quita una que viene por defecto
+features: # elección por paquete: true activa, false quita una que viene por defecto
   "@components/health-module": { nestjs: true, metrics: true }
-overrides: {}                   # fija versiones, también transitivas
-providers:                      # proveedor elegido por capacidad
+overrides: {} # fija versiones, también transitivas
+providers: # proveedor elegido por capacidad
   browser.automation: "@testing/playwright"
 adapters: [agent-skills, claude-code, mcp]
-signaturePolicy: optional       # optional | signed | trusted
+signaturePolicy: optional # optional | signed | trusted
 context:
-  memory: local                 # local | remote | off
+  memory: local # local | remote | off
   # server: https://modai.example.com
   # projectId: <id>             # memoria remota compartida por el equipo
 ```
@@ -228,16 +228,16 @@ Determinista (sin marcas de tiempo, claves ordenadas). Por paquete: `version`, `
 
 ## 8. Ciclo de vida
 
-| Operación | Comportamiento |
-|---|---|
-| `modai add` | Resuelve, verifica integridad/firma, extrae al store, materializa con los adaptadores, actualiza lock e índice. Un fallo no deja instalaciones parciales de archivos del proyecto. |
-| `modai add <paquete> --x --no-y` | Igual, con las features elegidas: cada flag se aplica al paquete escrito antes y se guarda en `features` de `modai.yaml`. `modai add <paquete> --help` lista las que declara. |
-| `modai feature list\|enable\|disable\|reset` | Cambia las features de un paquete instalado y sincroniza: se instalan o retiran sus archivos y dependencias (los archivos editados por el usuario se conservan). |
-| `modai sync [--frozen]` | Reconstruye exactamente lo descrito por el lock; `--frozen` falla si el lock no corresponde. |
-| `modai update [paquetes]` | Ignora el lock para esos paquetes dentro de los rangos de `modai.yaml`. |
-| `modai remove` | Retira solo lo que sigue intacto; conserva y reporta cambios del usuario. |
-| Conflicto | Archivo, bloque o entrada JSON editados a mano detienen la instalación (`MANAGED_CONFLICT`) salvo `--force`. |
-| Integridad | La misma versión con contenido distinto en el registry se rechaza (`LOCK_INTEGRITY_MISMATCH`); un store alterado deshabilita las herramientas del paquete. |
+| Operación                                    | Comportamiento                                                                                                                                                                     |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modai add`                                  | Resuelve, verifica integridad/firma, extrae al store, materializa con los adaptadores, actualiza lock e índice. Un fallo no deja instalaciones parciales de archivos del proyecto. |
+| `modai add <paquete> --x --no-y`             | Igual, con las features elegidas: cada flag se aplica al paquete escrito antes y se guarda en `features` de `modai.yaml`. `modai add <paquete> --help` lista las que declara.      |
+| `modai feature list\|enable\|disable\|reset` | Cambia las features de un paquete instalado y sincroniza: se instalan o retiran sus archivos y dependencias (los archivos editados por el usuario se conservan).                   |
+| `modai sync [--frozen]`                      | Reconstruye exactamente lo descrito por el lock; `--frozen` falla si el lock no corresponde.                                                                                       |
+| `modai update [paquetes]`                    | Ignora el lock para esos paquetes dentro de los rangos de `modai.yaml`.                                                                                                            |
+| `modai remove`                               | Retira solo lo que sigue intacto; conserva y reporta cambios del usuario.                                                                                                          |
+| Conflicto                                    | Archivo, bloque o entrada JSON editados a mano detienen la instalación (`MANAGED_CONFLICT`) salvo `--force`.                                                                       |
+| Integridad                                   | La misma versión con contenido distinto en el registry se rechaza (`LOCK_INTEGRITY_MISMATCH`); un store alterado deshabilita las herramientas del paquete.                         |
 
 ## 9. Validación del manifiesto
 

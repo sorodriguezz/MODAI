@@ -7,7 +7,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 const port = Number(process.env.MODAI_UI_PORT ?? 8798);
 const data = mkdtempSync(join(tmpdir(), "modai-ui-"));
-export const UI = { url: `http://127.0.0.1:${port}`, token: "ui-test-token", username: "admin", password: "ui-test-password-123" };
+export const UI = {
+  url: `http://127.0.0.1:${port}`,
+  token: "ui-test-token",
+  username: "admin",
+  password: "ui-test-password-123",
+};
 
 export default defineConfig({
   testDir: "tests/ui",
@@ -24,9 +29,14 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 30_000,
     env: {
-      MODAI_PORT: String(port), MODAI_HOST: "127.0.0.1", MODAI_API_TOKEN: UI.token,
-      MODAI_ADMIN_USERNAME: UI.username, MODAI_ADMIN_PASSWORD: UI.password, MODAI_LOGIN_RATE_LIMIT: "1000",
-      MODAI_DATABASE_PATH: join(data, "modai.db"), MODAI_ARTIFACT_DIR: join(data, "artifacts"),
+      MODAI_PORT: String(port),
+      MODAI_HOST: "127.0.0.1",
+      MODAI_API_TOKEN: UI.token,
+      MODAI_ADMIN_USERNAME: UI.username,
+      MODAI_ADMIN_PASSWORD: UI.password,
+      MODAI_LOGIN_RATE_LIMIT: "1000",
+      MODAI_DATABASE_PATH: join(data, "modai.db"),
+      MODAI_ARTIFACT_DIR: join(data, "artifacts"),
     },
   },
 });

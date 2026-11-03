@@ -7,12 +7,7 @@
     if (["light", "dark", "system"].includes(saved)) preference = saved;
   } catch {}
   function apply() {
-    root.dataset.theme =
-      preference === "system"
-        ? system.matches
-          ? "dark"
-          : "light"
-        : preference;
+    root.dataset.theme = preference === "system" ? (system.matches ? "dark" : "light") : preference;
   }
   window.modaiTheme = {
     get: () => preference,

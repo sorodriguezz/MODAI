@@ -1,5 +1,5 @@
-import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { signaturePolicySchema } from "@modai/contracts/schemas";
 import { createApp } from "./http/app.js";
 
@@ -24,7 +24,9 @@ const app = await createApp({
   signaturePolicy: signaturePolicySchema.parse(process.env.MODAI_SIGNATURE_POLICY ?? "optional"),
   maxArtifactStorageBytes: Number(process.env.MODAI_ARTIFACT_QUOTA_BYTES ?? 1024 * 1024 * 1024),
   // Login and first-run attempts per minute and IP (default 10).
-  ...(Number(process.env.MODAI_LOGIN_RATE_LIMIT) > 0 ? { loginRateLimitMax: Number(process.env.MODAI_LOGIN_RATE_LIMIT) } : {}),
+  ...(Number(process.env.MODAI_LOGIN_RATE_LIMIT) > 0
+    ? { loginRateLimitMax: Number(process.env.MODAI_LOGIN_RATE_LIMIT) }
+    : {}),
 });
 
 const close = async (signal: string): Promise<void> => {

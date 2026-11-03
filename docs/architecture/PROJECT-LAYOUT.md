@@ -1,18 +1,18 @@
 # Organización del proyecto
 
-| Directorio | Responsabilidad | Distribución |
-|---|---|---|
-| `apps/server` | API, autorización, catálogo, memoria, composición, cola y persistencia | Imagen Docker, privado en npm |
-| `apps/admin` | Panel web: HTML, CSS, tema y vistas JavaScript | Assets compilados dentro de la imagen del servidor; privado en npm |
-| `packages/core` | Núcleo: especificación, resolvedor de dependencias y capacidades, registries, adaptadores, instalación reversible, context gateway y herramientas | Workspace privado; incorporado al CLI y dependencia interna del servidor |
-| `packages/cli` | Comandos `modai` / `modai-mcp`, activación, runtime local y worker | Único paquete público npm |
-| `packages/sdk` | Cliente HTTP usado en desarrollo y compilación | Workspace privado; incorporado al CLI |
-| `packages/contracts` | Tipos, esquemas (incluida la especificación v1), firmas y validaciones compartidas | Workspace privado; incorporado al CLI y dependencia interna del servidor |
-| `deploy` | Dockerfile, Compose, Caddy y plantillas de entorno | Infraestructura de la instancia central |
-| `examples/packages` | Paquetes de agentes, skills, perfiles, tools y MCP | Se publican en el catálogo MODAI mediante su API |
-| `scripts` | Build auxiliar, empaquetado, prueba del cliente y despliegue | Herramientas del repositorio |
-| `tests` | Pruebas de integración y aislamiento | Desarrollo y build Docker |
-| `docs` | Guías, decisiones (`architecture/`) y especificación (`spec/`) | Documentación |
+| Directorio           | Responsabilidad                                                                                                                                   | Distribución                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `apps/server`        | API, autorización, catálogo, memoria, composición, cola y persistencia                                                                            | Imagen Docker, privado en npm                                            |
+| `apps/admin`         | Panel web: HTML, CSS, tema y vistas JavaScript                                                                                                    | Assets compilados dentro de la imagen del servidor; privado en npm       |
+| `packages/core`      | Núcleo: especificación, resolvedor de dependencias y capacidades, registries, adaptadores, instalación reversible, context gateway y herramientas | Workspace privado; incorporado al CLI y dependencia interna del servidor |
+| `packages/cli`       | Comandos `modai` / `modai-mcp`, activación, runtime local y worker                                                                                | Único paquete público npm                                                |
+| `packages/sdk`       | Cliente HTTP usado en desarrollo y compilación                                                                                                    | Workspace privado; incorporado al CLI                                    |
+| `packages/contracts` | Tipos, esquemas (incluida la especificación v1), firmas y validaciones compartidas                                                                | Workspace privado; incorporado al CLI y dependencia interna del servidor |
+| `deploy`             | Dockerfile, Compose, Caddy y plantillas de entorno                                                                                                | Infraestructura de la instancia central                                  |
+| `examples/packages`  | Paquetes de agentes, skills, perfiles, tools y MCP                                                                                                | Se publican en el catálogo MODAI mediante su API                         |
+| `scripts`            | Build auxiliar, empaquetado, prueba del cliente y despliegue                                                                                      | Herramientas del repositorio                                             |
+| `tests`              | Pruebas de integración y aislamiento                                                                                                              | Desarrollo y build Docker                                                |
+| `docs`               | Guías, decisiones (`architecture/`) y especificación (`spec/`)                                                                                    | Documentación                                                            |
 
 ## Panel web
 

@@ -1,4 +1,5 @@
 ---
+
 name: hexagonal-architecture
 description: Diseña y revisa servicios con puertos, adaptadores y un dominio independiente.
 ---

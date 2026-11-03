@@ -34,14 +34,14 @@ La configuración se guarda en `~/.modai/local-models.yaml`, fuera de los reposi
 
 La política es una **heurística de arranque**, no una garantía de rendimiento o calidad. Reserva al menos la mitad de la RAM total para el resto del sistema y descuenta 1,5 GiB de la memoria libre observada. El presupuesto es el menor de esos dos límites; con menos de 1,5 GiB de presupuesto recomienda liberar memoria o usar búsqueda de texto. La memoria libre cambia durante el uso.
 
-| Equipo o condición | Tratamiento |
-|---|---|
-| CPU, Mac Intel o GPU sin memoria verificable | Embedding pequeño `embeddinggemma-2:270m`, un fragmento por petición. |
-| Apple Silicon con recursos | Candidato `qwen3-embedding:0.6b`; no suma RAM y VRAM, porque comparten memoria. |
-| NVIDIA con VRAM libre verificada | Puede aumentar modelo y lote; el runtime debe confirmar el offload efectivo. |
-| AMD o Intel GPU | No deduce capacidad por marca ni por memoria compartida; deja que el runtime resuelva ROCm/Vulkan y usa presupuesto conservador. |
-| Windows ARM / Qualcomm | Detecta arquitectura y GPU, pero no presupone CUDA, ROCm ni aceleración de NPU. Requiere un runtime compatible disponible para ese equipo. |
-| Preferencia `quality` con presupuesto suficiente | Candidato `qwen3-embedding:4b`; requiere al menos 8 GiB de presupuesto RAM y aceleración candidata con recursos. |
+| Equipo o condición                               | Tratamiento                                                                                                                                |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| CPU, Mac Intel o GPU sin memoria verificable     | Embedding pequeño `embeddinggemma-2:270m`, un fragmento por petición.                                                                      |
+| Apple Silicon con recursos                       | Candidato `qwen3-embedding:0.6b`; no suma RAM y VRAM, porque comparten memoria.                                                            |
+| NVIDIA con VRAM libre verificada                 | Puede aumentar modelo y lote; el runtime debe confirmar el offload efectivo.                                                               |
+| AMD o Intel GPU                                  | No deduce capacidad por marca ni por memoria compartida; deja que el runtime resuelva ROCm/Vulkan y usa presupuesto conservador.           |
+| Windows ARM / Qualcomm                           | Detecta arquitectura y GPU, pero no presupone CUDA, ROCm ni aceleración de NPU. Requiere un runtime compatible disponible para ese equipo. |
+| Preferencia `quality` con presupuesto suficiente | Candidato `qwen3-embedding:4b`; requiere al menos 8 GiB de presupuesto RAM y aceleración candidata con recursos.                           |
 
 Con recursos suficientes, el lote aumenta hasta cuatro fragmentos. Ante un error del lote, la indexación reintenta los fragmentos individualmente; si también fallan se detiene y permite corregir la causa. Nunca cambia de modelo durante una indexación.
 

@@ -1,4 +1,5 @@
 ---
+
 name: architecture-decisions
 description: Evalúa alternativas de arquitectura con trade-offs explícitos y redacta un ADR breve y verificable. Úsala cuando una decisión afecte a varios módulos, sea costosa de revertir o la pida el equipo; no para cambios locales triviales.
 ---

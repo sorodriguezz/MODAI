@@ -1,4 +1,5 @@
 ---
+
 name: frontend-architecture
 description: Decide límites de componentes, ubicación del estado, estrategia de renderizado y presupuestos de rendimiento en aplicaciones frontend (React, Angular, Vue). Úsala al diseñar o revisar una pantalla o módulo; no para estilos visuales puntuales.
 ---

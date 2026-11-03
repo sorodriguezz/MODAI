@@ -2,13 +2,13 @@
 
 Los tres entornos usan **la misma imagen** (`deploy/Dockerfile`, multi-arquitectura amd64/arm64). Cambia solo cómo cada plataforma entrega disco, puerto y HTTPS:
 
-| | Raspberry Pi | Fly.io | Railway |
-|---|---|---|---|
-| Archivos | `deploy/compose.yaml` + `deploy/compose.raspberry.yaml` | `deploy/fly/fly.toml` | `deploy/railway/railway.json` + `variables.example` |
-| Disco | Volúmenes Docker | Un volumen en `/app/data` | Un volumen en `/app/data` |
-| HTTPS | Caddy (`compose.lan.yaml` / `compose.public.yaml`), Tailscale o Cloudflare Tunnel | Incluido (`*.fly.dev` o dominio propio) | Incluido (`*.up.railway.app` o dominio propio) |
-| Puerto | 8787 | 8787 (`MODAI_PORT`) | El que inyecta Railway (`PORT`) |
-| Costo | Tu hardware | Por uso de máquina y volumen | Por uso y volumen |
+|          | Raspberry Pi                                                                      | Fly.io                                  | Railway                                             |
+| -------- | --------------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------------- |
+| Archivos | `deploy/compose.yaml` + `deploy/compose.raspberry.yaml`                           | `deploy/fly/fly.toml`                   | `deploy/railway/railway.json` + `variables.example` |
+| Disco    | Volúmenes Docker                                                                  | Un volumen en `/app/data`               | Un volumen en `/app/data`                           |
+| HTTPS    | Caddy (`compose.lan.yaml` / `compose.public.yaml`), Tailscale o Cloudflare Tunnel | Incluido (`*.fly.dev` o dominio propio) | Incluido (`*.up.railway.app` o dominio propio)      |
+| Puerto   | 8787                                                                              | 8787 (`MODAI_PORT`)                     | El que inyecta Railway (`PORT`)                     |
+| Costo    | Tu hardware                                                                       | Por uso de máquina y volumen            | Por uso y volumen                                   |
 
 Reglas comunes:
 
@@ -17,6 +17,7 @@ Reglas comunes:
 - **`MODAI_TRUST_PROXY=true`** cuando un proxy (Caddy, Fly, Railway, Tailscale, Cloudflare) es el único acceso al servidor. Así los límites de intentos de login usan la IP real del cliente y la cookie de sesión sale marcada `Secure`.
 - El contenedor arranca como `root` solo para ajustar la propiedad del volumen y baja de inmediato al usuario `node` (uid 1000). Para otro uid usa `MODAI_RUN_UID` / `MODAI_RUN_GID`.
 - Después del primer arranque, carga el catálogo de ejemplo desde tu equipo:
+
   ```sh
   MODAI_SERVER=https://TU_DIRECCION MODAI_API_TOKEN=TU_TOKEN npm run seed:examples
   ```
@@ -57,12 +58,12 @@ Si el paquete de GHCR es privado, ejecuta antes `docker login ghcr.io` con un to
 
 **Acceso:**
 
-| Necesidad | Cómo |
-|---|---|
-| Solo tu red, HTTPS | Agrega `-f deploy/compose.lan.yaml`; entra por `https://MODAI_HOSTNAME:8443` |
-| Desde cualquier lugar, sin abrir puertos | [Tailscale](https://tailscale.com): `sudo tailscale serve --bg 8787` publica `https://<pi>.<tailnet>.ts.net` dentro de tu tailnet. Define `MODAI_PUBLIC_URL` con esa dirección y `MODAI_TRUST_PROXY=true` |
-| Dominio público, sin abrir puertos | Cloudflare Tunnel hacia `http://localhost:8787`, con `MODAI_PUBLIC_URL` y `MODAI_TRUST_PROXY=true` |
-| Dominio público, con puertos 80/443 abiertos | `-f deploy/compose.public.yaml` y `MODAI_PUBLIC_HOST` (Caddy obtiene el certificado) |
+| Necesidad                                    | Cómo                                                                                                                                                                                                      |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Solo tu red, HTTPS                           | Agrega `-f deploy/compose.lan.yaml`; entra por `https://MODAI_HOSTNAME:8443`                                                                                                                              |
+| Desde cualquier lugar, sin abrir puertos     | [Tailscale](https://tailscale.com): `sudo tailscale serve --bg 8787` publica `https://<pi>.<tailnet>.ts.net` dentro de tu tailnet. Define `MODAI_PUBLIC_URL` con esa dirección y `MODAI_TRUST_PROXY=true` |
+| Dominio público, sin abrir puertos           | Cloudflare Tunnel hacia `http://localhost:8787`, con `MODAI_PUBLIC_URL` y `MODAI_TRUST_PROXY=true`                                                                                                        |
+| Dominio público, con puertos 80/443 abiertos | `-f deploy/compose.public.yaml` y `MODAI_PUBLIC_HOST` (Caddy obtiene el certificado)                                                                                                                      |
 
 Mantén `MODAI_BIND_IP=127.0.0.1` cuando el acceso es por un proxy o un túnel.
 
@@ -114,7 +115,7 @@ Abre `https://modai-tu-nombre.fly.dev/admin`. Guarda el valor de `MODAI_API_TOKE
 
 1. **New Project → Deploy from GitHub repo** y elige el repositorio.
 2. En el servicio, **Settings → Config-as-code**, fija la ruta del archivo de configuración en `/deploy/railway/railway.json`. Así Railway construye con `deploy/Dockerfile`, comprueba `/health` y reinicia ante fallos.
-3. **Volumes → Add volume** con *mount path* `/app/data`.
+3. **Volumes → Add volume** con _mount path_ `/app/data`.
 4. **Variables → Raw Editor**: pega el contenido de `deploy/railway/variables.example` y reemplaza `MODAI_API_TOKEN` y `MODAI_ADMIN_PASSWORD`. `MODAI_PUBLIC_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}` toma el dominio automáticamente.
 5. **Settings → Networking → Generate Domain**. Railway enruta al puerto que inyecta en `PORT`, y MODAI lo usa.
 6. Despliega y abre `https://<tu-servicio>.up.railway.app/admin`.

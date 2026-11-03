@@ -1,4 +1,5 @@
 ---
+
 name: skill-authoring
 description: Crea o revisa SKILL.md y sus recursos cuando una capacidad procedimental deba reutilizarse y activarse con precisión. No la uses para documentación genérica, hechos del proyecto ni instrucciones que pertenecen al harness raíz.
 ---

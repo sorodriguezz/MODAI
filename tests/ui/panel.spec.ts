@@ -1,18 +1,36 @@
 import { createHash } from "node:crypto";
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 import { UI } from "../../playwright.config.ts";
 
 const auth = { authorization: `Bearer ${UI.token}` };
 
 function file(path: string, content: string) {
-  return { path, content: Buffer.from(content).toString("base64"), sha256: createHash("sha256").update(content).digest("hex") };
+  return {
+    path,
+    content: Buffer.from(content).toString("base64"),
+    sha256: createHash("sha256").update(content).digest("hex"),
+  };
 }
 
-async function publish(request: APIRequestContext, name: string, version: string, spec: Record<string, unknown> = {}, files = [file("knowledge/README.md", "# Guía\n")]) {
-  const response = await request.post("/api/v1/packages", { headers: auth, data: {
-    manifest: { apiVersion: "modai.dev/v1", kind: "Package", metadata: { name, version, description: `${name}: paquete de prueba del panel con descripción suficiente` }, spec: { contributes: { knowledge: [{ path: "knowledge/README.md", title: "Guía" }] }, ...spec } },
-    files,
-  } });
+async function publish(
+  request: APIRequestContext,
+  name: string,
+  version: string,
+  spec: Record<string, unknown> = {},
+  files = [file("knowledge/README.md", "# Guía\n")],
+) {
+  const response = await request.post("/api/v1/packages", {
+    headers: auth,
+    data: {
+      manifest: {
+        apiVersion: "modai.dev/v1",
+        kind: "Package",
+        metadata: { name, version, description: `${name}: paquete de prueba del panel con descripción suficiente` },
+        spec: { contributes: { knowledge: [{ path: "knowledge/README.md", title: "Guía" }] }, ...spec },
+      },
+      files,
+    },
+  });
   expect(response.status(), await response.text()).toBe(201);
 }
 
@@ -148,7 +166,10 @@ test("publica una nueva versión desde el detalle conservando manifiesto y archi
 test("muestra qué proyectos usan un paquete, con su versión", async ({ page, request }) => {
   const project = await request.post("/api/v1/projects", { headers: auth, data: { id: "ui-shop", name: "Tienda" } });
   expect(project.ok()).toBeTruthy();
-  const reported = await request.put("/api/v1/projects/ui-shop/installations", { headers: auth, data: { packages: [{ name: "@ui/users-module", version: "0.1.0", direct: true }] } });
+  const reported = await request.put("/api/v1/projects/ui-shop/installations", {
+    headers: auth,
+    data: { packages: [{ name: "@ui/users-module", version: "0.1.0", direct: true }] },
+  });
   expect(reported.status()).toBe(204);
 
   await login(page);
@@ -162,7 +183,8 @@ test("muestra qué proyectos usan un paquete, con su versión", async ({ page, r
 });
 
 test("el catálogo pagina en el servidor y filtra por tipo y texto", async ({ page, request }) => {
-  for (let index = 0; index < 26; index++) await publish(request, `@ui/guide-${String(index).padStart(2, "0")}`, "1.0.0");
+  for (let index = 0; index < 26; index++)
+    await publish(request, `@ui/guide-${String(index).padStart(2, "0")}`, "1.0.0");
   await login(page);
   await page.goto("/admin#/packages");
   await expect(page.locator("#packageMeta")).toContainText("28 paquetes");
@@ -186,18 +208,43 @@ test("el catálogo pagina en el servidor y filtra por tipo y texto", async ({ pa
 });
 
 test("Resumen, Agentes, Ejecuciones y Conectar no descargan el catálogo completo", async ({ page, request }) => {
-  const published = await request.post("/api/v1/packages", { headers: auth, data: {
-    manifest: { apiVersion: "modai.dev/v1", kind: "Package", metadata: { name: "@ui/reviewer", version: "1.0.0", description: "Agente de revisión usado por las pruebas del panel" },
-      spec: { category: "agent", contributes: { agents: [{ name: "reviewer", instructions: "Revisa el código con evidencia.", skills: [], capabilities: [], memory: { read: ["project"], write: false } }] } } },
-    files: [],
-  } });
+  const published = await request.post("/api/v1/packages", {
+    headers: auth,
+    data: {
+      manifest: {
+        apiVersion: "modai.dev/v1",
+        kind: "Package",
+        metadata: {
+          name: "@ui/reviewer",
+          version: "1.0.0",
+          description: "Agente de revisión usado por las pruebas del panel",
+        },
+        spec: {
+          category: "agent",
+          contributes: {
+            agents: [
+              {
+                name: "reviewer",
+                instructions: "Revisa el código con evidencia.",
+                skills: [],
+                capabilities: [],
+                memory: { read: ["project"], write: false },
+              },
+            ],
+          },
+        },
+      },
+      files: [],
+    },
+  });
   expect(published.status(), await published.text()).toBe(201);
 
   const fullCatalog: string[] = [];
   page.on("request", (sent) => {
     const url = new URL(sent.url());
     // Only the paginated catalog, the summary, usage and a single package by name are allowed.
-    if (url.pathname === "/api/v1/packages" && !url.searchParams.get("name")) fullCatalog.push(url.pathname + url.search);
+    if (url.pathname === "/api/v1/packages" && !url.searchParams.get("name"))
+      fullCatalog.push(url.pathname + url.search);
   });
   await login(page);
 
@@ -208,10 +255,14 @@ test("Resumen, Agentes, Ejecuciones y Conectar no descargan el catálogo complet
   // Agentes is no longer a menu: old links land on the Agentes tab of Paquetes, and the agent opens from its detail.
   await page.goto("/admin#/agents");
   await expect(page).toHaveURL(/#\/packages\?type=agents/);
-  await expect(page.getByRole("toolbar", { name: "Tipo de paquete" }).getByRole("button", { name: "Agentes" })).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("toolbar", { name: "Tipo de paquete" }).getByRole("button", { name: "Agentes" }),
+  ).toHaveAttribute("aria-pressed", "true");
   await page.locator(".card", { hasText: "@ui/reviewer" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Usar reviewer" }).click();
-  await expect(page.getByRole("dialog").locator("#activateCommand")).toContainText("modai agent activate @ui/reviewer@1.0.0");
+  await expect(page.getByRole("dialog").locator("#activateCommand")).toContainText(
+    "modai agent activate @ui/reviewer@1.0.0",
+  );
   await page.getByRole("dialog").getByRole("button", { name: "Cerrar" }).first().click();
   await page.goto("/admin#/runs");
   await expect(page.locator("main")).toBeVisible();
@@ -222,7 +273,9 @@ test("Resumen, Agentes, Ejecuciones y Conectar no descargan el catálogo complet
 });
 
 test("elimina un proyecto tras confirmar escribiendo su identificador", async ({ page, request }) => {
-  expect((await request.post("/api/v1/projects", { headers: auth, data: { id: "ui-borrar", name: "Para borrar" } })).ok()).toBeTruthy();
+  expect(
+    (await request.post("/api/v1/projects", { headers: auth, data: { id: "ui-borrar", name: "Para borrar" } })).ok(),
+  ).toBeTruthy();
   await login(page);
   await page.goto("/admin#/projects");
   await page.getByRole("button", { name: "Eliminar el proyecto Para borrar (ui-borrar)" }).click();
@@ -236,7 +289,10 @@ test("elimina un proyecto tras confirmar escribiendo su identificador", async ({
   await expect(page.locator("#projectResults")).toContainText("ui-shop");
 });
 
-test("la versión de un paquete nuevo no puede repetir ni ser menor que la última publicada", async ({ page, request }) => {
+test("la versión de un paquete nuevo no puede repetir ni ser menor que la última publicada", async ({
+  page,
+  request,
+}) => {
   await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui" } });
   await publish(request, "@ui/ver-check", "1.2.0");
   await login(page);
@@ -261,17 +317,43 @@ test("la versión de un paquete nuevo no puede repetir ni ser menor que la últi
   await expect(dialog.locator("#pkgVersionHint")).not.toHaveClass(/invalid/);
 });
 
-test("el detalle de un paquete con features arma el comando de instalación respetando requires y conflicts", async ({ page, request }) => {
+test("el detalle de un paquete con features arma el comando de instalación respetando requires y conflicts", async ({
+  page,
+  request,
+}) => {
   await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui" } });
-  await publish(request, "@ui/health-flags", "1.0.0", {
-    permissions: ["project.source"],
-    contributes: { knowledge: [{ path: "knowledge/README.md", title: "Guía" }], components: [{ name: "health", path: "component", target: "src/modules/{component}" }] },
-    features: {
-      metrics: { description: "Métricas", default: true, overlays: [{ component: "health", path: "features/metrics" }] },
-      tls: { description: "TLS", requires: ["metrics"], overlays: [{ component: "health", path: "features/tls" }] },
-      legacy: { description: "Legacy", conflicts: ["tls"], overlays: [{ component: "health", path: "features/legacy" }] },
+  await publish(
+    request,
+    "@ui/health-flags",
+    "1.0.0",
+    {
+      permissions: ["project.source"],
+      contributes: {
+        knowledge: [{ path: "knowledge/README.md", title: "Guía" }],
+        components: [{ name: "health", path: "component", target: "src/modules/{component}" }],
+      },
+      features: {
+        metrics: {
+          description: "Métricas",
+          default: true,
+          overlays: [{ component: "health", path: "features/metrics" }],
+        },
+        tls: { description: "TLS", requires: ["metrics"], overlays: [{ component: "health", path: "features/tls" }] },
+        legacy: {
+          description: "Legacy",
+          conflicts: ["tls"],
+          overlays: [{ component: "health", path: "features/legacy" }],
+        },
+      },
     },
-  }, [file("knowledge/README.md", "# Guía\n"), file("component/health.ts", "x"), file("features/metrics/m.ts", "m"), file("features/tls/t.ts", "t"), file("features/legacy/l.ts", "l")]);
+    [
+      file("knowledge/README.md", "# Guía\n"),
+      file("component/health.ts", "x"),
+      file("features/metrics/m.ts", "m"),
+      file("features/tls/t.ts", "t"),
+      file("features/legacy/l.ts", "l"),
+    ],
+  );
   await login(page);
   await page.goto("/admin#/packages?name=@ui/health-flags");
   const dialog = page.getByRole("dialog");

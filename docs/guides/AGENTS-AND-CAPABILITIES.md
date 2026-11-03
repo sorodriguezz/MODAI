@@ -109,11 +109,11 @@ Las skills deben declararse como dependencias y resolver a un paquete que contri
 
 MODAI trae las herramientas de conocimiento y memoria (definidas en `@modai/contracts/agent-tools`); ningún paquete tiene que aportarlas:
 
-| Herramienta | Comportamiento |
-|---|---|
-| `modai_search_knowledge` | Busca entre los paquetes fijados del bundle |
-| `modai_recall` | Recupera memoria según los ámbitos declarados por el agente |
-| `modai_remember` | Guarda memoria de proyecto; exige `memory.write: true` (si no, publicar o componer falla con `MEMORY_POLICY`) y permiso de la API key |
+| Herramienta              | Comportamiento                                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `modai_search_knowledge` | Busca entre los paquetes fijados del bundle                                                                                           |
+| `modai_recall`           | Recupera memoria según los ámbitos declarados por el agente                                                                           |
+| `modai_remember`         | Guarda memoria de proyecto; exige `memory.write: true` (si no, publicar o componer falla con `MEMORY_POLICY`) y permiso de la API key |
 
 Los esquemas validan los argumentos antes de invocar la herramienta. Publicar un paquete no inicia ningún proceso.
 

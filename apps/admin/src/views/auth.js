@@ -1,7 +1,7 @@
-import { html, mount, $ } from "../lib/html.js";
-import { icon } from "../lib/icons.js";
 import { post } from "../lib/api.js";
-import { bindForm, passwordField, strengthMeter, bindStrength } from "../lib/ui.js";
+import { $, html, mount } from "../lib/html.js";
+import { icon } from "../lib/icons.js";
+import { bindForm, bindStrength, passwordField, strengthMeter } from "../lib/ui.js";
 import { state } from "../state.js";
 
 function themeSwitcher() {
@@ -47,7 +47,9 @@ function bindTheme(root) {
 /** Login screen. `onSuccess(user)` is called after the session cookie is set. */
 export function renderLogin({ onSuccess, notice }) {
   const root = $("authScreen");
-  mount(root, frame(html`
+  mount(
+    root,
+    frame(html`
     <div class="auth-card-head">
       <span class="logo-mark mobile-only" aria-hidden="true">M</span>
       <h1>Inicia sesión</h1>
@@ -67,13 +69,17 @@ export function renderLogin({ onSuccess, notice }) {
       <summary>¿No puedes entrar?</summary>
       <p>Pide a una persona administradora que restablezca tu contraseña desde <b>Usuarios</b>. Las API keys sirven para la CLI y MCP, no para este panel.</p>
     </details>
-  `));
+  `),
+  );
   bindTheme(root);
   const form = root.querySelector("#loginForm");
   bindForm(form, async () => {
     let user;
     try {
-      ({ user } = await post("/auth/login", { username: form.loginUsername.value.trim(), password: form.loginPassword.value }));
+      ({ user } = await post("/auth/login", {
+        username: form.loginUsername.value.trim(),
+        password: form.loginPassword.value,
+      }));
     } catch (error) {
       // Keep the username, clear the password and return focus to it.
       form.loginPassword.value = "";
@@ -90,7 +96,9 @@ export function renderLogin({ onSuccess, notice }) {
 export function renderSetup({ onSuccess }) {
   const root = $("authScreen");
   const min = state.minPasswordLength;
-  mount(root, frame(html`
+  mount(
+    root,
+    frame(html`
     <div class="auth-card-head">
       <span class="badge tone-info">Primer inicio</span>
       <h1>Crea la cuenta de administración</h1>
@@ -108,7 +116,8 @@ export function renderSetup({ onSuccess }) {
       <div class="form-error" role="alert" hidden></div>
       <button class="btn primary block large" type="submit">Crear administrador y entrar</button>
     </form>
-  `));
+  `),
+  );
   bindTheme(root);
   const form = root.querySelector("#setupForm");
   bindStrength(form.setupPassword, root.querySelector("#setupStrength"));

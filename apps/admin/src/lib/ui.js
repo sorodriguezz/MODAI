@@ -1,4 +1,4 @@
-import { html, mount, raw, $, esc } from "./html.js";
+import { $, esc, html, mount, raw } from "./html.js";
 import { icon, iconMarkup } from "./icons.js";
 
 // ------------------------------------------------------------------ format
@@ -15,31 +15,58 @@ export function formatDate(value, empty = "—") {
 export function relativeTime(value, empty = "Nunca") {
   if (!value) return empty;
   const seconds = (new Date(value).getTime() - Date.now()) / 1000;
-  const units = [["year", 31536000], ["month", 2592000], ["week", 604800], ["day", 86400], ["hour", 3600], ["minute", 60]];
-  for (const [unit, size] of units) if (Math.abs(seconds) >= size) return relativeFormat.format(Math.round(seconds / size), unit);
+  const units = [
+    ["year", 31536000],
+    ["month", 2592000],
+    ["week", 604800],
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+  ];
+  for (const [unit, size] of units)
+    if (Math.abs(seconds) >= size) return relativeFormat.format(Math.round(seconds / size), unit);
   return "hace un momento";
 }
 
 export function timeTag(value, empty) {
-  return value ? html`<time datetime="${value}" title="${formatDate(value)}">${relativeTime(value, empty)}</time>` : html`<span class="muted">${empty ?? "Nunca"}</span>`;
+  return value
+    ? html`<time datetime="${value}" title="${formatDate(value)}">${relativeTime(value, empty)}</time>`
+    : html`<span class="muted">${empty ?? "Nunca"}</span>`;
 }
 
 export function csv(value) {
-  return String(value ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+  return String(value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 export function initials(name) {
-  return String(name || "?").split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("") || "?";
+  return (
+    String(name || "?")
+      .split(/[\s._-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0].toUpperCase())
+      .join("") || "?"
+  );
 }
 
 // ------------------------------------------------------------------ labels
 
-export const roleLabels = { admin: "Administración global", "org-admin": "Administración de organización", publisher: "Publicación", worker: "Worker", reader: "Lectura" };
+export const roleLabels = {
+  admin: "Administración global",
+  "org-admin": "Administración de organización",
+  publisher: "Publicación",
+  worker: "Worker",
+  reader: "Lectura",
+};
 export const roleDescriptions = {
   reader: "Consulta catálogo, conocimiento y la memoria de sus proyectos.",
   publisher: "Además publica paquetes y conocimiento, crea proyectos, guarda memoria y envía tareas.",
   worker: "Pensado para workers: reclama y completa ejecuciones de sus proyectos.",
-  "org-admin": "Gestiona usuarios, API keys, proyectos y namespaces de sus organizaciones, y publica en sus namespaces.",
+  "org-admin":
+    "Gestiona usuarios, API keys, proyectos y namespaces de sus organizaciones, y publica en sus namespaces.",
   admin: "Control total: todas las organizaciones, auditoría, backups y retención.",
 };
 
@@ -47,8 +74,26 @@ export function roleBadge(role) {
   return html`<span class="badge role-${role}">${roleLabels[role] || role}</span>`;
 }
 
-const statusTone = { active: "success", completed: "success", deprecated: "warning", queued: "neutral", running: "info", yanked: "danger", failed: "danger", cancelled: "neutral" };
-const statusLabels = { active: "Activa", deprecated: "Deprecada", yanked: "Retirada", queued: "En cola", running: "En curso", completed: "Completada", failed: "Fallida", cancelled: "Cancelada" };
+const statusTone = {
+  active: "success",
+  completed: "success",
+  deprecated: "warning",
+  queued: "neutral",
+  running: "info",
+  yanked: "danger",
+  failed: "danger",
+  cancelled: "neutral",
+};
+const statusLabels = {
+  active: "Activa",
+  deprecated: "Deprecada",
+  yanked: "Retirada",
+  queued: "En cola",
+  running: "En curso",
+  completed: "Completada",
+  failed: "Fallida",
+  cancelled: "Cancelada",
+};
 export function statusBadge(status) {
   return html`<span class="badge tone-${statusTone[status] || "neutral"}"><span class="dot" aria-hidden="true"></span>${statusLabels[status] || status}</span>`;
 }
@@ -60,7 +105,10 @@ export function toast(message, tone = "success") {
   const item = document.createElement("div");
   item.className = "toast tone-" + tone;
   item.setAttribute("role", tone === "error" ? "alert" : "status");
-  mount(item, html`${icon(tone === "error" ? "alert" : tone === "info" ? "info" : "check")}<span>${message}</span><button class="icon-button small" type="button" aria-label="Cerrar notificación">${icon("x", 16)}</button>`);
+  mount(
+    item,
+    html`${icon(tone === "error" ? "alert" : tone === "info" ? "info" : "check")}<span>${message}</span><button class="icon-button small" type="button" aria-label="Cerrar notificación">${icon("x", 16)}</button>`,
+  );
   const close = () => {
     item.classList.add("leaving");
     setTimeout(() => item.remove(), 180);
@@ -95,7 +143,13 @@ export function openDialog({ title, description, body, size = "md", onClose } = 
     if (returnFocus && document.contains(returnFocus)) returnFocus.focus();
   };
   if (!dialog.open) dialog.showModal();
-  requestAnimationFrame(() => (container.querySelector("[autofocus], input:not([type=hidden]), select, textarea") || container.querySelector("button") || dialog.querySelector(".dialog-close"))?.focus());
+  requestAnimationFrame(() =>
+    (
+      container.querySelector("[autofocus], input:not([type=hidden]), select, textarea") ||
+      container.querySelector("button") ||
+      dialog.querySelector(".dialog-close")
+    )?.focus(),
+  );
   return container;
 }
 
@@ -108,7 +162,10 @@ export function closeDialog() {
 export function closeDialogAndWait() {
   const dialog = $("dialog");
   if (!dialog.open) return Promise.resolve();
-  return new Promise((resolve) => { dialog.addEventListener("close", resolve, { once: true }); dialog.close(); });
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", resolve, { once: true });
+    dialog.close();
+  });
 }
 
 export function initDialog() {
@@ -157,7 +214,18 @@ export function confirmDialog({ title, message, confirmLabel = "Confirmar", dang
 }
 
 /** Simple one-field prompt (e.g. deprecation message). Resolves to the value or null. */
-export function promptDialog({ title, message, label, placeholder = "", value = "", confirmLabel = "Guardar", danger = false, required = true, multiline = false, action }) {
+export function promptDialog({
+  title,
+  message,
+  label,
+  placeholder = "",
+  value = "",
+  confirmLabel = "Guardar",
+  danger = false,
+  required = true,
+  multiline = false,
+  action,
+}) {
   return new Promise((resolve) => {
     let done = false;
     const body = openDialog({
@@ -229,7 +297,15 @@ export function setBusy(button, busy) {
 }
 
 /** Password input with show/hide toggle. */
-export function passwordField({ id, label, autocomplete = "current-password", hint, minlength, value = "", required = true }) {
+export function passwordField({
+  id,
+  label,
+  autocomplete = "current-password",
+  hint,
+  minlength,
+  value = "",
+  required = true,
+}) {
   return html`<div class="field">
     <label for="${id}">${label}</label>
     <div class="input-group">
@@ -274,7 +350,8 @@ export function bindStrength(input, meter) {
   input.addEventListener("input", update);
   update();
 }
-export const strengthMeter = (id) => html`<div class="strength" id="${id}" data-level="-1" aria-live="polite"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="strength-label"></span></div>`;
+export const strengthMeter = (id) =>
+  html`<div class="strength" id="${id}" data-level="-1" aria-live="polite"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="strength-label"></span></div>`;
 
 export function generatePassword(length = 18) {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789-_.!";

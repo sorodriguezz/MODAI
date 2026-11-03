@@ -35,4 +35,8 @@ spec:
         - { component: health, path: features/metrics/component }
       contributes:
         knowledge:
-          - { path: features/metrics/docs/METRICS.md, title: Métricas del health module, tags: [observability, prometheus] }
+          - {
+              path: features/metrics/docs/METRICS.md,
+              title: Métricas del health module,
+              tags: [observability, prometheus],
+            }

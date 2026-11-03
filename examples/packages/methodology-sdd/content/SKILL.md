@@ -1,4 +1,5 @@
 ---
+
 name: specification-driven-development
 description: Convierte una intención en criterios verificables antes de implementar.
 ---
