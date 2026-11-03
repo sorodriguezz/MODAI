@@ -65,7 +65,7 @@ El usuario instala después:
 
 ```sh
 npm install -g @sorodriguez/modai
-modai connect https://modai.tu-dominio.cl
+modai server connect https://modai.tu-dominio.cl
 ```
 
 La publicación no levanta el servidor. El servidor se despliega mediante Docker y tiene su URL propia. Usa una nueva versión del CLI para cada publicación; verifica el nombre y la versión en npm antes del paso público. No se ha publicado ningún paquete durante esta implementación.

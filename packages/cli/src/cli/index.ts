@@ -5,6 +5,7 @@ import { isV1Project, loadV1Project } from "@modai/core";
 import { registerAgentCommands, commaList } from "./agent-commands.js";
 import { registerClientCommands } from "./client-commands.js";
 import { effectiveConnection } from "./connection.js";
+import { applyHelpSections, rewriteLegacyCommand } from "./groups.js";
 import { print, setJsonMode } from "./output.js";
 import { registerUpgradeCommand, startUpdateNotice } from "./upgrade.js";
 import { registerAuthoringCommands } from "./commands/authoring.js";
@@ -18,7 +19,7 @@ import { registerWorkspaceCommands } from "../v1/workspace.js";
 import { tokenFor } from "../v1/runtime.js";
 
 const program = new Command();
-program.name("modai").description("MODAI: gestor de paquetes y capacidades para agentes de IA").version("0.8.0")
+program.name("modai").description("MODAI: gestor de paquetes y capacidades para agentes de IA").version("0.8.1")
   .option("--json", "Salida JSON para scripts (en cualquier comando)")
   .hook("preAction", () => setJsonMode(Boolean(program.opts().json)));
 
@@ -40,11 +41,17 @@ registerClientCommands(program, () => {
 }, print);
 registerUpgradeCommand(program, print);
 
+applyHelpSections(program);
+
 program.configureOutput({ outputError: (message) => process.stderr.write(message) });
-const showUpdateNotice = ["upgrade", "self-update", "worker"].includes(process.argv[2] ?? "") ? () => {} : startUpdateNotice(program.version()!);
+const argv = rewriteLegacyCommand(process.argv, message => process.stderr.write(message));
+const words = argv.slice(2).filter(value => !value.startsWith("-"));
+// No update check while upgrading, nor in a long-running worker.
+const quiet = ["upgrade", "self-update"].includes(words[0] ?? "") || (words[0] === "agent" && words[1] === "worker");
+const showUpdateNotice = quiet ? () => {} : startUpdateNotice(program.version()!);
 
 try {
-  await program.parseAsync(process.argv);
+  await program.parseAsync(argv);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`Error: ${message}\n`);

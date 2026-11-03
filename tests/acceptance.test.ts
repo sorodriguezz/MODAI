@@ -51,9 +51,9 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
 
   assert.match(await modai(dev, "--json", "package", "validate", "fake-browser"), /"score"/);
   assert.match(await modai(dev, "package", "validate", "fake-browser"), /^Score: \d+\/100/m, "sin --json la salida es legible");
-  await modai(dev, "publish", "fake-browser", "--registry", registry);
-  await modai(dev, "publish", "regression", "--registry", registry);
-  assert.match(await modaiFails(dev, "publish", "regression", "--registry", registry), /inmutable/);
+  await modai(dev, "package", "publish", "fake-browser", "--registry", registry);
+  await modai(dev, "package", "publish", "regression", "--registry", registry);
+  assert.match(await modaiFails(dev, "package", "publish", "regression", "--registry", registry), /inmutable/);
 
   // 2. A project installs it from the shared registry. No MODAI server exists anywhere.
   const project = join(root, "shop");
@@ -72,12 +72,12 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
   assert.match(lock.packages["@acme/regression"].integrity, /^sha256-[a-f0-9]{64}$/);
   assert.ok(existsSync(join(project, ".agents/skills/regression/SKILL.md")));
   assert.match(readFileSync(join(project, "AGENTS.md"), "utf8"), /browser_run_tests/);
-  const capabilities = JSON.parse(await modai(project, "capabilities", "--json"));
+  const capabilities = JSON.parse(await modai(project, "capability", "list", "--json"));
   assert.equal(capabilities.tools[0].authorized, false, "instalar no equivale a autorizar");
-  assert.match(await modaiFails(project, "tools", "run", "browser_run_tests"), /modai grant/);
+  assert.match(await modaiFails(project, "capability", "run", "browser_run_tests"), /modai permissions grant/);
 
   // 3. Connect to a compatible agent through MCP; authorise explicitly; run.
-  await modai(project, "grant", "@acme/fake-browser", "--yes");
+  await modai(project, "permissions", "grant", "@acme/fake-browser", "--yes");
   const transport = new StdioClientTransport({ command: process.execPath, args: [tsx, join(repo, "packages/cli/src/mcp.ts"), "--project", project], cwd: project, env, stderr: "pipe" });
   const client = new Client({ name: "acceptance-agent", version: "1.0.0" });
   await client.connect(transport);
@@ -92,7 +92,7 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
     assert.match(JSON.stringify(skill.contents), /name: regression/);
     await client.callTool({ name: "modai_remember", arguments: { content: "Las pruebas de pago se ejecutan contra el sandbox del PSP", kind: "decision" } });
   } finally { await client.close(); }
-  assert.match(await modai(project, "recall", "sandbox pago"), /PSP/);
+  assert.match(await modai(project, "memory", "search", "sandbox pago"), /PSP/);
 
   // 4. Reproducible on another machine/clone from modai.yaml + modai.lock alone.
   const clone = join(root, "shop-clone");
@@ -100,7 +100,7 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
   for (const name of ["modai.yaml", "modai.lock"]) writeFileSync(join(clone, name), readFileSync(join(project, name)));
   await modai(clone, "sync", "--frozen", "--allow", "project.instructions");
   assert.equal(readFileSync(join(clone, ".agents/skills/regression/SKILL.md"), "utf8"), readFileSync(join(project, ".agents/skills/regression/SKILL.md"), "utf8"));
-  assert.match(await modaiFails(clone, "tools", "run", "browser_run_tests"), /modai grant/, "las autorizaciones no viajan con el repositorio");
+  assert.match(await modaiFails(clone, "capability", "run", "browser_run_tests"), /modai permissions grant/, "las autorizaciones no viajan con el repositorio");
 
   // 5. Reversible.
   await modai(project, "remove", "@acme/regression");

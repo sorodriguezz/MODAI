@@ -29,7 +29,7 @@ Conecta usando una clave `publisher` o `admin` para crear el proyecto. Una clave
 
 ```sh
 # connect solicita la API key con entrada oculta; MODAI_API_TOKEN permite automatizarlo.
-modai connect https://modai.equipo.cl
+modai server connect https://modai.equipo.cl
 cd mi-proyecto
 modai init --name mi-proyecto
 modai status
@@ -152,16 +152,16 @@ El ejecutor construye el contexto del bundle y realiza un ciclo limitado de llam
 ```sh
 # En el proyecto que solicita el trabajo:
 modai agent submit 'Revisa las decisiones de arquitectura'
-modai runs list
-modai runs show ID_EJECUCION
-modai runs cancel ID_EJECUCION
+modai agent runs list
+modai agent runs show ID_EJECUCION
+modai agent runs cancel ID_EJECUCION
 
 # En otro equipo, con API key worker y Ollama local:
-modai connect https://modai.equipo.cl
-modai worker --project ID_PROYECTO --model MODELO_LOCAL
+modai server connect https://modai.equipo.cl
+modai agent worker --project ID_PROYECTO --model MODELO_LOCAL
 ```
 
-El worker exige publicadores localmente autorizados por defecto. Registra sus claves públicas con `modai trust public.pem` antes de ejecutar. Para un catálogo de desarrollo explícitamente sin firmas, usa `--signature-policy optional`; el worker nunca reduce una política más estricta del servidor o de su configuración global.
+El worker exige publicadores localmente autorizados por defecto. Registra sus claves públicas con `modai permissions trust public.pem` antes de ejecutar. Para un catálogo de desarrollo explícitamente sin firmas, usa `--signature-policy optional`; el worker nunca reduce una política más estricta del servidor o de su configuración global.
 
 Cada tarea conserva el bundle y las versiones del momento de envío. El worker reclama una tarea con un lease de 60 segundos y lo renueva durante la ejecución. Un worker caído permite reclamar la tarea al vencer el lease, con un máximo de tres intentos. Un lease viejo no puede finalizar una tarea reclamada por otro worker. La cancelación invalida el lease y el worker aborta al detectarlo en su siguiente renovación.
 
@@ -175,8 +175,8 @@ Guardar memoria es una llamada explícita del agente o del usuario. No modifica 
 
 ## Confianza y límites
 
-- `modai signatures optional|signed|trusted` configura el mínimo del cliente.
-- `modai trust public.pem` autoriza un publicador localmente por fingerprint.
+- `modai permissions signatures optional|signed|trusted` configura el mínimo del cliente.
+- `modai permissions trust public.pem` autoriza un publicador localmente por fingerprint.
 - `MODAI_SIGNATURE_POLICY` configura el mínimo del servidor.
 - `modai admin trust-publisher public.pem --label equipo` registra la confianza del servidor, incluso antes de publicar el primer paquete.
 - Una firma válida acredita integridad y autoría, no inocuidad de las instrucciones o herramientas.

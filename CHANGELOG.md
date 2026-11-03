@@ -1,5 +1,10 @@
 # Cambios
 
+## Sin publicar (0.9.0)
+
+- **Comandos agrupados**: `modai --help` muestra secciones (Proyecto, Lo que instalan los paquetes, Contexto y memoria, Publicar paquetes, Servidor, Este equipo) y los comandos sueltos pasan a su grupo: `server connect/ping/whoami/logout`, `memory add/search/list/update/remove` (antes `remember`, `recall`, `memories`, `memory-update`, `forget`), `context search`, `package publish/deprecate/yank/unpublish`, `permissions grant/revoke/trust/signatures`, `capability list/tools/run/providers/use`, `agent runs` y `agent worker`, `client embed` y `project create`. Los nombres anteriores siguen funcionando, ocultos en la ayuda, y avisan del nuevo.
+- **Eliminar proyectos** desde el panel (confirmando con su identificador), con `modai project delete <id>` o `DELETE /api/v1/projects/:id`. Borra su memoria de proyecto y de sesión, sus ejecuciones y su registro de instalaciones, y lo quita de los accesos de usuarios y API keys; la memoria de organización se conserva. Solo un administrador o quien creó el proyecto, y no mientras un worker procesa una de sus tareas.
+
 ## Sin publicar (0.8.0)
 
 **Incompatible:** el formato de proyecto 0.5 (`.modai/manifest.yaml`) ya no se opera. Conviértelo con `modai migrate`; `modai init --legacy` y `package scaffold --type` se retiraron.

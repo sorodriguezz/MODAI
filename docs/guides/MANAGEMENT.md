@@ -5,9 +5,9 @@
 ```sh
 modai package scaffold ./capacidad --name @skills/capacidad --type skill
 modai package validate ./capacidad
-modai publish ./capacidad
-modai deprecate @skills/capacidad@0.1.0 --message "usa 0.2.0"
-modai yank @skills/capacidad@0.1.0 --reason "defecto crítico"
+modai package publish ./capacidad
+modai package deprecate @skills/capacidad@0.1.0 --message "usa 0.2.0"
+modai package yank @skills/capacidad@0.1.0 --reason "defecto crítico"
 ```
 
 Las versiones son inmutables. `deprecated` sigue resolviendo; `yanked` queda fuera de nuevas resoluciones. La eliminación física requiere primero yank y luego `unpublish --confirm`.

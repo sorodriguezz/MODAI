@@ -1,5 +1,5 @@
 // Visual package authoring: build a modai.dev/v1 manifest and its files in the browser, validate
-// them against the server rubric and publish an immutable version. Same artifact as `modai publish`.
+// them against the server rubric and publish an immutable version. Same artifact as `modai package publish`.
 import { html, mount, delegate } from "../lib/html.js";
 import { icon } from "../lib/icons.js";
 import { get, post } from "../lib/api.js";

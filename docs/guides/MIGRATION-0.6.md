@@ -17,7 +17,7 @@
 | `type` cerrado | `kind` (`Package`, `Profile`, `Adapter`) + `category` libre + `provides`/`requires` |
 | `modai registry --query x` | `modai registry packages --query x`; `registry add/list/remove` gestionan registries |
 | `modai package scaffold --type skill` | `modai package scaffold --kind package --category …` (v1); `--type` sigue creando un paquete 0.5 |
-| Bindings de herramientas del operador | Las herramientas viajan en el paquete y se habilitan con `modai grant` |
+| Bindings de herramientas del operador | Las herramientas viajan en el paquete y se habilitan con `modai permissions grant` |
 | `GET /api/v1/capabilities` → `{ capabilities }` | Añade `contracts` (provides/requires/tools); filtro `?capability=` |
 | `POST /api/v1/resolve` | Verifica también capacidades: puede responder `409 CAPABILITY_UNSATISFIED` |
 

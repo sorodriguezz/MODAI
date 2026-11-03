@@ -114,9 +114,37 @@ export class AuthService {
     return { id, name: input.name, organizationId: input.organizationId, createdAt };
   }
 
+  /**
+   * Deletes a project with its memories, runs and usage reports, and removes it from every key and user grant.
+   * Organization memories survive: they belong to the organization, not to the project that wrote them.
+   * Only an admin or the project's creator may do it, and never while a worker holds a live lease on one of its runs.
+   */
+  deleteProject(identity: Identity | undefined, id: string): { project: ProjectRecord; memories: number; runs: number } {
+    const actor = this.require(identity, "reader");
+    const project = this.requireProject(actor, id);
+    const createdBy = (this.db.connection.prepare("SELECT created_by AS createdBy FROM projects WHERE id = ?").get(id) as { createdBy: string }).createdBy;
+    if (actor.role !== "admin" && (actor.role === "reader" || createdBy !== actor.id)) throw new AppError(403, "FORBIDDEN", "Solo un administrador o quien creó el proyecto puede eliminarlo");
+    const busy = this.db.connection.prepare("SELECT COUNT(*) AS n FROM runs WHERE project_id = ? AND status = 'running' AND lease_expires_at > ?").get(id, new Date().toISOString()) as { n: number };
+    if (busy.n > 0) throw new AppError(409, "PROJECT_BUSY", `Hay ${busy.n} ejecución(es) en curso en este proyecto; cancélalas o espera a que terminen`);
+    return this.db.connection.transaction(() => {
+      const memoryIds = this.db.connection.prepare("SELECT id FROM memories WHERE project_id = ? AND scope != 'organization'").all(id) as Array<{ id: string }>;
+      for (const memory of memoryIds) this.db.connection.prepare("DELETE FROM memories_fts WHERE id = ?").run(memory.id);
+      this.db.connection.prepare("DELETE FROM memories WHERE project_id = ? AND scope != 'organization'").run(id);
+      const runs = this.db.connection.prepare("DELETE FROM runs WHERE project_id = ?").run(id).changes;
+      this.db.connection.prepare("DELETE FROM project_installations WHERE project_id = ?").run(id);
+      for (const table of ["api_keys", "users"]) {
+        this.db.connection.prepare(`UPDATE ${table} SET project_ids_json = (SELECT json_group_array(value) FROM json_each(${table}.project_ids_json) WHERE value != ?)
+          WHERE EXISTS (SELECT 1 FROM json_each(${table}.project_ids_json) WHERE value = ?)`).run(id, id);
+      }
+      this.db.connection.prepare("DELETE FROM projects WHERE id = ?").run(id);
+      return { project, memories: memoryIds.length, runs: Number(runs) };
+    })();
+  }
+
   listProjects(identity: Identity | undefined): ProjectRecord[] {
     const actor = this.require(identity, "reader");
-    return (this.db.connection.prepare("SELECT id, name, organization_id AS organizationId, created_by AS createdBy, created_at AS createdAt FROM projects ORDER BY name").all() as Array<ProjectRecord & { createdBy: string }>).filter(row => actor.role === "admin" || row.createdBy === actor.id || actor.projectIds.includes(row.id)).map(({ createdBy, ...project }) => project);
+    return (this.db.connection.prepare("SELECT id, name, organization_id AS organizationId, created_by AS createdBy, created_at AS createdAt FROM projects ORDER BY name").all() as Array<ProjectRecord & { createdBy: string }>).filter(row => actor.role === "admin" || row.createdBy === actor.id || actor.projectIds.includes(row.id))
+      .map(({ createdBy, ...project }) => ({ ...project, canDelete: actor.role === "admin" || (actor.role !== "reader" && createdBy === actor.id) }));
   }
 
   createOrganization(name: string): { id: string; name: string } {

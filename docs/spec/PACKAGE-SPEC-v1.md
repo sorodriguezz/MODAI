@@ -82,7 +82,7 @@ El resolvedor **no instala proveedores implícitamente**: la decisión de qué i
 | `skills[]` | `{ name, path, files? }`; `path` es una carpeta con `SKILL.md` ([Agent Skills](https://agentskills.io)) | Adaptadores con destino `skills`; recurso MCP `modai://skills/<name>` |
 | `rules[]` | `{ name, path, description? }`; fragmento breve de instrucciones | Bloque administrado o un archivo por regla, según el adaptador |
 | `knowledge[]` | `{ path, title, tags[] }` | Índice local del Context Gateway; nunca se carga entero en un prompt |
-| `tools[]` | `{ name, description, inputSchema, command, args, envKeys, timeoutMs, readOnly, implements? }` | Herramienta del gateway MCP y `modai tools run`, solo si está autorizada |
+| `tools[]` | `{ name, description, inputSchema, command, args, envKeys, timeoutMs, readOnly, implements? }` | Herramienta del gateway MCP y `modai capability run`, solo si está autorizada |
 | `mcpServers[]` | `{ name, description, command, args, envKeys }` | Proceso MCP proxied por el gateway, solo si está autorizado |
 | `agents[]` | definición de agente (instrucciones, skills, capacidades, memoria) | Composición por el servidor (ADR-003) |
 | `components[]` | `{ name, path, target, description?, language?, tags[] }`; código reutilizable (módulos de backend, componentes de UI, servicios…). Requiere `project.source` | Cada archivo de `path` se copia bajo `target` (marcadores `{component}`, `{package}`). Archivos administrados: `modai remove` retira solo los intactos y conserva los editados |
@@ -108,7 +108,7 @@ El resolvedor **no instala proveedores implícitamente**: la decisión de qué i
 | `filesystem.read`, `filesystem.write`, `network` | Intención declarada de la herramienta; se muestra al autorizar. |
 | `env.read` | Reenviar las variables declaradas en `envKeys`. |
 
-Las contribuciones ejecutables se habilitan con `modai grant <paquete>`, que muestra comandos y permisos y concede **todos** los declarados, por equipo, ligados a la `integrity` exacta. MODAI no es un sandbox: un proceso autorizado corre con los permisos del usuario.
+Las contribuciones ejecutables se habilitan con `modai permissions grant <paquete>`, que muestra comandos y permisos y concede **todos** los declarados, por equipo, ligados a la `integrity` exacta. MODAI no es un sandbox: un proceso autorizado corre con los permisos del usuario.
 
 ## 5. Adaptadores
 

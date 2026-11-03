@@ -8,6 +8,7 @@ import { after, before, test } from "node:test";
 import YAML from "yaml";
 import { LocalRegistry, createProjectFile, loadPackageSource, saveProjectFile } from "@modai/core";
 import { discoverProjects } from "../packages/cli/src/v1/workspace.ts";
+import { LEGACY_COMMANDS, rewriteLegacyCommand } from "../packages/cli/src/cli/groups.ts";
 
 const root = mkdtempSync(join(tmpdir(), "modai-workspace-"));
 const env = { ...process.env, MODAI_CONFIG_DIR: join(root, "config"), MODAI_NO_UPDATE_NOTIFIER: "1", MODAI_SERVER: "", MODAI_API_TOKEN: "" };
@@ -95,8 +96,8 @@ test("modai workspace instala en muchos proyectos con plan previo, sin seguir en
   assert.match(readFileSync(join(repos, "web/modai.yaml"), "utf8"), /@acme\/guide/);
 });
 
-test("modai ping informa si el servidor está arriba, su latencia y si la credencial sirve", async () => {
-  const up = await modai(root, "ping", healthUrl);
+test("modai server ping informa si el servidor está arriba, su latencia y si la credencial sirve", async () => {
+  const up = await modai(root, "server", "ping", healthUrl);
   assert.equal(up.status, 0, up.stderr);
   assert.match(up.stdout, /✓\s+Servidor\s+http:\/\/127\.0\.0\.1:\d+ · ok · \d+ ms/);
   assert.match(up.stdout, /Versión/);
@@ -106,7 +107,7 @@ test("modai ping informa si el servidor está arriba, su latencia y si la creden
   await new Promise<void>(resolve => closed.listen(0, "127.0.0.1", resolve));
   const closedPort = (closed.address() as { port: number }).port;
   await new Promise(resolve => closed.close(resolve));
-  const down = await modai(root, "--json", "ping", `http://127.0.0.1:${closedPort}`, "--timeout", "2000");
+  const down = await modai(root, "--json", "server", "ping", `http://127.0.0.1:${closedPort}`, "--timeout", "2000");
   assert.equal(down.status, 1);
   const [server] = JSON.parse(down.stdout) as Array<{ status: string; detail: string }>;
   assert.equal(server.status, "error");
@@ -115,7 +116,9 @@ test("modai ping informa si el servidor está arriba, su latencia y si la creden
   const project = join(root, "ping-project");
   mkdirSync(project);
   saveProjectFile(project, createProjectFile("ping", { registries: [{ name: "central", url: healthUrl }, { name: "missing", path: "./no-existe" }], adapters: [] }));
+  // The pre-0.9 spelling still works and says where the command lives now.
   const fromProject = await modai(project, "--json", "ping");
+  assert.match(fromProject.stderr, /'modai ping' ahora es 'modai server ping'/);
   const checks = JSON.parse(fromProject.stdout) as Array<{ check: string; status: string }>;
   assert.ok(checks.some(item => item.check === "Registry missing" && item.status === "aviso"), "revisa también los registries del proyecto");
 });
@@ -136,16 +139,38 @@ test("las salidas son tablas legibles por defecto y JSON con --json en cualquier
   assert.match(refused.stderr, /formato 0\.5[\s\S]*modai migrate/);
 });
 
-test("modai logout olvida servidor y API key, conserva la confianza local y permite conectar otro servidor", async () => {
+test("modai server logout olvida servidor y API key, conserva la confianza local y permite conectar otro servidor", async () => {
   const configDir = join(root, "config");
   mkdirSync(configDir, { recursive: true });
   writeFileSync(join(configDir, "client.yaml"), YAML.stringify({ server: "https://viejo.example", token: "secreto", trustedPublishers: ["abc123"], signaturePolicy: "signed" }));
-  const out = await modai(root, "logout");
+  const out = await modai(root, "server", "logout");
   assert.equal(out.status, 0, out.stderr);
-  assert.match(out.stdout, /Sesión cerrada en https:\/\/viejo\.example[\s\S]*modai connect <url>/);
+  assert.match(out.stdout, /Sesión cerrada en https:\/\/viejo\.example[\s\S]*modai server connect <url>/);
   const saved = YAML.parse(readFileSync(join(configDir, "client.yaml"), "utf8"));
   assert.deepEqual(saved, { trustedPublishers: ["abc123"], signaturePolicy: "signed" }, "la API key no queda en disco");
-  const whoami = await modai(root, "whoami");
+  const whoami = await modai(root, "server", "whoami");
   assert.match(whoami.stderr, /No hay servidor configurado/);
-  assert.match((await modai(root, "logout")).stdout, /No había ninguna sesión/);
+  assert.match((await modai(root, "server", "logout")).stdout, /No había ninguna sesión/);
+});
+
+test("los comandos están agrupados y los nombres antiguos redirigen a su grupo", async () => {
+  const help = await modai(root, "--help");
+  assert.equal(help.status, 0, help.stderr);
+  for (const heading of ["Proyecto:", "Contexto y memoria:", "Publicar paquetes:", "Servidor:", "Este equipo:"]) assert.ok(help.stdout.includes(heading), heading);
+  for (const moved of ["remember", "recall", "forget", "publish", "yank", "grant", "trust", "providers", "worker", "connect", "ping"]) {
+    assert.doesNotMatch(help.stdout, new RegExp(`^  ${moved}\\b`, "m"), `${moved} ya no aparece suelto en la ayuda`);
+  }
+  // Every legacy spelling points to a command that exists.
+  for (const [legacy, target] of Object.entries(LEGACY_COMMANDS)) {
+    const out = await modai(root, ...target, "--help");
+    assert.equal(out.status, 0, `${legacy} → ${target.join(" ")}: ${out.stderr}`);
+  }
+  const warnings: string[] = [];
+  const argv = (...args: string[]) => rewriteLegacyCommand(["node", "modai", ...args], message => warnings.push(message));
+  assert.deepEqual(argv("--json", "remember", "hola", "--kind", "decision"), ["node", "modai", "--json", "memory", "add", "hola", "--kind", "decision"]);
+  assert.deepEqual(argv("tools", "run", "x"), ["node", "modai", "capability", "run", "x"]);
+  assert.deepEqual(argv("admin", "create-project", "--name", "a"), ["node", "modai", "project", "create", "--name", "a"]);
+  assert.deepEqual(argv("admin", "export", "f.json"), ["node", "modai", "admin", "export", "f.json"]);
+  assert.deepEqual(argv("memory", "add", "x"), ["node", "modai", "memory", "add", "x"]);
+  assert.equal(warnings.length, 3);
 });

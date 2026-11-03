@@ -9,6 +9,7 @@ import { listV1 } from "../../v1/list.js";
 import { registryFromArgument, registrySource, requireV1Project, runSync, summarize } from "../../v1/runtime.js";
 import { effectiveConnection } from "../connection.js";
 import { signPackage } from "../package-authoring.js";
+import { group } from "../groups.js";
 import type { Print } from "../output.js";
 
 export function splitPackageSpec(spec: string): { name: string; range: string } {
@@ -26,7 +27,7 @@ function exactVersion(spec: string): { name: string; version: string } {
 
 const serverApi = () => { const connection = effectiveConnection(); return new ApiClient(connection.server, connection.token); };
 
-/** Registries of the project, publishing and the lifecycle of published versions. */
+/** Registries of the project, plus publishing and the lifecycle of published versions (under `modai package`). */
 export function registerRegistryCommands(program: Command, print: Print): void {
   const registry = program.command("registry").description("Registries del proyecto y búsqueda de paquetes");
   registry.command("list").description("Registries configurados en modai.yaml").action(() => listV1("registries", {}, print));
@@ -43,7 +44,8 @@ export function registerRegistryCommands(program: Command, print: Print): void {
     .option("--query <text>", "Filtro de texto").option("--registry <url|path>", "Registry concreto")
     .action(options => listV1("packages", { ...options, available: true }, print));
 
-  program.command("publish")
+  const pkg = group(program, "package", "Crear, validar, publicar y retirar paquetes");
+  pkg.command("publish")
     .description("Publica un paquete inmutable en un registry (servidor MODAI o carpeta local)")
     .argument("[directory]", "Carpeta del paquete", ".")
     .option("--key <private-key>", "Firma el paquete con una clave privada Ed25519")
@@ -57,13 +59,13 @@ export function registerRegistryCommands(program: Command, print: Print): void {
       print(`Publicado ${published.name}@${published.version}, calidad ${published.quality?.score ?? "—"}/100${published.signerFingerprint ? ", firmado" : ""}.`);
     });
 
-  program.command("deprecate").description("Marca una versión como deprecada").argument("<package>", "@scope/nombre@versión").requiredOption("--message <message>")
+  pkg.command("deprecate").description("Marca una versión como deprecada").argument("<package>", "@scope/nombre@versión").requiredOption("--message <message>")
     .action(async (spec: string, options: { message: string }) => { const item = exactVersion(spec); await serverApi().deprecate(item.name, item.version, options.message); print(`Deprecada ${item.name}@${item.version}.`); });
-  program.command("yank").description("Retira una versión de nuevas resoluciones").argument("<package>", "@scope/nombre@versión").requiredOption("--reason <reason>")
+  pkg.command("yank").description("Retira una versión de nuevas resoluciones").argument("<package>", "@scope/nombre@versión").requiredOption("--reason <reason>")
     .action(async (spec: string, options: { reason: string }) => { const item = exactVersion(spec); await serverApi().yank(item.name, item.version, options.reason); print(`Retirada ${item.name}@${item.version}: ya no se resuelve en instalaciones nuevas.`); });
-  program.command("unpublish").description("Elimina definitivamente una versión previamente retirada").argument("<package>", "@scope/nombre@versión").option("--confirm", "Confirma la eliminación irreversible")
+  pkg.command("unpublish").description("Elimina definitivamente una versión previamente retirada").argument("<package>", "@scope/nombre@versión").option("--confirm", "Confirma la eliminación irreversible")
     .action(async (spec: string, options: { confirm?: boolean }) => {
-      if (!options.confirm) throw new Error("Operación irreversible: repite con --confirm después de ejecutar yank.");
+      if (!options.confirm) throw new Error("Operación irreversible: repite con --confirm después de ejecutar modai package yank.");
       const item = exactVersion(spec);
       await serverApi().hardDelete(item.name, item.version);
       print(`Eliminado definitivamente ${item.name}@${item.version}.`);

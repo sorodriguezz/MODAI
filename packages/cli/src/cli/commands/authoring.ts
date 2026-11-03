@@ -6,11 +6,12 @@ import { loadPackageSource, validatePackage } from "@modai/core";
 import { scaffoldV1 } from "../../v1/commands.js";
 import { auditHarness, createHarness } from "../harness-tools.js";
 import { generateSigningKey } from "../package-authoring.js";
+import { group } from "../groups.js";
 import type { Print } from "../output.js";
 
 /** Creating, validating and signing packages and harnesses. */
 export function registerAuthoringCommands(program: Command, print: Print): void {
-  const pkg = program.command("package").description("Herramientas de autoría de paquetes");
+  const pkg = group(program, "package", "Crear, validar, publicar y retirar paquetes");
   pkg.command("scaffold")
     .description("Crea un paquete con la especificación v1")
     .argument("<directory>")

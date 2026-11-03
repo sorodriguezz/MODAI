@@ -1,6 +1,6 @@
 # Servidor MCP
 
-`modai-mcp` es un servidor MCP real por stdio. Usa la conexión de `modai connect`, `MODAI_SERVER` y `MODAI_API_TOKEN`.
+`modai-mcp` es un servidor MCP real por stdio. Usa la conexión de `modai server connect`, `MODAI_SERVER` y `MODAI_API_TOKEN`.
 
 ```json
 {
@@ -29,7 +29,7 @@ Herramientas:
 
 Ejecuta el proceso con el directorio de trabajo del proyecto para que detecte `.modai/manifest.yaml`. Usa token `reader` si no necesita `remember`; este último requiere `publisher`.
 
-Para búsqueda semántica ejecuta primero `modai client setup --download` y `modai embed index` en ese equipo cliente. El servidor MCP utiliza su configuración local de modelos, no la del host Docker. Consulta [modelos del cliente](CLIENT-MODELS.md).
+Para búsqueda semántica ejecuta primero `modai client setup --download` y `modai client embed index` en ese equipo cliente. El servidor MCP utiliza su configuración local de modelos, no la del host Docker. Consulta [modelos del cliente](CLIENT-MODELS.md).
 
 ## Agente activo y capacidades dinámicas
 
@@ -52,7 +52,7 @@ En proyectos v1, `modai-mcp --project <ruta>` funciona **sin servidor**: lee `mo
 | `modai_list_capabilities` | Contratos instalados, proveedor elegido, skills y estado de autorización de herramientas |
 | `modai_project_status` | Dependencias y versiones fijadas |
 | `modai_recall`, `modai_remember` | Memoria local o remota según `context.memory` |
-| herramientas de paquetes | Solo las autorizadas con `modai grant` y cuya copia local coincide con `modai.lock` |
+| herramientas de paquetes | Solo las autorizadas con `modai permissions grant` y cuya copia local coincide con `modai.lock` |
 | `<servidor>__<herramienta>` | Herramientas de `mcpServers` de paquetes autorizados, proxied por el gateway |
 | `modai://skills/<nombre>[/<archivo>]` | Skills instaladas como recursos |
 

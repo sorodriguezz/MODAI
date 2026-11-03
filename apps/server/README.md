@@ -11,8 +11,8 @@ La [CLI](../../packages/cli) funciona sin servidor. Lo levantas cuando quieres q
 | **Registry privado** | Paquetes versionados e inmutables con integridad SHA-256, firma Ed25519 opcional, deprecación y retiro de versiones, y resolución de dependencias por contrato. |
 | **Panel web** (`/admin`) | Catálogo paginado con filtros por tipo, detalle, archivos, calidad y **qué proyectos usan cada paquete** (y en qué versión). Desde aquí se **crean y publican paquetes** (componentes de código, harnesses, skills, conocimiento) y sus nuevas versiones, con edición de archivos y carpetas. |
 | **Conocimiento y memoria** | Documentos que los agentes consultan con búsqueda y memoria por proyecto u organización, compartida por todo el equipo. |
-| **Proyectos y accesos** | Usuarios con contraseña, roles (`reader`, `publisher`, `worker`, `admin`), API keys por persona limitadas a proyectos y namespaces, y organizaciones. |
-| **Agentes y ejecuciones** | Composición de agentes desde paquetes y una cola de tareas que procesan workers (`modai worker`). |
+| **Proyectos y accesos** | Proyectos que se crean y se eliminan desde el panel o la CLI, usuarios con contraseña, roles (`reader`, `publisher`, `worker`, `admin`), API keys por persona limitadas a proyectos y namespaces, y organizaciones. |
+| **Agentes y ejecuciones** | Composición de agentes desde paquetes y una cola de tareas que procesan workers (`modai agent worker`). |
 | **Operación** | Auditoría, métricas Prometheus (`/metrics`), healthcheck (`/health`), export/import de backups y cuotas de almacenamiento. |
 
 ## Levantarlo con Docker
@@ -54,7 +54,7 @@ npm install -g @sorodriguez/modai
 ```
 
 ```bash
-modai connect https://modai.tu-equipo.cl     # pide la API key sin mostrarla
+modai server connect https://modai.tu-equipo.cl     # pide la API key sin mostrarla
 ```
 
 ```bash
@@ -68,7 +68,7 @@ modai add @acme/auth --allow project.source
 Antes de empezar, cada persona puede comprobar que llega al servidor y que su key funciona:
 
 ```bash
-modai ping
+modai server ping
 ```
 
 Los proyectos vinculados con `--project` informan qué tienen instalado al sincronizar; el panel lo muestra en la pestaña **Proyectos** de cada paquete, solo a quien tiene acceso a esos proyectos.
@@ -76,7 +76,7 @@ Los proyectos vinculados con `--project` informan qué tienen instalado al sincr
 Para publicar desde la CLI (con una key de rol `publisher` o `admin`):
 
 ```bash
-modai publish ./mi-paquete
+modai package publish ./mi-paquete
 ```
 
 ## Configuración

@@ -51,7 +51,7 @@ Los usuarios usan los **mismos roles y permisos que las API keys**; todas las co
 
 Cada usuario tiene además:
 
-- **Proyectos**: los que puede ver además de los que cree.
+- **Proyectos**: los que puede ver además de los que cree. Un administrador o quien creó un proyecto puede eliminarlo desde la lista (icono de papelera), escribiendo su identificador para confirmar: se borran su memoria de proyecto y de sesión, sus ejecuciones y su registro de instalaciones; la memoria de organización se conserva.
 - **Organizaciones**: habilitan la memoria de organización.
 - **Namespaces publicables** (`@equipo`, o `*` para todos).
 
@@ -66,7 +66,7 @@ El panel oculta las secciones y acciones que tu rol no permite (por ejemplo, **U
 
 ## 4. API keys y su relación con los usuarios
 
-- Una cuenta del panel **no sirve** para la CLI ni para MCP. Para conectar un equipo, abre **Conectar un cliente**, elige el proyecto y pulsa **Crear API key para este proyecto**: el panel muestra el token una sola vez y los comandos (`modai connect`, `modai init --project …`).
+- Una cuenta del panel **no sirve** para la CLI ni para MCP. Para conectar un equipo, abre **Conectar un cliente**, elige el proyecto y pulsa **Crear API key para este proyecto**: el panel muestra el token una sola vez y los comandos (`modai server connect`, `modai init --project …`).
 - Las API keys se crean, ajustan y revocan en **Accesos**. Su rol no cambia; para otro rol, revoca y crea una nueva.
 - Si en una petición hay cabecera `Authorization: Bearer`, el servidor la usa y **ignora la cookie**. Un Bearer inválido no recurre a la sesión.
 - `MODAI_API_TOKEN` sigue siendo una credencial `admin` completa para la API. Úsala solo para instalación, automatización y recuperación; no la compartas.

@@ -158,3 +158,37 @@ test("los backups conservan qué proyecto usa qué y el resumen del panel no nec
     rmSync(restoredRoot, { recursive: true, force: true });
   }
 });
+
+test("un proyecto se elimina con su memoria, ejecuciones e instalaciones, y sale de los accesos", async () => {
+  const as = (token: string) => ({ authorization: `Bearer ${token}` });
+  const key = async (label: string, role: string, projectIds: string[] = []) =>
+    (await app.inject({ method: "POST", url: "/api/v1/admin/api-keys", headers: auth, payload: { label, role, projectIds } })).json().key.token as string;
+  const owner = await key("owner", "publisher");
+  assert.equal((await app.inject({ method: "POST", url: "/api/v1/projects", headers: as(owner), payload: { id: "doomed", name: "Condenado" } })).statusCode, 201);
+  const member = await key("member", "publisher", ["doomed"]);
+  const reader = await key("reader", "reader", ["doomed"]);
+  assert.equal((await app.inject({ method: "POST", url: "/api/v1/memories", headers: as(owner), payload: { projectId: "doomed", content: "Decisión que se borra con el proyecto", kind: "decision" } })).statusCode, 201);
+  assert.equal((await app.inject({ method: "PUT", url: "/api/v1/projects/doomed/installations", headers: as(owner), payload: { packages: [{ name: "@skills/design-patterns", version: "1.0.0", direct: true }] } })).statusCode, 204);
+
+  const listed = (token: string) => app.inject({ method: "GET", url: "/api/v1/projects", headers: as(token) }).then(response => response.json().projects as Array<{ id: string; canDelete: boolean }>);
+  assert.equal((await listed(owner)).find(item => item.id === "doomed")?.canDelete, true);
+  assert.equal((await listed(member)).find(item => item.id === "doomed")?.canDelete, false, "tener acceso no basta para eliminar");
+
+  const remove = (token: string, confirmation = "doomed") => app.inject({ method: "DELETE", url: "/api/v1/projects/doomed", headers: as(token), payload: { confirmation } });
+  assert.equal((await remove(member)).statusCode, 403);
+  assert.equal((await remove(reader)).statusCode, 403);
+  assert.equal((await remove(owner, "otro")).statusCode, 400, "exige confirmar con el identificador");
+  const deleted = await remove(owner);
+  assert.equal(deleted.statusCode, 200, deleted.body);
+  assert.equal(deleted.json().memories, 1);
+
+  assert.ok(!(await listed(owner)).some(item => item.id === "doomed"));
+  const session = (await app.inject({ method: "GET", url: "/api/v1/session", headers: as(member) })).json();
+  assert.deepEqual(session.projectIds, [], "el proyecto sale de los accesos de las API keys");
+  const usage = (await app.inject({ method: "GET", url: "/api/v1/packages/usage?name=@skills/design-patterns", headers: auth })).json();
+  assert.ok(!usage.projects.some((item: { projectId: string }) => item.projectId === "doomed"), "sin registro de instalaciones huérfano");
+  assert.equal((await app.inject({ method: "GET", url: "/api/v1/memories?projectId=doomed", headers: auth })).statusCode, 403, "el proyecto ya no existe");
+  // Re-creating the id starts empty.
+  await app.inject({ method: "POST", url: "/api/v1/projects", headers: auth, payload: { id: "doomed", name: "Nuevo" } });
+  assert.deepEqual((await app.inject({ method: "GET", url: "/api/v1/memories?projectId=doomed", headers: auth })).json().memories, []);
+});

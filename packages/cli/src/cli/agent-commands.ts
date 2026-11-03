@@ -40,7 +40,7 @@ function executionOptions(command: Command): Command {
 
 /** Agents, remote runs and workers. They work on a v1 project linked to a server project (modai init --project). */
 export function registerAgentCommands(program: Command, print: Print) {
-  const agent = program.command("agent").description("Compone, activa y ejecuta agentes versionados del servidor");
+  const agent = program.command("agent").description("Agentes versionados del servidor: componer, activar, ejecutar, encolar tareas y procesarlas");
   agent.command("list").description("Agentes publicados en el servidor").action(async () => {
     const connection = effectiveConnection();
     print((await new ApiClient(connection.server, connection.token).agents()).map(item => ({ agent: item.name, version: item.version, description: item.description })));
@@ -78,15 +78,15 @@ export function registerAgentCommands(program: Command, print: Print) {
       print(await serverClient(target).submitRun({ projectId: target.projectId, ...item, task, overrides: target.overrides, idempotencyKey: options.idempotencyKey }));
     });
 
-  const runs = program.command("runs").description("Consulta y cancela ejecuciones remotas");
-  runs.command("list").action(async () => {
+  const runs = agent.command("runs").description("Consulta y cancela ejecuciones remotas del proyecto");
+  runs.command("list", { isDefault: true }).description("Últimas ejecuciones del proyecto").action(async () => {
     const target = serverProject();
     print((await serverClient(target).runs(target.projectId)).map(run => ({ id: run.id, agent: `${run.agentName}@${run.agentVersion}`, status: run.status, created: run.createdAt })));
   });
-  runs.command("show").argument("<id>").action(async (id: string) => { const target = serverProject(); print(await serverClient(target).run(id)); });
-  runs.command("cancel").argument("<id>").action(async (id: string) => { const target = serverProject(); print(await serverClient(target).cancelRun(id)); });
+  runs.command("show").description("Detalle y resultado de una ejecución").argument("<id>").action(async (id: string) => { const target = serverProject(); print(await serverClient(target).run(id)); });
+  runs.command("cancel").description("Cancela una ejecución en cola o en curso").argument("<id>").action(async (id: string) => { const target = serverProject(); print(await serverClient(target).cancelRun(id)); });
 
-  executionOptions(program.command("worker").description("Ejecutor opcional de tareas de un proyecto del servidor"))
+  executionOptions(agent.command("worker").description("Procesa en este equipo las tareas encoladas de un proyecto del servidor"))
     .requiredOption("--project <id>").option("--once", "Procesa una tarea y termina").option("--signature-policy <policy>", "optional, signed o trusted", "trusted")
     .action(async options => {
       const connection = effectiveConnection();

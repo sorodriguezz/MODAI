@@ -28,7 +28,7 @@ modai client setup --embedding-model embeddinggemma:300m --download
 modai client setup --url http://127.0.0.1:11434 --download --with-chat
 ```
 
-La configuración se guarda en `~/.modai/local-models.yaml`, fuera de los repositorios. Incluye URL local, modelo de embeddings, digest de sus pesos, tamaño de lote y recomendación de chat. No incluye el inventario de hardware. La conexión y el token del registro se gestionan por separado con `modai connect`.
+La configuración se guarda en `~/.modai/local-models.yaml`, fuera de los repositorios. Incluye URL local, modelo de embeddings, digest de sus pesos, tamaño de lote y recomendación de chat. No incluye el inventario de hardware. La conexión y el token del registro se gestionan por separado con `modai server connect`.
 
 ## Criterio de selección
 
@@ -66,9 +66,9 @@ Evalúa también preguntas representativas de tu proyecto y verifica si los resu
 Conecta primero la CLI al registro. Necesitas `publisher` o `admin` para subir vectores; `reader` basta para buscarlos cuando ya están indexados.
 
 ```sh
-modai embed index
-modai embed index --package @skills/design-patterns
-modai embed search "cuándo elegir Strategy frente a State"
+modai client embed index
+modai client embed index --package @skills/design-patterns
+modai client embed search "cuándo elegir Strategy frente a State"
 ```
 
 La indexación pagina todo el conocimiento disponible, o filtra por el paquete solicitado. Los documentos se fragmentan por caracteres Unicode, con solapamiento, y se procesan en lotes. Se usa `truncate: false` para que el runtime avise en vez de cortar silenciosamente la entrada. Esta versión agrega los fragmentos en un centroide normalizado por documento: recupera documentos completos, no pasajes individuales. Para documentos extensos, separarlos por tema suele mejorar precisión.
@@ -77,7 +77,7 @@ El espacio vectorial incluye el nombre del modelo, su digest y la versión del p
 
 El servidor valida un hash del texto antes de aceptar cada vector; si un documento cambia durante el cálculo, responde `DOCUMENT_CHANGED` y debes indexar otra vez. Las ediciones manuales invalidan sus vectores anteriores. El hash y el espacio no contienen inventarios de hardware ni claves.
 
-Si la operación se interrumpe, puedes repetir `modai embed index`: las escrituras por documento y espacio son idempotentes. Esta versión vuelve a calcular también documentos ya indexados; no tiene caché incremental. Los snapshots portables no incluyen vectores: se reconstruyen desde los documentos con el cliente, o se conservan mediante backup del volumen SQLite.
+Si la operación se interrumpe, puedes repetir `modai client embed index`: las escrituras por documento y espacio son idempotentes. Esta versión vuelve a calcular también documentos ya indexados; no tiene caché incremental. Los snapshots portables no incluyen vectores: se reconstruyen desde los documentos con el cliente, o se conservan mediante backup del volumen SQLite.
 
 ## Uso desde MCP
 

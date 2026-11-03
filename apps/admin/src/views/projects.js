@@ -1,7 +1,7 @@
 import { html, mount, delegate } from "../lib/html.js";
 import { icon } from "../lib/icons.js";
-import { post } from "../lib/api.js";
-import { openDialog, closeDialog, bindForm, toast, skeletonRows, emptyState, errorState, timeTag, debounce, codeBlock, copyText } from "../lib/ui.js";
+import { post, del } from "../lib/api.js";
+import { openDialog, closeDialog, bindForm, confirmDialog, toast, skeletonRows, emptyState, errorState, timeTag, debounce, codeBlock, copyText } from "../lib/ui.js";
 import { store, can } from "../state.js";
 
 function newProject(onCreated) {
@@ -80,6 +80,7 @@ export default {
               <a class="btn small ghost" href="#/memories?projectId=${encodeURIComponent(p.id)}">${icon("brain", 16)}Memoria</a>
               <a class="btn small ghost" href="#/runs?projectId=${encodeURIComponent(p.id)}">${icon("play", 16)}Ejecuciones</a>
               ${can.admin() ? html`<a class="btn small ghost" href="#/connect?projectId=${encodeURIComponent(p.id)}">${icon("link", 16)}Dar acceso</a>` : ""}
+              ${p.canDelete ? html`<button type="button" class="icon-button small danger" data-action="delete" data-id="${p.id}" aria-label="Eliminar el proyecto ${p.name} (${p.id})" title="Eliminar proyecto">${icon("trash", 16)}</button>` : ""}
             </td></tr>`)}</tbody></table></div>`
         : projects.length ? emptyState({ iconName: "search", title: "Sin coincidencias" })
           : emptyState({ iconName: "folder", title: "No tienes proyectos", text: can.createProject() ? "Crea uno para guardar memoria y enviar tareas." : "Pide a la administración que te asigne un proyecto.", action: can.createProject() ? html`<button class="btn primary" data-action="new">${icon("plus")}Nuevo proyecto</button>` : "" }));
@@ -101,6 +102,22 @@ export default {
         if (can.admin()) navigate("connect", { params: { projectId: project.id } });
       }),
       org: () => newOrganization(),
+      delete: async (button) => {
+        const project = projects.find((p) => p.id === button.dataset.id);
+        if (!project) return;
+        let result;
+        const confirmed = await confirmDialog({
+          title: "Eliminar proyecto",
+          message: html`Se eliminará <b>${project.name}</b> junto con su memoria de proyecto y sesión, sus ejecuciones y el registro de paquetes instalados. Se quitará también de los accesos de usuarios y API keys. La memoria de organización se conserva. <b>No se puede deshacer.</b>`,
+          confirmLabel: "Eliminar proyecto",
+          typed: project.id,
+          action: async () => { result = await del(`/projects/${encodeURIComponent(project.id)}`, { confirmation: project.id }); },
+        });
+        if (!confirmed) return;
+        toast(`Proyecto «${project.name}» eliminado (${result.memories} memorias, ${result.runs} ejecuciones)`);
+        store.invalidate("projects");
+        await load(true);
+      },
       copy: (button) => copyText(button.dataset.value),
       retry: () => load(true),
     };

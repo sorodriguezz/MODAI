@@ -14,6 +14,7 @@ import { commaList } from "../cli/agent-commands.js";
 import { confirm, defaultLocalRegistry, memoryProvider, projectRegistry, registrySource, requireV1Project, runSync, summarize, tokenFor } from "./runtime.js";
 import type { SyncReport } from "@modai/core";
 
+import { group } from "../cli/groups.js";
 import type { Print } from "../cli/output.js";
 
 export function parseSpec(spec: string, root: string): { name: string; value: string } {
@@ -39,7 +40,7 @@ export async function initV1(root: string, options: { name?: string; registry?: 
     : server ? [{ name: "central", url: server }] : [{ name: "local", path: defaultLocalRegistry() }];
   const context: ProjectFile["context"] = { memory: (options.memory as "local") ?? (options.project ? "remote" : "local") };
   if (options.project) {
-    if (!server) throw new Error("--project requiere un servidor conectado (modai connect <url>) o --server");
+    if (!server) throw new Error("--project requiere un servidor conectado (modai server connect <url>) o --server");
     const api = new ApiClient(server, tokenFor(server));
     if (!(await api.projects()).some(project => project.id === options.project)) throw new Error("Proyecto no autorizado para esta clave");
     Object.assign(context, { server, projectId: options.project });
@@ -73,7 +74,7 @@ export async function addPackages(root: string, specs: string[], options: { allo
 export async function addV1(root: string, specs: string[], options: { allow?: string[]; force?: boolean; keepMine?: boolean }, print: Print): Promise<void> {
   const { names, report, needsGrant } = await addPackages(root, specs, options);
   print(`Añadido ${names.join(", ")}.\n${summarize(report)}`);
-  if (needsGrant.length) print(`Contiene herramientas ejecutables no autorizadas todavía. Revisa y autoriza con: ${needsGrant.map(name => `modai grant ${name}`).join("; ")}`);
+  if (needsGrant.length) print(`Contiene herramientas ejecutables no autorizadas todavía. Revisa y autoriza con: ${needsGrant.map(name => `modai permissions grant ${name}`).join("; ")}`);
 }
 
 /** Removes a direct dependency from one project, its provider pins and its now-orphan grants. */
@@ -128,7 +129,7 @@ export function statusV1(root: string, print: Print): void {
     installed: installed.map(item => ({ name: item.name, version: item.version, kind: item.kind, category: item.category, verified: item.verified,
       provides: item.manifest.spec.provides.map(capability => `${capability.capability}@${capability.version}`),
       contributes: Object.fromEntries(Object.entries(item.manifest.spec.contributes).filter(([, value]) => value.length).map(([key, value]) => [key, value.length])),
-      executable: item.authorization.missing.length || item.authorization.allowed ? (item.authorization.allowed ? "autorizado" : "requiere modai grant") : "no" })),
+      executable: item.authorization.missing.length || item.authorization.allowed ? (item.authorization.allowed ? "autorizado" : "requiere modai permissions grant") : "no" })),
     capabilities: project.lock.capabilities,
   });
 }
@@ -228,7 +229,12 @@ const v1Project = () => requireV1Project();
 
 /** Commands that only exist for v1 projects. */
 export function registerV1Commands(program: Command, print: Print): void {
-  program.command("grant").description("Autoriza en este equipo las herramientas y servidores MCP de un paquete instalado").argument("<package>")
+  const permissions = group(program, "permissions", "Qué permite este equipo: herramientas autorizadas, publicadores de confianza y política de firmas");
+  permissions.command("list", { isDefault: true }).description("Permisos declarados y concedidos en este equipo para el proyecto").action(() => {
+    const root = v1Project(), project = loadV1Project(root), grants = loadGrants(root);
+    print({ install: grants.install, packages: Object.fromEntries(inspectWorkspace(project).map(item => [item.name, { declared: item.manifest.spec.permissions, granted: grants.packages[item.name]?.permissions ?? [], allowed: item.authorization.allowed, reason: item.authorization.reason }])) });
+  });
+  permissions.command("grant").description("Autoriza en este equipo las herramientas y servidores MCP de un paquete instalado").argument("<package>")
     .option("--yes", "No pide confirmación")
     .action(async (name: string, options: { yes?: boolean }) => {
       const root = v1Project(), project = loadV1Project(root);
@@ -242,22 +248,18 @@ export function registerV1Commands(program: Command, print: Print): void {
       const grants = loadGrants(root);
       grants.packages[name] = { integrity: locked.integrity, permissions: locked.permissions, grantedAt: new Date().toISOString() };
       saveGrants(root, grants);
-      print(`Autorizado ${name}. Sus herramientas quedan disponibles en el gateway MCP (modai-mcp) y en modai tools run.`);
+      print(`Autorizado ${name}. Sus herramientas quedan disponibles en el gateway MCP (modai-mcp) y en modai capability run.`);
     });
-  program.command("revoke").description("Retira la autorización local de un paquete").argument("<package>").action((name: string) => {
+  permissions.command("revoke").description("Retira la autorización local de un paquete").argument("<package>").action((name: string) => {
     const root = v1Project(), grants = loadGrants(root);
     delete grants.packages[name];
     saveGrants(root, grants);
     print(`Autorización retirada: ${name}`);
   });
-  program.command("permissions").description("Muestra permisos concedidos en este equipo para el proyecto").action(() => {
-    const root = v1Project(), project = loadV1Project(root), grants = loadGrants(root);
-    print({ install: grants.install, packages: Object.fromEntries(inspectWorkspace(project).map(item => [item.name, { declared: item.manifest.spec.permissions, granted: grants.packages[item.name]?.permissions ?? [], allowed: item.authorization.allowed, reason: item.authorization.reason }])) });
-  });
 
-  const tools = program.command("tools").description("Herramientas ejecutables aportadas por paquetes");
-  tools.command("list").action(() => capabilitiesV1(v1Project(), value => print((value as { tools: unknown }).tools)));
-  tools.command("run").argument("<tool>").option("--input <json>", "Entrada JSON", "{}").action(async (name: string, options: { input: string }) => {
+  const capability = group(program, "capability", "Capacidades del proyecto: contratos, proveedores y herramientas ejecutables");
+  capability.command("tools").description("Herramientas ejecutables aportadas por los paquetes instalados").action(() => capabilitiesV1(v1Project(), value => print((value as { tools: unknown }).tools)));
+  capability.command("run").description("Ejecuta una herramienta autorizada de un paquete").argument("<tool>").option("--input <json>", "Entrada JSON", "{}").action(async (name: string, options: { input: string }) => {
     const root = v1Project(), project = loadV1Project(root), grants = loadGrants(root);
     const owner = inspectWorkspace(project).find(item => item.manifest.spec.contributes.tools.some(tool => tool.name === name));
     if (!owner) throw new Error(`Herramienta no instalada: ${name}`);
@@ -265,10 +267,17 @@ export function registerV1Commands(program: Command, print: Print): void {
     if (!owner.authorization.allowed) throw new Error(`${owner.name}: ${owner.authorization.reason}`);
     print(await runTool(owner.manifest.spec.contributes.tools.find(tool => tool.name === name)!, JSON.parse(options.input), { packageDir: owner.packageDir, projectDir: root, grant: grants.packages[owner.name] }));
   });
+  capability.command("providers").description("Busca en los registries paquetes que proporcionan una capacidad").argument("<capability>").action(async (name: string) => {
+    print(await suggestProviders(projectRegistry(loadV1Project(v1Project())), name));
+  });
+  capability.command("use").description("Fija el proveedor de una capacidad cuando hay varios instalados").argument("<capability>").argument("<package>").action(async (name: string, provider: string) => {
+    const { report } = await runSync(v1Project(), file => { file.providers[name] = provider; });
+    print(`${name} → ${provider}\n${summarize(report)}`);
+  });
 
-  const context = program.command("context").description("Context Gateway: conocimiento recuperado bajo demanda con procedencia");
-  context.command("search").argument("<query>").option("--package <name>", "Limita a paquetes", commaList).option("--limit <n>").action((query: string, options) => searchV1(v1Project(), query, options, print));
-  context.command("show").argument("<id>").action((id: string) => {
+  const context = group(program, "context", "Conocimiento de los paquetes instalados, recuperado bajo demanda con su procedencia");
+  context.command("search").description("Busca conocimiento relevante en los paquetes instalados").argument("<query>").option("--package <name>", "Limita a paquetes", commaList).option("--limit <n>").action((query: string, options) => searchV1(v1Project(), query, options, print));
+  context.command("show").description("Muestra un fragmento de conocimiento por ID").argument("<id>").action((id: string) => {
     const chunk = readKnowledgeChunk(loadContextIndex(v1Project()), id);
     if (!chunk) throw new Error(`Fragmento no encontrado: ${id}`);
     print(chunk);
@@ -291,13 +300,6 @@ export function registerV1Commands(program: Command, print: Print): void {
     print(`Adaptador ${id} desactivado.\n${summarize(report)}`);
   });
 
-  program.command("providers").description("Busca en los registries paquetes que proporcionan una capacidad").argument("<capability>").action(async (capability: string) => {
-    print(await suggestProviders(projectRegistry(loadV1Project(v1Project())), capability));
-  });
-  program.command("provider").description("Fija el proveedor de una capacidad cuando hay varios instalados").argument("<capability>").argument("<package>").action(async (capability: string, name: string) => {
-    const { report } = await runSync(v1Project(), file => { file.providers[capability] = name; });
-    print(`${capability} → ${name}\n${summarize(report)}`);
-  });
   program.command("migrate").description("Convierte un proyecto 0.5 al formato modai.yaml / modai.lock").option("--allow <permissions>", "Permisos de instalación", commaList).option("--force", "Sobrescribe conflictos").action((options) => migrateV1(process.cwd(), options, print));
 }
 

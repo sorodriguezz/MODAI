@@ -93,7 +93,7 @@ export function summarize(report: SyncReport): string {
   if (report.sideBySide.length) lines.push(`Conservé tu versión; la nueva quedó al lado para que la compares: ${report.sideBySide.join(", ")}`);
   for (const warning of report.warnings) lines.push(`Aviso: ${warning}`);
   for (const item of report.missingOptional) lines.push(`Opcional sin proveedor: ${item.package} puede usar ${item.capability}@${item.range}`);
-  if (report.regrant.length) lines.push(`Requieren nueva autorización por cambio de contenido: ${report.regrant.map(name => `modai grant ${name}`).join("; ")}`);
+  if (report.regrant.length) lines.push(`Requieren nueva autorización por cambio de contenido: ${report.regrant.map(name => `modai permissions grant ${name}`).join("; ")}`);
   return lines.join("\n");
 }
 

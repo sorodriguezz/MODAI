@@ -161,7 +161,7 @@ export function registerWorkspaceCommands(program: Command, print: Print): void 
           const loaded = loadV1Project(project.root);
           const missing = absolute.filter(spec => !(parseSpec(spec, project.root).name in loaded.file.dependencies));
           const { names, needsGrant } = await addPackages(project.root, missing, { allow: options.allow });
-          return `añadido ${names.join(", ")}${needsGrant.length ? ` · requiere modai grant ${needsGrant.join(", ")}` : ""}`;
+          return `añadido ${names.join(", ")}${needsGrant.length ? ` · requiere modai permissions grant ${needsGrant.join(", ")}` : ""}`;
         },
       }, options, print);
     });

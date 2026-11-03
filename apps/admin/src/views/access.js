@@ -21,7 +21,7 @@ function keyForm(key, projects, onSaved) {
   const editing = Boolean(key);
   const body = openDialog({
     title: editing ? "Permisos de " + key.label : "Nueva API key",
-    description: editing ? "El rol de una API key no cambia; revócala y crea otra si necesitas otro rol." : "Crea una credencial por cliente, persona o worker. La CLI y MCP la usan con modai connect.",
+    description: editing ? "El rol de una API key no cambia; revócala y crea otra si necesitas otro rol." : "Crea una credencial por cliente, persona o worker. La CLI y MCP la usan con modai server connect.",
     size: "lg",
     body: html`<form class="stack" novalidate>
       ${editing ? "" : html`<div class="field"><label for="keyLabel">Nombre del cliente</label><input id="keyLabel" required maxlength="200" placeholder="Notebook de María · worker CI"></div>`}
@@ -40,7 +40,7 @@ function keyForm(key, projects, onSaved) {
       toast("Permisos actualizados");
     } else {
       const { key: created } = await post("/admin/api-keys", { label: form.keyLabel.value.trim(), role: grants.role, projectIds: grants.projectIds, organizationIds: grants.organizationIds, packageScopes: grants.packageScopes });
-      showNewKey(created, html`<p class="hint">En el equipo cliente: <code>modai connect ${location.origin}</code> y pega el token cuando lo pida.</p>`);
+      showNewKey(created, html`<p class="hint">En el equipo cliente: <code>modai server connect ${location.origin}</code> y pega el token cuando lo pida.</p>`);
     }
     await onSaved();
   });

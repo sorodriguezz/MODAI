@@ -14,7 +14,7 @@ export async function readAccessToken(fromStdin = false): Promise<string> {
   } else {
     if (!process.stdin.isTTY)
       throw new Error(
-        "Falta una API key. Usa MODAI_API_TOKEN o modai connect <url> --token-stdin.",
+        "Falta una API key. Usa MODAI_API_TOKEN o modai server connect <url> --token-stdin.",
       );
     process.stderr.write("API key de MODAI (entrada oculta): ");
     const hidden = new Writable({

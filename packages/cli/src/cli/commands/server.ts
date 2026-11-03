@@ -10,8 +10,9 @@ import { clientConfigPath, loadClientConfig, saveClientConfig } from "../config.
 import { effectiveConnection } from "../connection.js";
 import { readAccessToken } from "../credentials.js";
 import { commaList } from "../agent-commands.js";
+import { group } from "../groups.js";
 import { formatTable, isJsonMode, type Print } from "../output.js";
-import { tokenFor } from "../../v1/runtime.js";
+import { confirm, tokenFor } from "../../v1/runtime.js";
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", process.platform === "win32" ? "''" : "'\\''")}'`;
 const serverApi = () => { const connection = effectiveConnection(); return new ApiClient(connection.server, connection.token); };
@@ -51,34 +52,35 @@ export async function pingServer(target: string, cliVersion: string, options: { 
       const session = await new ApiClient(server, options.token).session();
       checks.push({ check: "Credencial", status: "ok", detail: `${session.label} · ${session.role}` });
     } catch (error) {
-      checks.push({ check: "Credencial", status: "error", detail: `rechazada (${(error as Error).message}). Vuelve a conectar con: modai connect ${server}` });
+      checks.push({ check: "Credencial", status: "error", detail: `rechazada (${(error as Error).message}). Vuelve a conectar con: modai server connect ${server}` });
     }
-  } else checks.push({ check: "Credencial", status: "aviso", detail: `no hay API key guardada para este servidor: modai connect ${server}` });
+  } else checks.push({ check: "Credencial", status: "aviso", detail: `no hay API key guardada para este servidor: modai server connect ${server}` });
   return checks;
 }
 
-/** Connection to a central server, its administration and local trust settings. */
+/** Connection to a central server, its projects, its administration and local trust settings. */
 export function registerServerCommands(program: Command, print: Print): void {
-  program.command("connect")
+  const server = program.command("server").description("Conexión con un servidor MODAI: conectar, comprobar y cerrar sesión");
+  server.command("connect")
     .description("Conecta la CLI a un servidor MODAI")
     .argument("<url>", "URL del servidor")
     .option("--token <token>", "Token Bearer (prefiere la entrada oculta o --token-stdin)")
     .option("--token-stdin", "Lee la API key por stdin para automatizaciones")
     .action(async (url: string, options: { token?: string; tokenStdin?: boolean }) => {
-      const server = url.replace(/\/+$/, "");
+      const target = url.replace(/\/+$/, "");
       if (options.token && options.tokenStdin) throw new Error("Usa --token o --token-stdin, no ambos");
-      const token = options.token ?? (options.tokenStdin ? await readAccessToken(true) : effectiveConnection(server).token ?? await readAccessToken());
-      const api = new ApiClient(server, token);
+      const token = options.token ?? (options.tokenStdin ? await readAccessToken(true) : effectiveConnection(target).token ?? await readAccessToken());
+      const api = new ApiClient(target, token);
       await api.assertCompatible();
       const health = await api.health();
       const identity = await api.session();
       const projects = await api.projects();
-      saveClientConfig({ ...loadClientConfig(), server, token });
-      print(`Conectado a ${server} (MODAI ${health.version}) como ${identity.label} · ${identity.role}. Configuración: ${clientConfigPath}`);
+      saveClientConfig({ ...loadClientConfig(), server: target, token });
+      print(`Conectado a ${target} (MODAI ${health.version}) como ${identity.label} · ${identity.role}. Configuración: ${clientConfigPath}`);
       print(projects.length ? projects.map(project => `${project.name}: modai init --project ${shellQuote(project.id)}`).join("\n") : "No hay proyectos asignados. Pide acceso a quien administra el servidor.");
     });
 
-  program.command("logout").alias("disconnect")
+  server.command("logout").alias("disconnect")
     .description("Cierra la sesión: olvida el servidor y la API key guardados en este equipo (para cambiar de servidor)")
     .action(() => {
       const config = loadClientConfig();
@@ -91,18 +93,18 @@ export function registerServerCommands(program: Command, print: Print): void {
       if (process.env.MODAI_API_TOKEN || process.env.MODAI_SERVER) notes.push("Ojo: MODAI_API_TOKEN o MODAI_SERVER siguen definidas en tu entorno y se seguirán usando; quítalas con unset.");
       const project = isV1Project(process.cwd()) ? loadV1Project() : undefined;
       if (previous && project?.file.context.server?.replace(/\/+$/, "") === previous.replace(/\/+$/, "")) notes.push(`Este proyecto sigue vinculado a ${previous} en modai.yaml; para moverlo, cambia context.server y su registry.`);
-      notes.push("Para usar otro servidor: modai connect <url>");
+      notes.push("Para usar otro servidor: modai server connect <url>");
       print(notes.join("\n"));
     });
 
-  program.command("whoami").description("Muestra la identidad y los proyectos autorizados").action(async () => {
+  server.command("whoami").description("Muestra la identidad y los proyectos autorizados").action(async () => {
     const connection = effectiveConnection();
     const api = new ApiClient(connection.server, connection.token);
     const session = await api.session();
     print({ server: connection.server, label: session.label, role: session.role, projects: (await api.projects()).map(project => ({ id: project.id, name: project.name })) });
   });
 
-  program.command("ping")
+  server.command("ping")
     .description("Comprueba si el servidor está arriba: latencia, versión, credencial y registries del proyecto")
     .argument("[url]", "Servidor; por defecto el del proyecto o el conectado")
     .option("--timeout <ms>", "Tiempo máximo de espera por servidor", "5000")
@@ -124,33 +126,54 @@ export function registerServerCommands(program: Command, print: Print): void {
           catch { checks.push({ check: `Registry ${registry.name}`, status: "aviso", detail: `la carpeta ${path} no existe o no se puede leer (se crea al publicar)` }); }
         }
       }
-      if (!checks.length) throw new Error("No hay servidor que comprobar: indica una URL (modai ping https://…) o conecta la CLI con modai connect");
+      if (!checks.length) throw new Error("No hay servidor que comprobar: indica una URL (modai server ping https://…) o conecta la CLI con modai server connect");
       if (isJsonMode()) print(checks);
       else print(formatTable(checks.map(item => ({ "": item.status === "ok" ? "✓" : item.status === "aviso" ? "!" : "✗", check: item.check, detail: item.detail })), 300));
       if (checks.some(item => item.status === "error")) process.exitCode = 1;
     });
 
-  program.command("trust").argument("<public-key>", "Clave pública Ed25519 que se autoriza en este equipo").description("Confía en un publicador para la política de firmas 'trusted'")
+  const permissions = group(program, "permissions", "Qué permite este equipo: herramientas autorizadas, publicadores de confianza y política de firmas");
+  permissions.command("trust").argument("<public-key>", "Clave pública Ed25519 que se autoriza en este equipo").description("Confía en un publicador para la política de firmas 'trusted'")
     .action((path: string) => {
       const config = loadClientConfig();
-      if (!config) throw new Error("Conecta primero la CLI");
+      if (!config) throw new Error("Conecta primero la CLI: modai server connect <url>");
       const fingerprint = publicKeyFingerprint(readFileSync(resolve(path), "utf8"));
       config.trustedPublishers = [...new Set([...(config.trustedPublishers ?? []), fingerprint])];
       saveClientConfig(config);
       print({ trustedPublisher: fingerprint });
     });
-  program.command("signatures").argument("<policy>", "optional, signed o trusted").description("Política de firmas de este equipo")
+  permissions.command("signatures").argument("<policy>", "optional, signed o trusted").description("Política de firmas de este equipo")
     .action((value: string) => {
       const config = loadClientConfig();
-      if (!config) throw new Error("Conecta primero la CLI");
+      if (!config) throw new Error("Conecta primero la CLI: modai server connect <url>");
       config.signaturePolicy = signaturePolicySchema.parse(value);
       saveClientConfig(config);
       print({ signaturePolicy: config.signaturePolicy });
     });
 
-  program.command("project").description("Proyectos del servidor").command("list").action(async () => {
-    print((await serverApi().projects()).map(project => ({ id: project.id, name: project.name, organization: project.organizationId })));
+  const project = program.command("project").description("Proyectos del servidor: listar, crear y eliminar");
+  project.command("list", { isDefault: true }).alias("ls").description("Proyectos a los que tienes acceso").action(async () => {
+    print((await serverApi().projects()).map(item => ({ id: item.id, name: item.name, organization: item.organizationId ?? "", created: item.createdAt })));
   });
+  project.command("create").description("Crea un proyecto en el servidor")
+    .requiredOption("--name <name>", "Nombre visible").option("--id <id>", "Identificador; por defecto se genera uno").option("--organization <id>", "Organización para compartir memoria")
+    .action(async (options: { name: string; id?: string; organization?: string }) => {
+      const created = await serverApi().createProject({ id: options.id, name: options.name, organizationId: options.organization });
+      print(isJsonMode() ? created : `Proyecto ${created.name} creado (${created.id}).\nVincula un repositorio con: modai init --project ${shellQuote(created.id)}`);
+    });
+  project.command("delete").alias("rm").description("Elimina un proyecto con su memoria, ejecuciones y registro de instalaciones (irreversible)")
+    .argument("<id>", "Identificador del proyecto")
+    .option("--yes", "No pide confirmación (para scripts)")
+    .action(async (id: string, options: { yes?: boolean }) => {
+      const api = serverApi();
+      const found = (await api.projects()).find(item => item.id === id);
+      if (!found) throw new Error(`No existe el proyecto ${id} o no tienes acceso. Revisa los identificadores con: modai project list`);
+      if (found.canDelete === false) throw new Error(`No puedes eliminar ${found.name}: solo un administrador o quien lo creó`);
+      const question = `Se eliminará ${found.name} (${id}) con su memoria de proyecto, sus ejecuciones y su registro de instalaciones. La memoria de organización se conserva. No se puede deshacer. ¿Continuar?`;
+      if (!(await confirm(question, options.yes))) { print("Sin cambios."); return; }
+      const result = await api.deleteProject(id);
+      print(isJsonMode() ? result : `Proyecto ${found.name} eliminado: ${result.memories} memorias y ${result.runs} ejecuciones borradas.\nLos repositorios vinculados conservan sus archivos; quita context.projectId de su modai.yaml o vincúlalos a otro proyecto.`);
+    });
 
   const admin = program.command("admin").description("Administración del servidor");
   admin.command("export").argument("<file>").action(async (file: string) => {
@@ -173,8 +196,6 @@ export function registerServerCommands(program: Command, print: Print): void {
       await serverApi().updateKeyGrants(id, { projectIds: options.projects ?? [], organizationIds: options.organizations ?? [], packageScopes: options.scopes ?? [] });
       print("Accesos de la API key reemplazados.");
     });
-  admin.command("create-project").requiredOption("--name <name>").option("--organization <id>")
-    .action(async (options: { name: string; organization?: string }) => print(await serverApi().createProject({ name: options.name, organizationId: options.organization })));
   admin.command("create-organization").argument("<name>").action(async (name: string) => print(await serverApi().createOrganization(name)));
   admin.command("trust-publisher").argument("<public-key>").option("--label <label>", "Nombre del publicador", "publisher")
     .action(async (path: string, options: { label: string }) => print(await serverApi().registerPublisher(readFileSync(resolve(path), "utf8"), options.label, true)));

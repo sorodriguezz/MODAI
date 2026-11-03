@@ -180,6 +180,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline-offs
 .icon-button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .icon-button:disabled { opacity: 0.4; cursor: not-allowed; }
 .icon-button.small { width: 30px; height: 30px; }
+.icon-button.danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
 .link-button {
   background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--text);
   cursor: pointer; text-align: left; overflow-wrap: anywhere;

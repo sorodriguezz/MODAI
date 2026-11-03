@@ -92,7 +92,7 @@ export default {
     const recent = summary?.recent ?? [];
     mount(root.querySelector("#recentPackages"), recent.length
       ? html`<ul class="list">${recent.map((item) => html`<li><a href="#/packages?name=${encodeURIComponent(item.name)}"><span class="list-icon">${icon("package")}</span><span class="list-main"><b>${item.name}</b><span class="muted">v${item.version} · ${item.category}</span></span>${timeTag(item.publishedAt)}</a></li>`)}</ul>`
-      : emptyState({ iconName: "package", title: "Aún no hay paquetes", text: "Publica el primero con modai publish desde la CLI." }));
+      : emptyState({ iconName: "package", title: "Aún no hay paquetes", text: "Publica el primero con modai package publish desde la CLI." }));
 
     if (can.admin()) {
       try {

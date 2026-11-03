@@ -158,7 +158,7 @@ function renderIndex(units: InstallUnit[], skillLocation: Map<string, string>): 
   if (!skills.length && !tools.length && !knowledge.length && !capabilities.length && !components.length) return undefined;
   const sections = ["## Capacidades MODAI", "Bloque generado por `modai sync` a partir de modai.yaml y modai.lock; no lo edites a mano."];
   if (skills.length) sections.push(`### Skills (cárgalas solo cuando la tarea lo requiera)\n\n${skills.join("\n")}`);
-  if (tools.length) sections.push(`### Herramientas (servidor MCP \`modai\`; requieren \`modai grant\` en este equipo)\n\n${tools.join("\n")}`);
+  if (tools.length) sections.push(`### Herramientas (servidor MCP \`modai\`; requieren \`modai permissions grant\` en este equipo)\n\n${tools.join("\n")}`);
   if (components.length) sections.push(`### Componentes de código (instalados en el proyecto; adáptalos libremente, MODAI conserva tus cambios)\n\n${components.join("\n")}`);
   if (knowledge.length) sections.push(`### Conocimiento\n\nUsa \`modai_search_knowledge\` para recuperar fragmentos relevantes en lugar de cargar documentos completos. Fuentes: ${knowledge.join(", ")}.`);
   if (capabilities.length) sections.push(`### Capacidades disponibles\n\n${capabilities.join("\n")}`);

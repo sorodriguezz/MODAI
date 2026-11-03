@@ -33,14 +33,14 @@ $ modai component create ../auth-module --name @acme/auth --from src/modules/aut
     --description "Autenticación JWT para NestJS"
 Componente creado en ../auth-module
 Valida:   modai package validate ../auth-module
-Publica:  modai publish ../auth-module --registry <registry>
+Publica:  modai package publish ../auth-module --registry <registry>
 Instala:  modai add @acme/auth --allow project.source
 ```
 
 **2. Publícalo** en un registry: una carpeta, que puede ser compartida, o tu servidor MODAI.
 
 ```console
-$ modai publish ../auth-module --registry ~/.modai/registry
+$ modai package publish ../auth-module --registry ~/.modai/registry
 Publicado @acme/auth@0.1.0 en file:~/.modai/registry (sha256-e861…)
 ```
 
@@ -80,16 +80,16 @@ modai sync --frozen               # en CI: reconstruye exactamente modai.lock
 **Instalar no es autorizar.** Los permisos para escribir archivos se conceden al instalar (`--allow`). Las herramientas que ejecutan comandos necesitan una autorización explícita, válida solo en tu equipo y solo para ese contenido exacto:
 
 ```bash
-modai grant @testing/regression        # muestra comandos y permisos y pide confirmación
-modai tools run regression_baseline --input '{"mode":"compare","results":{"tests":[]}}'
+modai permissions grant @testing/regression        # muestra comandos y permisos y pide confirmación
+modai capability run regression_baseline --input '{"mode":"compare","results":{"tests":[]}}'
 ```
 
 **Contexto para el agente**, sin cargar todo en el prompt:
 
 ```bash
-modai search "dónde ubicar el estado compartido"   # fragmentos de conocimiento con su origen
-modai remember "Usamos Playwright contra staging" --kind decision
-modai recall "staging"
+modai context search "dónde ubicar el estado compartido"   # fragmentos de conocimiento con su origen
+modai memory add "Usamos Playwright contra staging" --kind decision
+modai memory search "staging"
 ```
 
 ## Muchos repositorios a la vez
@@ -148,7 +148,7 @@ modai package scaffold ./mi-tool --name @equipo/mi-tool --with-tool            #
 modai component create ./mi-modulo --name @equipo/mi-modulo --from ./src/modules/x
 modai harness init                                                              # harness en el proyecto actual
 modai package validate ./mi-skill                                               # calidad estructural 0-100
-modai publish ./mi-skill --registry ~/.modai/registry                           # o la URL de tu servidor
+modai package publish ./mi-skill --registry ~/.modai/registry                           # o la URL de tu servidor
 ```
 
 También puedes crear y versionar paquetes desde el **panel web** del servidor (Paquetes → Crear paquete). Las versiones publicadas son inmutables. Referencia del formato: [especificación de paquetes v1](https://github.com/sorodriguezz/MODAI/blob/main/docs/spec/PACKAGE-SPEC-v1.md) y [guía de autoría](https://github.com/sorodriguezz/MODAI/blob/main/docs/guides/AUTHORING-PACKAGES.md).
@@ -156,40 +156,41 @@ También puedes crear y versionar paquetes desde el **panel web** del servidor (
 ## Trabajar en equipo con un servidor
 
 ```console
-$ modai ping https://modai.tu-equipo.cl
+$ modai server ping https://modai.tu-equipo.cl
    CHECK       DETAIL
 ✓  Servidor    https://modai.tu-equipo.cl · ok · 42 ms
 ✓  Versión     servidor 0.8.0 · CLI 0.8.0
-!  Credencial  no hay API key guardada para este servidor: modai connect https://modai.tu-equipo.cl
+!  Credencial  no hay API key guardada para este servidor: modai server connect https://modai.tu-equipo.cl
 ```
 
 ```bash
-modai connect https://modai.tu-equipo.cl     # pide tu API key (créala en el panel → Conectar un cliente)
+modai server connect https://modai.tu-equipo.cl     # pide tu API key (créala en el panel → Conectar un cliente)
 modai init --project <id>                    # usa el servidor como registry y comparte la memoria del proyecto
 ```
 
-Para cambiar de servidor, `modai logout` borra el servidor y la API key guardados (conserva tus publicadores de confianza) y luego `modai connect <otra-url>`.
+Para eliminar un proyecto del servidor con su memoria y ejecuciones: `modai project delete <id>` (pide confirmación; solo administradores o quien lo creó).
 
-Dentro de un proyecto, `modai ping` revisa también sus registries. Sale con código 1 si el servidor no responde, así que sirve en scripts. Los proyectos vinculados informan al servidor qué tienen instalado, y el panel muestra qué proyectos usan cada paquete (desactívalo con `MODAI_NO_USAGE_REPORT=1`).
+Para cambiar de servidor, `modai server logout` borra el servidor y la API key guardados (conserva tus publicadores de confianza) y luego `modai server connect <otra-url>`.
 
-Con un proyecto vinculado también puedes usar **agentes** compuestos por el servidor: `modai agent list`, `agent activate <paquete>`, `agent run "<tarea>"` y `agent submit` para que lo procese un `modai worker`.
+Dentro de un proyecto, `modai server ping` revisa también sus registries. Sale con código 1 si el servidor no responde, así que sirve en scripts. Los proyectos vinculados informan al servidor qué tienen instalado, y el panel muestra qué proyectos usan cada paquete (desactívalo con `MODAI_NO_USAGE_REPORT=1`).
+
+Con un proyecto vinculado también puedes usar **agentes** compuestos por el servidor: `modai agent list`, `agent activate <paquete>`, `agent run "<tarea>"` y `agent submit` para que lo procese un `modai agent worker`.
 
 ## Referencia de comandos
 
-| Para… | Comandos |
-|---|---|
-| Proyecto | `init`, `add`, `remove`, `update [--keep-mine]`, `outdated`, `sync [--frozen]`, `status`, `override` |
-| Muchos repositorios | `workspace list/add/remove/update/sync` (`ws`) |
-| Listar | `list [tipo] [--available] [--json]` (`ls`), `capabilities`, `providers <capacidad>`, `registry list` |
-| Componentes | `component create`, `component list` |
-| Permisos y herramientas | `grant`, `revoke`, `permissions`, `tools list`, `tools run` |
-| Contexto y memoria | `search`, `context show`, `remember`, `recall`, `memories`, `forget` |
-| Agentes | `adapter list/add/remove`, `harness init/audit`, `agent …`, `worker` |
-| Autoría | `package scaffold/validate/keygen`, `publish`, `deprecate`, `yank`, `unpublish` |
-| Servidor | `ping`, `connect`, `logout`, `whoami`, `project list`, `admin …` |
-| La propia CLI | `upgrade [--check] [--tag next]`, `--version` |
+Los comandos del día a día del proyecto van sueltos; el resto está agrupado por tema.
 
-`modai <comando> --help` muestra las opciones de cada uno. Todas las salidas son tablas legibles; añade `--json` a cualquier comando para usarlo en scripts.
+| Grupo | Comandos |
+|---|---|
+| Proyecto | `init`, `add`, `remove`, `update [--keep-mine]`, `outdated`, `sync [--frozen]`, `status`, `list [tipo] [--available]` (`ls`), `override`, `migrate` |
+| Muchos repositorios | `workspace list/add/remove/update/sync` (`ws`) |
+| Lo que instalan los paquetes | `component create/list`, `harness init/audit`, `adapter list/add/remove`, `capability list/tools/run/providers/use`, `permissions list/grant/revoke/trust/signatures` |
+| Contexto y memoria | `context search/show`, `memory add/search/list/update/remove` |
+| Publicar paquetes | `package scaffold/validate/keygen/publish/deprecate/yank/unpublish`, `registry list/add/remove/packages` |
+| Servidor | `server connect/ping/whoami/logout`, `project list/create/delete`, `agent list/compose/activate/deactivate/run/submit/runs/worker`, `admin …` |
+| Este equipo | `client doctor/setup/benchmark/embed`, `upgrade [--check] [--tag next]` |
+
+`modai <comando> --help` muestra las opciones de cada uno. Los nombres anteriores a 0.9 (`modai connect`, `modai remember`, `modai publish`…) siguen funcionando y avisan de su nuevo nombre. Todas las salidas son tablas legibles; añade `--json` a cualquier comando para usarlo en scripts.
 
 Los proyectos del formato 0.5 (`.modai/manifest.yaml`) se convierten una vez con `modai migrate`.
 
@@ -205,6 +206,6 @@ Una vez al día, la CLI avisa si hay una versión nueva. Puedes desactivar el av
 ## Requisitos
 
 - Node.js `>=26.13.0 <27`.
-- Opcional: [Ollama](https://ollama.com) para búsqueda semántica con embeddings locales (`modai client`, `modai embed`).
+- Opcional: [Ollama](https://ollama.com) para búsqueda semántica con embeddings locales (`modai client`, `modai client embed`).
 
 [Repositorio](https://github.com/sorodriguezz/MODAI) · [Cambios](https://github.com/sorodriguezz/MODAI/blob/main/CHANGELOG.md) · [Reportar un problema](https://github.com/sorodriguezz/MODAI/issues)

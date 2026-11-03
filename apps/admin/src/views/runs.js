@@ -79,7 +79,7 @@ export default {
         <label class="sr-only" for="runProject">Proyecto</label><select id="runProject" class="grow"><option value="">Cargando proyectos…</option></select>
         <label class="sr-only" for="runStatus">Estado</label><select id="runStatus"><option value="">Todos los estados</option><option value="queued">En cola</option><option value="running">En curso</option><option value="completed">Completadas</option><option value="failed">Fallidas</option><option value="cancelled">Canceladas</option></select>
       </div>
-      <div class="callout tone-info">${icon("info")}<span>El servidor no ejecuta modelos: un worker del proyecto (<code>modai worker</code>) reclama cada tarea. Se muestran las 50 más recientes.</span></div>
+      <div class="callout tone-info">${icon("info")}<span>El servidor no ejecuta modelos: un worker del proyecto (<code>modai agent worker</code>) reclama cada tarea. Se muestran las 50 más recientes.</span></div>
       <div class="panel" id="runResults"></div>`);
     const $project = root.querySelector("#runProject"), $status = root.querySelector("#runStatus");
     let projects = [], runs = [];

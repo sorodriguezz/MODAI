@@ -103,7 +103,7 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     });
   });
 
-  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.8.0", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
+  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.8.1", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
   app.get("/", async (_request, reply) => reply.redirect("/admin"));
   if (options.adminDirectory !== false) {
     try { registerAdminAssets(app, options.adminDirectory); }
@@ -303,6 +303,14 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     const project = auth.createProject(identityOf(request), parseInput(projectSchema, request.body));
     record(request, "project.create", project.id);
     return reply.code(201).send({ project });
+  });
+  app.delete<{ Params: { id: string }; Body: { confirmation: string } }>("/api/v1/projects/:id", {
+    schema: { body: { type: "object", required: ["confirmation"], properties: { confirmation: { type: "string", maxLength: 200 } }, additionalProperties: false } },
+  }, async request => {
+    if (request.body.confirmation !== request.params.id) throw new AppError(400, "CONFIRMATION_REQUIRED", "Para eliminar el proyecto, confirma escribiendo su identificador");
+    const result = auth.deleteProject(identityOf(request), request.params.id);
+    record(request, "project.delete", request.params.id, { name: result.project.name, memories: result.memories, runs: result.runs });
+    return { deleted: result.project, memories: result.memories, runs: result.runs };
   });
   app.post<{ Body: { name: string } }>("/api/v1/admin/organizations", { schema: { body: { type: "object", required: ["name"], properties: { name: { type: "string", minLength: 1, maxLength: 200 } }, additionalProperties: false } } }, async (request, reply) => {
     requireRole(request, "admin");

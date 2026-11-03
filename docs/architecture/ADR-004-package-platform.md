@@ -39,7 +39,7 @@ Las decisiones concretas:
 4. **`modai.yaml` + `modai.lock`** en la raíz del proyecto. El lock es determinista (sin marcas de tiempo) y guarda `integrity` (`sha256` del manifiesto publicado y de cada archivo), fuente, firmante, capacidades resueltas y cada archivo/bloque/entrada JSON administrado con su hash.
 5. **Adaptadores declarativos.** `agent-skills`, `agents-md`, `claude-code` y `mcp` vienen integrados como datos; `@adapters/cursor` y `@adapters/opencode` son paquetes de ejemplo. Un adaptador solo describe destinos con plantillas (`{skill}`, `{package}`, `{rule}`): nunca ejecuta código.
 6. **Gateway MCP único** (`modai-mcp`). Expone conocimiento por fragmentos, memoria, skills como recursos y las herramientas autorizadas de los paquetes. Es la frontera donde se aplican los permisos.
-7. **Instalar no es autorizar.** Las herramientas y servidores MCP de un paquete se habilitan solo con `modai grant`, por equipo, ligado a la `integrity` exacta. Si el contenido cambia, la autorización caduca. Las autorizaciones nunca viajan con el repositorio.
+7. **Instalar no es autorizar.** Las herramientas y servidores MCP de un paquete se habilitan solo con `modai permissions grant`, por equipo, ligado a la `integrity` exacta. Si el contenido cambia, la autorización caduca. Las autorizaciones nunca viajan con el repositorio.
 8. **Compatibilidad.** Los manifiestos `schemaVersion: 1` se normalizan a v1 al leerse (las skills legacy se convierten en contribuciones de skill). Los proyectos 0.5 siguen funcionando y se convierten con `modai migrate`. La composición de agentes por el servidor (ADR-003) continúa disponible para proyectos `--legacy`.
 
 ## Reglas que no se rompen

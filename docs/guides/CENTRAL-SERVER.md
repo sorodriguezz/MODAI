@@ -71,7 +71,7 @@ Usa Node 26.13.0 o posterior dentro de la rama 26. Una vez [publicado el CLI](PU
 
 ```sh
 npm install -g @sorodriguez/modai
-modai connect https://modai.tu-dominio.cl
+modai server connect https://modai.tu-dominio.cl
 ```
 
 `connect` pide el token con entrada oculta y muestra los proyectos autorizados. La configuración queda en `~/.modai/client.yaml`, con permisos restringidos, fuera del repositorio. Para automatizaciones puedes usar `MODAI_API_TOKEN` o `--token-stdin`.
@@ -85,20 +85,20 @@ npm install -g ./sorodriguez-modai-0.5.0.tgz
 Desde la carpeta del proyecto:
 
 ```sh
-modai whoami
+modai server whoami
 modai init --project ID_QUE_ENTREGA_EL_ADMIN
 modai status
 modai agent list
 ```
 
-Si el repositorio ya contiene `modai.yaml` y `modai.lock`, usa `modai sync` en lugar de inicializar de nuevo. Conserva ambos archivos en Git para que todos los equipos compartan proyecto y versiones. Si contiene el formato antiguo (`.modai/manifest.yaml`), conviértelo una vez con `modai migrate`. Antes de empezar, `modai ping` confirma que el servidor responde y que tu API key es válida. Los permisos para escribir instrucciones o ejecutar herramientas se aprueban localmente en cada equipo. Si un paquete necesita modificar instrucciones, usa `modai sync --allow project.instructions` después de revisar ese permiso.
+Si el repositorio ya contiene `modai.yaml` y `modai.lock`, usa `modai sync` en lugar de inicializar de nuevo. Conserva ambos archivos en Git para que todos los equipos compartan proyecto y versiones. Si contiene el formato antiguo (`.modai/manifest.yaml`), conviértelo una vez con `modai migrate`. Antes de empezar, `modai server ping` confirma que el servidor responde y que tu API key es válida. Los permisos para escribir instrucciones o ejecutar herramientas se aprueban localmente en cada equipo. Si un paquete necesita modificar instrucciones, usa `modai sync --allow project.instructions` después de revisar ese permiso.
 
 Con el catálogo de ejemplos cargado, activa un agente reutilizable:
 
 ```sh
 modai agent activate @agents/backend-reviewer --adapter agents-md --allow project.instructions
-modai remember "Los pedidos usan UUID" --kind decision
-modai recall "pedidos"
+modai memory add "Los pedidos usan UUID" --kind decision
+modai memory search "pedidos"
 ```
 
 Otra persona autorizada para el mismo proyecto puede recuperar esa decisión desde su equipo. Otro proyecto mantiene su memoria separada. Las conversaciones del editor no se guardan automáticamente: el agente debe usar las herramientas de memoria o el usuario debe registrar las decisiones.
@@ -133,7 +133,7 @@ modai agent run "Revisa las decisiones del proyecto" --model MODELO_LOCAL
 Para delegar, el usuario envía una tarea con `modai agent submit "TAREA"`. Un equipo con credencial `worker`, acceso al proyecto y modelo instalado ejecuta:
 
 ```sh
-modai worker --project ID_PROYECTO --model MODELO_LOCAL
+modai agent worker --project ID_PROYECTO --model MODELO_LOCAL
 ```
 
 El worker exige firmas de publicadores de confianza por defecto; registra y fija sus fingerprints según la [guía de agentes](AGENTS-AND-CAPABILITIES.md). Las tareas permanecen en cola hasta que un worker autorizado las reclame. Su resultado aparece en **Ejecuciones**. La API central conserva las definiciones y el estado; el modelo corre en el cliente o worker.

@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import YAML from "yaml";
 
 export interface ClientConfig {
-  /** Absent after `modai logout`; trust settings survive a logout. */
+  /** Absent after `modai server logout`; trust settings survive a logout. */
   server?: string;
   token?: string;
   signaturePolicy?: SignaturePolicy;

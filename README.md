@@ -37,7 +37,7 @@ Principios garantizados por el código y los tests:
 
 - **Reproducible**: `modai.yaml` (lo pedido) + `modai.lock` (versiones, `integrity` SHA-256, proveedores y cada archivo administrado). `modai sync --frozen` reconstruye exactamente lo mismo en otro equipo o en CI.
 - **Reversible**: `modai remove` solo retira lo que sigue intacto; tus ediciones se conservan y se informan.
-- **Seguro**: instalar no autoriza ejecutar. Las herramientas se habilitan con `modai grant`, por equipo y ligadas al contenido exacto. MODAI no es un sandbox, y lo declara.
+- **Seguro**: instalar no autoriza ejecutar. Las herramientas se habilitan con `modai permissions grant`, por equipo y ligadas al contenido exacto. MODAI no es un sandbox, y lo declara.
 - **Portable**: cambiar de agente es cambiar `adapters` en `modai.yaml`. Vienen integrados `agent-skills`, `agents-md`, `claude-code` y `mcp`; los agentes nuevos llegan como paquetes `kind: Adapter`.
 - **Contexto bajo demanda**: el gateway entrega fragmentos de conocimiento con su procedencia, la memoria y las skills como recursos, sin cargar todo en el prompt.
 
@@ -66,20 +66,20 @@ npm link --workspace @sorodriguez/modai     # deja `modai` y `modai-mcp` en tu P
 # alternativa sin link: npm run cli -- <comando>
 
 # Publica el catálogo de ejemplo en un registry local
-for d in examples/packages/*/; do modai publish "$d" --registry ~/modai-registry; done
+for d in examples/packages/*/; do modai package publish "$d" --registry ~/modai-registry; done
 
 # Crea un proyecto de prueba
 mkdir -p /tmp/modai-demo && cd /tmp/modai-demo
 modai init --registry ~/modai-registry --adapter agent-skills,claude-code,mcp --allow project.instructions
 modai add @profiles/fullstack-quality
 modai status
-modai capabilities                          # quién implementa cada contrato
+modai capability list                          # quién implementa cada contrato
 modai list                                  # lo instalado; también: list components, list harness, list skills --available…
-modai search "dónde ubicar el estado compartido"
-modai grant @testing/regression --yes       # autoriza sus herramientas en este equipo
-modai tools run regression_baseline --input '{"mode":"compare","results":{"tests":[]}}'
-modai remember "Usamos Playwright contra el entorno de staging" --kind decision
-modai recall "staging"
+modai context search "dónde ubicar el estado compartido"
+modai permissions grant @testing/regression --yes       # autoriza sus herramientas en este equipo
+modai capability run regression_baseline --input '{"mode":"compare","results":{"tests":[]}}'
+modai memory add "Usamos Playwright contra el entorno de staging" --kind decision
+modai memory search "staging"
 modai remove @testing/regression
 ```
 
@@ -112,7 +112,7 @@ MODAI_SERVER=http://127.0.0.1:8787 MODAI_API_TOKEN=local-dev-token npm run seed:
 Conecta la CLI al servidor local y úsalo como registry y memoria compartida:
 
 ```sh
-modai connect http://127.0.0.1:8787          # pega local-dev-token o una API key creada en el panel
+modai server connect http://127.0.0.1:8787          # pega local-dev-token o una API key creada en el panel
 mkdir -p /tmp/modai-team && cd /tmp/modai-team
 modai init                                    # usa el servidor conectado como registry
 modai add @testing/playwright @testing/regression
@@ -151,7 +151,7 @@ modai add @acme/auth-module --allow project.source                              
 ```sh
 modai package scaffold ./mi-paquete --name @acme/mi-paquete --category testing --with-tool
 modai package validate ./mi-paquete
-modai publish ./mi-paquete --registry ~/modai-registry     # o la URL de tu servidor MODAI
+modai package publish ./mi-paquete --registry ~/modai-registry     # o la URL de tu servidor MODAI
 modai add file:../mi-paquete                               # instalar sin publicar, mientras desarrollas
 ```
 
@@ -165,18 +165,18 @@ Guía completa: [crear, publicar e instalar paquetes](docs/guides/AUTHORING-PACK
 |---|---|
 | `modai init` | Crea `modai.yaml`: registries, adaptadores y memoria (`--registry`, `--adapter`, `--profile`, `--project`) |
 | `modai add` / `remove` / `update` / `outdated` / `sync [--frozen]` / `status` | Ciclo de vida reproducible y reversible |
-| `modai capabilities` / `providers <capacidad>` / `provider <capacidad> <paquete>` | Contratos instalados, proveedores disponibles y elección de proveedor |
-| `modai grant` / `revoke` / `permissions` | Autorización local de herramientas y servidores MCP |
-| `modai tools list` / `tools run` | Herramientas aportadas por paquetes |
-| `modai search` / `context show` / `remember` / `recall` / `memories` / `forget` | Context Gateway y memoria |
+| `modai capability list` / `providers <capacidad>` / `provider <capacidad> <paquete>` | Contratos instalados, proveedores disponibles y elección de proveedor |
+| `modai permissions grant` / `revoke` / `permissions` | Autorización local de herramientas y servidores MCP |
+| `modai capability tools` / `tools run` | Herramientas aportadas por paquetes |
+| `modai context search` / `context show` / `remember` / `recall` / `memories` / `forget` | Context Gateway y memoria |
 | `modai adapter list` / `adapter add` / `adapter remove` | Conectar con otros agentes |
 | `modai registry list` / `add` / `remove` / `packages` | Registries del proyecto |
-| `modai package scaffold` / `validate` / `keygen`, `modai publish` | Autoría y publicación (firma Ed25519 opcional) |
+| `modai package scaffold` / `validate` / `keygen`, `modai package publish` | Autoría y publicación (firma Ed25519 opcional) |
 | `modai migrate` | Convierte un proyecto 0.5 a `modai.yaml` |
-| `modai connect` / `whoami` / `admin …` / `project …` | Servidor central |
+| `modai server connect` / `whoami` / `admin …` / `project …` | Servidor central |
 | `modai agent …` / `runs …` / `worker` | Agentes compuestos por el servidor (proyectos vinculados con `modai init --project`) |
 | `modai workspace add/remove/update/sync/list` | La misma operación en muchos repositorios bajo una raíz, con plan previo y confirmación |
-| `modai ping` | Comprueba si el servidor está arriba: latencia, versión y credencial |
+| `modai server ping` | Comprueba si el servidor está arriba: latencia, versión y credencial |
 | `modai client doctor` / `setup` / `embed …` | Modelos y embeddings locales con Ollama |
 | `modai harness init` / `audit` | Harness de cinco subsistemas para agentes de programación |
 
@@ -238,9 +238,9 @@ Paso a paso, respaldos (`deploy/backup.sh`) e imagen multi-arquitectura en GHCR:
 
 | Síntoma | Qué revisar |
 |---|---|
-| `CAPABILITY_UNSATISFIED` al instalar | Falta un proveedor del contrato; el mensaje sugiere qué paquete añadir (`modai providers <capacidad>`) |
+| `CAPABILITY_UNSATISFIED` al instalar | Falta un proveedor del contrato; el mensaje sugiere qué paquete añadir (`modai capability providers <capacidad>`) |
 | `PERMISSION_REQUIRED … project.instructions` | Un adaptador escribe instrucciones del agente: repite con `--allow project.instructions` |
-| Una herramienta no aparece en el agente | Autorízala con `modai grant <paquete>`; revisa `modai capabilities` y vuelve a iniciar el cliente MCP |
+| Una herramienta no aparece en el agente | Autorízala con `modai permissions grant <paquete>`; revisa `modai capability list` y vuelve a iniciar el cliente MCP |
 | `MANAGED_CONFLICT` | Editaste un archivo o bloque administrado: integra tus cambios o usa `--force` |
 | `LOCK_INTEGRITY_MISMATCH` | El registry sirve contenido distinto para la misma versión: no se instala, por seguridad |
 | El panel no abre o no inicia sesión | ¿El servidor responde en `/health`? Con usuarios ya creados, `MODAI_ADMIN_*` se ignora. Ver la [guía del panel](docs/guides/ADMIN-PANEL.md) |
@@ -260,5 +260,5 @@ Paso a paso, respaldos (`deploy/backup.sh`) e imagen multi-arquitectura en GHCR:
 
 - El Core funciona sin servidor. Los registries de carpeta y el servidor central son intercambiables.
 - El panel web usa cuentas de usuario con sesión. La CLI, MCP y los workers usan API keys con roles, proyectos y namespaces. Aún no hay OIDC ni replicación entre servidores.
-- La búsqueda de conocimiento local usa BM25. La búsqueda semántica con embeddings (`modai embed`) opera con el servidor; los embeddings se calculan siempre en el cliente.
+- La búsqueda de conocimiento local usa BM25. La búsqueda semántica con embeddings (`modai client embed`) opera con el servidor; los embeddings se calculan siempre en el cliente.
 - Los agentes compuestos por el servidor (`modai agent`) funcionan sobre proyectos `modai.yaml` vinculados a un proyecto del servidor (`modai init --project`). El formato de proyecto 0.5 ya no se admite: conviértelo con `modai migrate`.

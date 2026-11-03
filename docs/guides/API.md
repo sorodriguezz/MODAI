@@ -44,7 +44,8 @@ curl -X POST http://localhost:8787/api/v1/resolve \
 
 | Método | Ruta | Uso |
 |---|---|---|
-| GET/POST | `/api/v1/projects` | Listar proyectos autorizados / registrar un proyecto propio |
+| GET/POST | `/api/v1/projects` | Listar proyectos autorizados (con `canDelete`) / registrar un proyecto propio |
+| DELETE | `/api/v1/projects/:id` | Eliminar un proyecto con su memoria, ejecuciones e instalaciones. Cuerpo `{ "confirmation": "<id>" }`; admin o quien lo creó; `409 PROJECT_BUSY` si un worker procesa una tarea |
 | POST | `/api/v1/admin/organizations` | Crear organización `{ name }` |
 | PATCH | `/api/v1/admin/api-keys/:id` | Reemplazar grants `{ projectIds, organizationIds, packageScopes }` |
 | POST | `/api/v1/admin/publishers` | Registrar `{ publicKey, label, trusted }` |

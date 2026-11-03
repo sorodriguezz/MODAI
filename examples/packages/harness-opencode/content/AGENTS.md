@@ -13,7 +13,7 @@
 - Conserva alcance y cambios del usuario. No reescribas áreas no relacionadas.
 - No marques `passing` sin ejecutar el gate de la función.
 - No ocultes fallos ni debilites pruebas para declarar finalización.
-- Registra decisiones durables con `modai remember` y documentación de proyecto cuando afecten contratos.
+- Registra decisiones durables con `modai memory add` y documentación de proyecto cuando afecten contratos.
 
 ## Enrutamiento
 

@@ -130,7 +130,7 @@ export function resolveCapabilities<T>(resolution: Resolution<T>, pins: Record<s
     const sorted = [...list].sort((a, b) => a.provider.localeCompare(b.provider));
     const chosen = sorted.find(item => item.provider === pins[capability]) ?? sorted[0];
     resolution.capabilities[capability] = chosen;
-    if (sorted.length > 1 && !pins[capability]) resolution.warnings.push(`Varios paquetes proporcionan ${capability} (${sorted.map(item => item.provider).join(", ")}); se usa ${chosen.provider}. Fíjalo con modai provider ${capability} <paquete>.`);
+    if (sorted.length > 1 && !pins[capability]) resolution.warnings.push(`Varios paquetes proporcionan ${capability} (${sorted.map(item => item.provider).join(", ")}); se usa ${chosen.provider}. Fíjalo con modai capability use ${capability} <paquete>.`);
   }
   for (const item of resolution.packages) {
     const chosenFor: Record<string, string> = {};

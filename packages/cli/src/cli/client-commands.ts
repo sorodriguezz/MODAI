@@ -43,7 +43,7 @@ export function registerClientCommands(program: Command, getApi: () => ApiClient
       const [vector] = await runtime.embed(embeddingModel, ["Una prueba breve de búsqueda en español."]);
       saveLocalModels({ schemaVersion: 1, url: runtime.url, embeddingModel, digest: model.digest, chatModel, batchSize: plan.batchSize });
       const status = await runtime.status();
-      print({ saved: localModelsPath, embeddingModel, digest: model.digest, chatModel, chatDownloaded: Boolean(o.download && o.withChat), dimensions: vector.length, smokeTestMs: Math.round(performance.now() - start), running: status.running, recommendation: plan, next: ["modai embed index", 'modai embed search "tu pregunta"'], execution: "client-only" });
+      print({ saved: localModelsPath, embeddingModel, digest: model.digest, chatModel, chatDownloaded: Boolean(o.download && o.withChat), dimensions: vector.length, smokeTestMs: Math.round(performance.now() - start), running: status.running, recommendation: plan, next: ["modai client embed index", 'modai client embed search "tu pregunta"'], execution: "client-only" });
     });
   client.command("benchmark")
     .description("Mide latencia de embeddings con modelos ya instalados, sin descargar")
@@ -69,14 +69,14 @@ export function registerClientCommands(program: Command, getApi: () => ApiClient
       print({ results, note: "Latencia local con textos cortos; no mide calidad de recuperación. No cambia el modelo configurado. Evalúa también consultas representativas de tu proyecto." });
     });
 
-  const embed = program.command("embed").description("Indexación y búsqueda semántica: embeddings calculados solo en el cliente");
-  embed.command("index")
+  const embed = client.command("embed").description("Indexación y búsqueda semántica del conocimiento del servidor: embeddings calculados solo en este equipo");
+  embed.command("index").description("Calcula y sube los vectores de los documentos de conocimiento")
     .option("--package <name>", "Indexar solo los documentos de este paquete")
     .action(async (o: { package?: string }) => print(await indexKnowledge(getApi(), loadLocalModels(), (s) => process.stderr.write(s + "\n"), o.package)));
-  embed.command("search")
+  embed.command("search").description("Búsqueda semántica con el modelo local")
     .argument("<query>")
     .action(async (query: string) => {
       const results = await semanticSearch(getApi(), loadLocalModels(), query);
-      print({ results, ...(!results.length ? { hint: "Sin vectores compatibles. Ejecuta modai embed index con este mismo modelo y digest, o usa modai search para búsqueda de texto." } : {}) });
+      print({ results, ...(!results.length ? { hint: "Sin vectores compatibles. Ejecuta modai client embed index con este mismo modelo y digest, o usa modai context search para búsqueda de texto." } : {}) });
     });
 }

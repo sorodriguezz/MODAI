@@ -3,6 +3,7 @@ import semver from "semver";
 import { addV1, capabilitiesV1, initV1, outdatedV1, removeV1, statusV1, syncV1, updateV1 } from "../../v1/commands.js";
 import { requireV1Project, runSync, summarize } from "../../v1/runtime.js";
 import { commaList } from "../agent-commands.js";
+import { group } from "../groups.js";
 import type { Print } from "../output.js";
 
 /** Project lifecycle: modai.yaml + modai.lock. */
@@ -49,7 +50,8 @@ export function registerProjectCommands(program: Command, print: Print): void {
 
   program.command("outdated").description("Compara el lock con las versiones disponibles en los registries").action(() => outdatedV1(requireV1Project(), print));
   program.command("status").description("Muestra el estado del proyecto").action(() => statusV1(requireV1Project(), print));
-  program.command("capabilities").description("Contratos provistos y requeridos, herramientas, servidores MCP y skills del proyecto").action(() => capabilitiesV1(requireV1Project(), print));
+  group(program, "capability", "Capacidades del proyecto: contratos, proveedores y herramientas ejecutables")
+    .command("list", { isDefault: true }).description("Contratos provistos y requeridos, herramientas, servidores MCP y skills del proyecto").action(() => capabilitiesV1(requireV1Project(), print));
 
   program.command("override")
     .description("Fija una versión o rango incluso si es una dependencia transitiva")

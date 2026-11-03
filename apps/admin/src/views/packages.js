@@ -299,7 +299,7 @@ export default {
         ? html`<div class="card-grid">${items.map(card)}</div>${pager(page, pages)}`
         : filtered
           ? emptyState({ iconName: "search", title: "Sin resultados", text: "Prueba con otra búsqueda o cambia los filtros.", action: html`<button class="btn" data-action="clear">Limpiar filtros</button>` })
-          : emptyState({ iconName: "package", title: "Aún no hay paquetes", text: "Publica capacidades con la CLI (modai publish ./mi-paquete) o créalas aquí: componentes de código, harnesses, skills y conocimiento.", action: can.publish() ? html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>` : "" }));
+          : emptyState({ iconName: "package", title: "Aún no hay paquetes", text: "Publica capacidades con la CLI (modai package publish ./mi-paquete) o créalas aquí: componentes de código, harnesses, skills y conocimiento.", action: can.publish() ? html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>` : "" }));
     };
     const reload = () => { page = 1; return load(); };
     $q.addEventListener("input", debounce(reload, 250));

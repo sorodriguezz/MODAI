@@ -50,9 +50,9 @@ modai package validate ./regression
 ## 2. Publicar
 
 ```sh
-modai publish ./regression --registry ~/modai-registry          # carpeta
-modai publish ./regression --registry https://modai.tu-dominio  # servidor MODAI (API key publisher)
-modai package keygen && modai publish ./regression --key .modai/keys/modai-ed25519-private.pem --registry ~/modai-registry   # firmado
+modai package publish ./regression --registry ~/modai-registry          # carpeta
+modai package publish ./regression --registry https://modai.tu-dominio  # servidor MODAI (API key publisher)
+modai package keygen && modai package publish ./regression --key .modai/keys/modai-ed25519-private.pem --registry ~/modai-registry   # firmado
 ```
 
 Una versión publicada es inmutable: para cambiarla incrementa `metadata.version`. Mientras desarrollas puedes instalarla sin publicar con `modai add file:../regression`.
@@ -66,7 +66,7 @@ modai add @acme/regression
 # Error: @acme/regression requiere la capacidad browser.automation@^1.0.0 ...
 #        Paquetes que la proporcionan: @testing/playwright@1.0.0
 modai add @testing/playwright @acme/regression
-modai capabilities
+modai capability list
 ```
 
 Resultado:
@@ -80,9 +80,9 @@ Resultado:
 Instalar no autoriza a ejecutar nada:
 
 ```sh
-modai grant @testing/playwright   # muestra comandos y permisos y pide confirmación
-modai grant @acme/regression
-modai tools run regression_compare --input '{"results":{"tests":[]}}'
+modai permissions grant @testing/playwright   # muestra comandos y permisos y pide confirmación
+modai permissions grant @acme/regression
+modai capability run regression_compare --input '{"results":{"tests":[]}}'
 ```
 
 Los agentes compatibles con MCP leen el gateway desde `.mcp.json` (Claude Code), `.modai/mcp.json` (cualquier cliente) u otro archivo según el adaptador. El servidor MCP `modai` expone:
@@ -104,7 +104,7 @@ modai sync --frozen        # en CI: falla si el lock no corresponde
 modai remove @acme/regression
 ```
 
-Si el contenido de un paquete autorizado cambia, `modai sync` avisa que requiere `modai grant` de nuevo.
+Si el contenido de un paquete autorizado cambia, `modai sync` avisa que requiere `modai permissions grant` de nuevo.
 
 ## Soportar otro agente
 

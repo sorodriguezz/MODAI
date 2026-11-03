@@ -1,5 +1,5 @@
 {
-  "version": "0.8.0",
+  "version": "0.8.1",
   "type": "module",
   "engines": {
     "node": ">=26.13.0 <27"
@@ -42,9 +42,9 @@
     "./package-source": "./dist/cli/package-source.js"
   },
   "devDependencies": {
-    "@modai/contracts": "0.8.0",
-    "@modai/sdk": "0.8.0",
+    "@modai/contracts": "0.8.1",
+    "@modai/sdk": "0.8.1",
     "esbuild": "^0.28.2",
-    "@modai/core": "0.8.0"
+    "@modai/core": "0.8.1"
   }
 }

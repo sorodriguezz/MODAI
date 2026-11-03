@@ -125,7 +125,7 @@ export interface AgentDefinition {
   memory: { read: Array<"project" | "organization" | "session">; write: boolean };
   runtime?: { provider: "ollama"; model?: string };
 }
-export interface ProjectRecord { id: string; name: string; organizationId?: string; createdAt: string }
+export interface ProjectRecord { id: string; name: string; organizationId?: string; createdAt: string; /** Whether the caller may delete it (admin or creator). */ canDelete?: boolean }
 export interface AgentBundle {
   schemaVersion: 1;
   projectId: string;

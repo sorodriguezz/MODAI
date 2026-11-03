@@ -20,7 +20,7 @@ Reglas comunes:
   ```sh
   MODAI_SERVER=https://TU_DIRECCION MODAI_API_TOKEN=TU_TOKEN npm run seed:examples
   ```
-- Conecta la CLI con `modai connect https://TU_DIRECCION` y crea las API keys por persona en **Conectar un cliente** del panel.
+- Conecta la CLI con `modai server connect https://TU_DIRECCION` y crea las API keys por persona en **Conectar un cliente** del panel.
 
 ## Raspberry Pi
 
@@ -128,8 +128,8 @@ Con la CLI de Railway (`railway login`, `railway link`), `railway up` despliega 
 
 ```sh
 curl https://TU_DIRECCION/health            # versión, apiVersion y publicUrl
-modai connect https://TU_DIRECCION          # pega MODAI_API_TOKEN o una API key del panel
-modai whoami
+modai server connect https://TU_DIRECCION          # pega MODAI_API_TOKEN o una API key del panel
+modai server whoami
 ```
 
 Si `/health` responde pero el panel no mantiene la sesión, revisa que `MODAI_PUBLIC_URL` coincida exactamente con la dirección del navegador (protocolo y dominio) y que `MODAI_TRUST_PROXY=true` esté definido detrás de un proxy HTTPS. Las escrituras del panel comprueban el origen de la petición.

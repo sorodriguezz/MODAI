@@ -157,3 +157,18 @@ test("Resumen, Agentes, Ejecuciones y Conectar no descargan el catálogo complet
 
   expect(fullCatalog).toEqual([]);
 });
+
+test("elimina un proyecto tras confirmar escribiendo su identificador", async ({ page, request }) => {
+  expect((await request.post("/api/v1/projects", { headers: auth, data: { id: "ui-borrar", name: "Para borrar" } })).ok()).toBeTruthy();
+  await login(page);
+  await page.goto("/admin#/projects");
+  await page.getByRole("button", { name: "Eliminar el proyecto Para borrar (ui-borrar)" }).click();
+  const dialog = page.getByRole("dialog");
+  const confirmButton = dialog.getByRole("button", { name: "Eliminar proyecto" });
+  await expect(confirmButton).toBeDisabled();
+  await dialog.getByLabel(/Escribe ui-borrar/).fill("ui-borrar");
+  await confirmButton.click();
+  await expect(page.getByText(/Proyecto «Para borrar» eliminado/)).toBeVisible();
+  await expect(page.locator("#projectResults")).not.toContainText("ui-borrar");
+  await expect(page.locator("#projectResults")).toContainText("ui-shop");
+});

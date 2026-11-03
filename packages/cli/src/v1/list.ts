@@ -150,7 +150,7 @@ export function registerListCommands(program: Command, print: Print, commaList: 
     .option("--tags <tags>", "Etiquetas separadas por comas", commaList)
     .action((directory: string, options) => {
       const created = createComponentPackage(directory, options);
-      print(`Componente creado en ${created}\nValida:   modai package validate ${directory}\nPublica:  modai publish ${directory} --registry <registry>\nInstala:  modai add ${options.name} --allow project.source`);
+      print(`Componente creado en ${created}\nValida:   modai package validate ${directory}\nPublica:  modai package publish ${directory} --registry <registry>\nInstala:  modai add ${options.name} --allow project.source`);
     });
   component.command("list").description("Componentes instalados (o --available)").option("--available").option("--registry <name|url|path>").option("--query <text>")
     .action(options => listV1("components", options, print));

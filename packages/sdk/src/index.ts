@@ -152,6 +152,10 @@ export class ApiClient {
   async createProject(input: { id?: string; name: string; organizationId?: string }): Promise<ProjectRecord> {
     return (await this.request<{ project: ProjectRecord }>("/api/v1/projects", { method: "POST", body: JSON.stringify(input) })).project;
   }
+  /** Irreversible: deletes the project with its memories, runs and usage reports. */
+  async deleteProject(id: string): Promise<{ deleted: ProjectRecord; memories: number; runs: number }> {
+    return this.request(`/api/v1/projects/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ confirmation: id }) });
+  }
   async projects(): Promise<ProjectRecord[]> { return (await this.request<{ projects: ProjectRecord[] }>("/api/v1/projects")).projects; }
   async agents(): Promise<PackageRecord[]> { return (await this.request<{ agents: PackageRecord[] }>("/api/v1/agents")).agents; }
   async capabilities(): Promise<unknown[]> { return (await this.request<{ capabilities: unknown[] }>("/api/v1/capabilities")).capabilities; }

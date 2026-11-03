@@ -17,7 +17,7 @@ function serverOrigin(value) {
 }
 
 function commands({ server, projectId, agent, shell }) {
-  const lines = ["npm install -g @sorodriguez/modai", "modai connect " + quote(serverOrigin(server), shell)];
+  const lines = ["npm install -g @sorodriguez/modai", "modai server connect " + quote(serverOrigin(server), shell)];
   if (projectId) {
     lines.push("modai init --project " + quote(projectId, shell), "modai status");
     if (agent) lines.push("modai agent activate " + quote(agent, shell) + " --adapter agents-md --allow project.instructions");
@@ -51,14 +51,14 @@ export default {
           </div>
         </li>
         <li class="panel step">
-          <div class="step-head"><span class="step-number" aria-hidden="true">2</span><div><h3>Ejecuta en la carpeta del proyecto del cliente</h3><p class="muted"><code>modai connect</code> pide la API key con entrada oculta y la guarda fuera del repositorio.</p></div></div>
+          <div class="step-head"><span class="step-number" aria-hidden="true">2</span><div><h3>Ejecuta en la carpeta del proyecto del cliente</h3><p class="muted"><code>modai server connect</code> pide la API key con entrada oculta y la guarda fuera del repositorio.</p></div></div>
           <div class="panel-body"><div id="connectCommands"></div>
           <p class="hint">Si otra persona ya inicializó el repositorio, usa <code>modai sync</code> en lugar de <code>modai init</code>.</p></div>
         </li>
         <li class="panel step">
-          <div class="step-head"><span class="step-number" aria-hidden="true">3</span><div><h3>Conecta tu editor o agente mediante MCP</h3><p class="muted">Reemplaza la ruta absoluta del proyecto. El puente usa la conexión guardada por <code>modai connect</code>.</p></div></div>
+          <div class="step-head"><span class="step-number" aria-hidden="true">3</span><div><h3>Conecta tu editor o agente mediante MCP</h3><p class="muted">Reemplaza la ruta absoluta del proyecto. El puente usa la conexión guardada por <code>modai server connect</code>.</p></div></div>
           <div class="panel-body">${codeBlock("connectMcp", JSON.stringify({ mcpServers: { modai: { command: "modai-mcp", args: ["--project", "/RUTA/ABSOLUTA/DEL/PROYECTO"] } } }, null, 2), "Copiar configuración")}
-          <p class="hint">Los agentes pueden leer AGENTS.md o cargar <code>modai://agent/active</code>. Para tareas en cola debe existir un worker activo (<code>modai worker</code>).</p></div>
+          <p class="hint">Los agentes pueden leer AGENTS.md o cargar <code>modai://agent/active</code>. Para tareas en cola debe existir un worker activo (<code>modai agent worker</code>).</p></div>
         </li>
       </ol>`);
     const $server = root.querySelector("#connectServer"), $project = root.querySelector("#connectProject"), $shell = root.querySelector("#connectShell"), $agent = root.querySelector("#connectAgent");
@@ -124,7 +124,7 @@ export default {
           const role = form.querySelector('input[name="clientRole"]:checked').value;
           const { key } = await post("/admin/api-keys", { label: form.clientLabel.value.trim(), role, projectIds: [project.id], packageScopes: [] });
           showNewKey(key, html`<h4>Comandos para el cliente</h4>${codeBlock("clientCommands", commandText, "Copiar comandos")}
-            ${role === "worker" ? html`<p class="hint">Para ejecutar la cola configura un modelo local y ejecuta <code>modai worker --project ${quote(project.id, $shell.value)} --model MODELO_LOCAL</code>.</p>` : ""}`);
+            ${role === "worker" ? html`<p class="hint">Para ejecutar la cola configura un modelo local y ejecuta <code>modai agent worker --project ${quote(project.id, $shell.value)} --model MODELO_LOCAL</code>.</p>` : ""}`);
         });
       },
     });
