@@ -34,7 +34,7 @@ test("crea un componente en el editor: archivos, carpetas, validación y publica
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "Crear paquete" })).toBeVisible();
 
-  // Step by step: type → identity → files → dependencies → review.
+  // Step by step: type → identity → files → options → dependencies → review.
   const next = () => dialog.getByRole("button", { name: "Siguiente" }).click();
   await expect(dialog.getByRole("button", { name: /Tipo/ })).toHaveAttribute("aria-current", "step");
   await next();
@@ -75,14 +75,17 @@ test("crea un componente en el editor: archivos, carpetas, validación y publica
   await expect(dialog.locator(".folder-row", { hasText: "component/tmp/" })).toHaveCount(0);
 
   await next();
-  await dialog.getByRole("button", { name: "Añadir dependencia" }).click();
-  await dialog.locator("[data-dep-name]").fill("@ui/users-module");
+  // Options (flags) are optional: none here.
+  await expect(dialog.getByRole("button", { name: /Opciones/ })).toHaveAttribute("aria-current", "step");
   await next();
-  await expect(dialog.locator(".form-error")).toContainText("sí mismo");
+  await dialog.getByRole("button", { name: "Añadir dependencia" }).click();
+  await next();
+  await expect(dialog.locator(".form-error")).toContainText("Elige un namespace y un paquete");
   await dialog.getByRole("button", { name: /Quitar/ }).click();
   await next();
-  // Arriving at the review validates automatically.
+  // Arriving at the review validates automatically, with the score broken down by dimension.
   await expect(dialog.locator("#validation")).toContainText("Calidad estructural");
+  await expect(dialog.locator("#validation .quality-dimensions")).toContainText("Documentación");
   await dialog.getByRole("button", { name: "Publicar" }).click();
 
   // After publishing, the detail of the new package opens with content (not an empty dialog).
@@ -91,6 +94,37 @@ test("crea un componente en el editor: archivos, carpetas, validación y publica
   await dialog.getByRole("tab", { name: "Archivos" }).click();
   await expect(dialog.locator("#packageFiles")).toContainText("component/helpers/hash.ts");
   await expect(dialog.locator("#packageFiles")).not.toContainText("component/tmp");
+});
+
+test("crea un perfil eligiendo namespace, paquete y versión, sin paso de archivos", async ({ page }) => {
+  await login(page);
+  await page.goto("/admin#/packages");
+  await page.getByRole("button", { name: "Crear paquete" }).first().click();
+  const dialog = page.getByRole("dialog");
+  const next = () => dialog.getByRole("button", { name: "Siguiente" }).click();
+  await dialog.getByRole("radio", { name: /Perfil/ }).check();
+  await expect(dialog.getByRole("button", { name: /Archivos/ })).toHaveCount(0);
+  await next();
+  await dialog.locator("#pkgNamespaceInput").fill("ui");
+  await dialog.getByRole("option", { name: "@ui", exact: true }).click();
+  await dialog.getByLabel("Nombre", { exact: true }).fill("my-profile");
+  await dialog.getByLabel("Descripción").fill("Perfil que compone el módulo de usuarios.");
+  await dialog.locator("#pkgCategoryInput").click();
+  await dialog.getByRole("option", { name: /^profile/ }).click();
+  await expect(dialog.locator("#pkgCategory")).toHaveValue("profile");
+  await next();
+  await expect(dialog.getByRole("button", { name: /Composición/ })).toHaveAttribute("aria-current", "step");
+  await next();
+  await expect(dialog.locator(".form-error")).toContainText("al menos uno");
+  await dialog.getByRole("button", { name: "Añadir paquete" }).click();
+  await dialog.locator("#depList").getByLabel("Namespace").selectOption("@ui");
+  await dialog.locator("#depList").getByLabel("Paquete", { exact: true }).selectOption("@ui/users-module");
+  await expect(dialog.locator("#dep0Version")).toHaveValue("0.1.0");
+  await next();
+  await expect(dialog.locator("#validation")).toContainText("Calidad estructural");
+  await expect(dialog.locator("#pkgManifest")).toHaveValue(/"kind": "Profile"[\s\S]*"@ui\/users-module": "\^0\.1\.0"/);
+  await dialog.getByRole("button", { name: "Publicar" }).click();
+  await expect(dialog.getByRole("heading", { name: "@ui/my-profile" })).toBeVisible();
 });
 
 test("publica una nueva versión desde el detalle conservando manifiesto y archivos", async ({ page }) => {
@@ -131,19 +165,20 @@ test("el catálogo pagina en el servidor y filtra por tipo y texto", async ({ pa
   for (let index = 0; index < 26; index++) await publish(request, `@ui/guide-${String(index).padStart(2, "0")}`, "1.0.0");
   await login(page);
   await page.goto("/admin#/packages");
-  await expect(page.locator("#packageMeta")).toContainText("27 paquetes");
+  await expect(page.locator("#packageMeta")).toContainText("28 paquetes");
   await expect(page.locator(".package-card")).toHaveCount(24);
   await expect(page.getByText("Página 1 de 2")).toBeVisible();
   await page.getByRole("button", { name: "Siguiente" }).click();
   await expect(page.getByText("Página 2 de 2")).toBeVisible();
-  await expect(page.locator(".package-card")).toHaveCount(3);
+  await expect(page.locator(".package-card")).toHaveCount(4);
 
-  await page.getByLabel("Tipo").selectOption("components");
+  const types = page.getByRole("toolbar", { name: "Tipo de paquete" });
+  await types.getByRole("button", { name: "Componentes" }).click();
   await expect(page.locator(".package-card")).toHaveCount(1);
   await expect(page.locator(".package-card")).toContainText("@ui/users-module");
   await expect(page.getByText(/Página \d de/)).toHaveCount(0);
 
-  await page.getByLabel("Tipo").selectOption("");
+  await types.getByRole("button", { name: "Todos" }).click();
   await page.getByLabel("Buscar paquetes").fill("guide-07");
   await expect(page.locator(".package-card")).toHaveCount(1);
   await page.getByLabel("Buscar paquetes").fill("no-existe-nada");
@@ -170,8 +205,14 @@ test("Resumen, Agentes, Ejecuciones y Conectar no descargan el catálogo complet
   await expect(page.locator(".stat-card", { hasText: "Agentes" })).toContainText("1");
   await expect(page.locator("#recentPackages")).toContainText("@ui/reviewer");
 
+  // Agentes is no longer a menu: old links land on the Agentes tab of Paquetes, and the agent opens from its detail.
   await page.goto("/admin#/agents");
-  await expect(page.locator(".card", { hasText: "@ui/reviewer" })).toBeVisible();
+  await expect(page).toHaveURL(/#\/packages\?type=agents/);
+  await expect(page.getByRole("toolbar", { name: "Tipo de paquete" }).getByRole("button", { name: "Agentes" })).toHaveAttribute("aria-pressed", "true");
+  await page.locator(".card", { hasText: "@ui/reviewer" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Usar reviewer" }).click();
+  await expect(page.getByRole("dialog").locator("#activateCommand")).toContainText("modai agent activate @ui/reviewer@1.0.0");
+  await page.getByRole("dialog").getByRole("button", { name: "Cerrar" }).first().click();
   await page.goto("/admin#/runs");
   await expect(page.locator("main")).toBeVisible();
   await page.goto("/admin#/connect");

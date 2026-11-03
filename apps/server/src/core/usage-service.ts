@@ -11,16 +11,11 @@ export class UsageService {
   report(projectId: string, packages: InstalledPackageReport[]): void {
     const connection = this.db.connection;
     const now = new Date().toISOString();
-    connection.exec("BEGIN IMMEDIATE");
-    try {
+    connection.transaction(() => {
       connection.prepare("DELETE FROM project_installations WHERE project_id = ?").run(projectId);
       const insert = connection.prepare("INSERT INTO project_installations (project_id, package_name, version, direct, reported_at) VALUES (?, ?, ?, ?, ?)");
       for (const item of packages) insert.run(projectId, item.name, item.version, item.direct ? 1 : 0, now);
-      connection.exec("COMMIT");
-    } catch (error) {
-      connection.exec("ROLLBACK");
-      throw error;
-    }
+    }).immediate();
   }
 
   /** Projects using `name`; `visible` limits the answer to projects the caller may see. */

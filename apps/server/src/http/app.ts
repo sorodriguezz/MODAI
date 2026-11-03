@@ -6,7 +6,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { AuditService } from "../core/audit-service.js";
 import { AuthService, namespaceOf, type Identity, type KeyGrants, type Role, type UserRecord } from "../core/auth-service.js";
 import { DirectoryService } from "../core/directory-service.js";
-import { TemplateService } from "../core/template-service.js";
+import { CategoryService } from "../core/category-service.js";
 import { BackupService } from "../core/backup-service.js";
 import { ContextService } from "../core/context-service.js";
 import { Database } from "../core/database.js";
@@ -18,7 +18,7 @@ import { UsageService } from "../core/usage-service.js";
 import { PackageService } from "../core/package-service.js";
 import type { MemoryInput, PublishPackageInput, ResolveRequest } from "@modai/contracts/types";
 import { AgentService } from "../core/agent-service.js";
-import { isAgentPackage, manifestIdentity, normalizeManifest, skillArchiveToPackage } from "@modai/core";
+import { isAgentPackage, manifestIdentity, normalizeManifest, parseTemplateManifest, skillArchiveToPackage, TEMPLATE_MANIFEST, templateToPackage, writeZip } from "@modai/core";
 import { RunService } from "../core/run-service.js";
 import { parseInput, publishSchema, projectSchema, keySchema, memorySchema, memoryQuerySchema, composeSchema, runSchema, resolveSchema } from "@modai/contracts/schemas";
 import type { SignaturePolicy } from "@modai/contracts/types";
@@ -74,12 +74,12 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   const auth = new AuthService(db, options.apiToken, { idleMs: options.sessionIdleMs, absoluteMs: options.sessionMaxMs });
   const usage = new UsageService(db);
   const directory = new DirectoryService(db, auth);
-  const templates = new TemplateService(db, options.artifactDirectory, options.maxArtifactStorageBytes);
+  const categories = new CategoryService(db);
   try { await seedInitialAdmin(auth, new AuditService(db), options.initialAdmin); } catch (error) { db.close(); throw error; }
   if (!auth.configured()) { db.close(); throw new AppError(500, "AUTH_NOT_CONFIGURED", "Configura MODAI_API_TOKEN, MODAI_ADMIN_USERNAME/MODAI_ADMIN_PASSWORD o una API key admin activa antes de arrancar"); }
   const audit = new AuditService(db);
   const metrics = new MetricsService();
-  const backup = new BackupService(db, packages, context, templates);
+  const backup = new BackupService(db, packages, context);
 
   await app.register(cors, { origin: false });
   await app.register(helmet, { contentSecurityPolicy: { directives: {
@@ -117,7 +117,8 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     });
   });
 
-  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.10.0", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
+  // Public: what a client needs to connect. The Node version is only for authenticated callers (it helps attackers, not users).
+  app.get("/health", async (request) => ({ status: "ok", service: "modularai", version: "0.10.0", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", publicUrl, ...(identityOf(request) ? { runtime: process.version } : {}) }));
   app.get("/", async (_request, reply) => reply.redirect("/admin"));
   if (options.adminDirectory !== false) {
     try { registerAdminAssets(app, options.adminDirectory); }
@@ -166,8 +167,8 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
     return { package: packages.get(request.query.name, request.query.version) };
   });
-  app.post<{ Body: PublishPackageInput }>("/api/v1/packages/validate", async (request) => {
-    requireRole(request, "reader");
+  app.post<{ Body: PublishPackageInput }>("/api/v1/packages/validate", { bodyLimit: 36 * 1024 * 1024, config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (request) => {
+    requireRole(request, "publisher");
     const input = validatedPackage(request.body);
     return { quality: analyzePackageQuality(input.manifest, input.files) };
   });
@@ -186,8 +187,10 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     schema: { body: { type: "object", required: ["archive", "namespace"], additionalProperties: false, properties: {
       archive: { type: "string", minLength: 1, maxLength: 36 * 1024 * 1024 }, namespace: { type: "string", pattern: "^@[a-z0-9][a-z0-9._-]*$" },
       version: { type: "string", maxLength: 100 }, name: { type: "string", maxLength: 64 }, dryRun: { type: "boolean" } } } },
+    // Unzipping up to 25 MiB is real work: only publishers, and not in a loop.
+    config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
   }, async (request, reply) => {
-    requireRole(request, "reader");
+    requireRole(request, "publisher");
     let converted;
     try { converted = skillArchiveToPackage(Buffer.from(request.body.archive, "base64"), request.body); }
     catch (error) { throw new AppError(400, "INVALID_SKILL", (error as Error).message); }
@@ -201,6 +204,49 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     auth.ensureNamespace(name, identityOf(request)!);
     record(request, "package.publish", `${published.name}@${published.version}`, { source: "skill", quality: published.quality?.score });
     return reply.code(201).send({ package: published });
+  });
+  /** A whole starter project (ZIP or files) becomes a `kind: Template` package, used with `modai template use`. */
+  app.post<{ Body: { name: string; version: string; description: string; category?: string; keywords?: string[]; declaration?: { features?: Record<string, Record<string, unknown>>; addon?: { for: string[] } }; archive?: string; files?: Array<{ path: string; content: string; sha256: string }> } }>("/api/v1/packages/import-template", {
+    bodyLimit: 36 * 1024 * 1024,
+    schema: { body: { type: "object", required: ["name", "version", "description"], additionalProperties: false, properties: {
+      name: { type: "string", maxLength: 214 }, version: { type: "string", maxLength: 100 }, description: { type: "string", maxLength: 5000 },
+      category: { type: "string", maxLength: 64 }, keywords: { type: "array", maxItems: 50, items: { type: "string", maxLength: 64 } },
+      // The template's features (flags of `modai template use`), validated like a modai.template.yaml on publish.
+      declaration: { type: "object", additionalProperties: false, properties: { features: { type: "object", maxProperties: 50, additionalProperties: { type: "object" } }, addon: { type: "object", additionalProperties: false, required: ["for"], properties: { for: { type: "array", maxItems: 50, items: { type: "string", maxLength: 214 } } } } } },
+      archive: { type: "string", maxLength: 36 * 1024 * 1024 },
+      files: { type: "array", maxItems: 5000, items: { type: "object", required: ["path", "content", "sha256"], additionalProperties: false, properties: { path: { type: "string", maxLength: 1024 }, content: { type: "string" }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" } } } } } } },
+  }, async (request, reply) => {
+    const { archive, files, ...options } = request.body;
+    auth.requirePublish(identityOf(request), options.name);
+    auth.requireNamespaceExists(options.name);
+    if (!archive && !files?.length) throw new AppError(400, "INVALID_TEMPLATE", "Envía un ZIP (archive) o la lista de archivos");
+    let input: PublishPackageInput;
+    try { input = templateToPackage(archive ? { archive: Buffer.from(archive, "base64") } : { entries: files!.map(file => ({ path: file.path, bytes: Buffer.from(file.content, "base64") })) }, options); }
+    catch (error) { throw new AppError(400, "INVALID_TEMPLATE", (error as Error).message); }
+    const published = packages.publish(validatedPackage(input));
+    record(request, "package.publish", `${published.name}@${published.version}`, { source: "template", quality: published.quality?.score });
+    return reply.code(201).send({ package: published });
+  });
+  /** Features and add-on declaration of a template version (its modai.template.yaml), plus its file list. */
+  app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/packages/template", async request => {
+    auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
+    const item = packages.get(request.query.name, request.query.version);
+    if (normalizeManifest(item.manifest).kind !== "Template") throw new AppError(400, "NOT_A_TEMPLATE", `${item.name} no es un template de proyecto`);
+    const { files } = packages.getArtifact(item.artifactId);
+    const declaration = files.find(file => file.path === TEMPLATE_MANIFEST);
+    let manifest: ReturnType<typeof parseTemplateManifest> & { manifestError?: string } = { features: [] };
+    // A version published before a rule changed keeps working for reading; `template use` reports the problem.
+    if (declaration) { try { manifest = parseTemplateManifest(Buffer.from(declaration.content, "base64").toString("utf8")); } catch (error) { manifest = { features: [], manifestError: (error as Error).message }; } }
+    return { package: item, ...manifest, files: files.map(file => ({ path: file.path, size: Buffer.from(file.content, "base64").length })) };
+  });
+  /** Any package version as a .zip of its files (a template unpacks as its project folder). */
+  app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/packages/download", async (request, reply) => {
+    auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
+    const item = packages.get(request.query.name, request.query.version);
+    const folder = item.name.split("/")[1]!;
+    const zip = writeZip(packages.getArtifact(item.artifactId).files.map(file => ({ path: `${folder}/${file.path}`, bytes: Buffer.from(file.content, "base64") })));
+    record(request, "package.download", `${item.name}@${item.version}`);
+    return reply.type("application/zip").header("content-disposition", `attachment; filename="${folder}-${item.version}.zip"`).send(zip);
   });
   app.post<{ Body: ResolveRequest }>("/api/v1/resolve", async (request) => {
     const visible = auth.packageReader(identityOf(request));
@@ -217,19 +263,26 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     else requireRole(request, "admin");
     return packages.getArtifact(request.params.id);
   });
-  app.post<{ Body: { name: string; version: string; message: string } }>("/api/v1/admin/packages/deprecate", async (request) => {
+  const versionRef = { name: { type: "string", pattern: "^@[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$", maxLength: 214 }, version: { type: "string", minLength: 1, maxLength: 100 } };
+  app.post<{ Body: { name: string; version: string; message: string } }>("/api/v1/admin/packages/deprecate", {
+    schema: { body: { type: "object", required: ["name", "version", "message"], additionalProperties: false, properties: { ...versionRef, message: { type: "string", maxLength: 1000 } } } },
+  }, async (request) => {
     auth.requireManagePackage(identityOf(request), String(request.body?.name ?? ""));
     const item = packages.deprecate(request.body.name, request.body.version, request.body.message);
     record(request, "package.deprecate", `${item.name}@${item.version}`, { message: request.body.message });
     return { package: item };
   });
-  app.post<{ Body: { name: string; version: string; reason: string } }>("/api/v1/admin/packages/yank", async (request) => {
+  app.post<{ Body: { name: string; version: string; reason: string } }>("/api/v1/admin/packages/yank", {
+    schema: { body: { type: "object", required: ["name", "version", "reason"], additionalProperties: false, properties: { ...versionRef, reason: { type: "string", maxLength: 1000 } } } },
+  }, async (request) => {
     auth.requireManagePackage(identityOf(request), String(request.body?.name ?? ""));
     const item = packages.yank(request.body.name, request.body.version, request.body.reason);
     record(request, "package.yank", `${item.name}@${item.version}`, { reason: request.body.reason });
     return { package: item };
   });
-  app.delete<{ Body: { name: string; version: string; confirmation: string } }>("/api/v1/admin/packages", async (request, reply) => {
+  app.delete<{ Body: { name: string; version: string; confirmation: string } }>("/api/v1/admin/packages", {
+    schema: { body: { type: "object", required: ["name", "version", "confirmation"], additionalProperties: false, properties: { ...versionRef, confirmation: { type: "string", maxLength: 330 } } } },
+  }, async (request, reply) => {
     requireRole(request, "admin");
     packages.hardDelete(request.body.name, request.body.version, request.body.confirmation);
     record(request, "package.delete", request.body.confirmation);
@@ -244,7 +297,9 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     const fingerprint = packages.registerPublisher(request.body.publicKey, request.body.label, request.body.trusted);
     record(request, "publisher.register", fingerprint); return { fingerprint };
   });
-  app.patch<{ Params: { fingerprint: string }; Body: { trusted: boolean; label?: string } }>("/api/v1/admin/publishers/:fingerprint", async (request) => {
+  app.patch<{ Params: { fingerprint: string }; Body: { trusted: boolean; label?: string } }>("/api/v1/admin/publishers/:fingerprint", {
+    schema: { body: { type: "object", required: ["trusted"], additionalProperties: false, properties: { trusted: { type: "boolean" }, label: { type: "string", maxLength: 200 } } } },
+  }, async (request) => {
     requireRole(request, "admin");
     packages.trustPublisher(request.params.fingerprint, request.body.trusted, request.body.label);
     record(request, "publisher.trust", request.params.fingerprint, request.body);
@@ -259,20 +314,33 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     const documents = (context.listKnowledge(limit, offset) as Array<{ packageName?: string | null }>).filter(doc => !doc.packageName || visible(doc.packageName));
     return { documents, nextOffset: documents.length === limit ? offset + limit : null };
   });
-  app.post<{ Body: { title: string; content: string; tags?: string[]; packageName?: string } }>("/api/v1/knowledge/documents", async (request, reply) => {
-    requireRole(request, "publisher");
+  const knowledgeBody = {
+    title: { type: "string", minLength: 1, maxLength: 300 }, content: { type: "string", minLength: 1, maxLength: 1_000_000 },
+    tags: { type: "array", maxItems: 50, items: { type: "string", maxLength: 64 } },
+  };
+  const knowledgeOwner = (id: string): string | null => {
+    const doc = db.connection.prepare("SELECT package_name FROM knowledge_documents WHERE id = ?").get(id) as { package_name: string | null } | undefined;
+    if (!doc) throw new AppError(404, "KNOWLEDGE_NOT_FOUND", "Documento no encontrado");
+    return doc.package_name;
+  };
+  app.post<{ Body: { title: string; content: string; tags?: string[]; packageName?: string } }>("/api/v1/knowledge/documents", {
+    schema: { body: { type: "object", required: ["title", "content"], additionalProperties: false, properties: { ...knowledgeBody, packageName: { type: "string", pattern: "^@[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$", maxLength: 214 } } } },
+  }, async (request, reply) => {
+    auth.requireWriteKnowledge(identityOf(request), request.body.packageName);
     const document = context.addKnowledge(request.body);
     record(request, "knowledge.create", String(document.id));
     return reply.code(201).send({ document });
   });
-  app.patch<{ Params: { id: string }; Body: { title?: string; content?: string; tags?: string[] } }>("/api/v1/knowledge/documents/:id", async (request) => {
-    requireRole(request, "publisher");
+  app.patch<{ Params: { id: string }; Body: { title?: string; content?: string; tags?: string[] } }>("/api/v1/knowledge/documents/:id", {
+    schema: { body: { type: "object", additionalProperties: false, properties: knowledgeBody } },
+  }, async (request) => {
+    auth.requireWriteKnowledge(identityOf(request), knowledgeOwner(request.params.id));
     const document = context.updateKnowledge(request.params.id, request.body);
     record(request, "knowledge.update", request.params.id);
     return { document };
   });
   app.delete<{ Params: { id: string } }>("/api/v1/knowledge/documents/:id", async (request, reply) => {
-    requireRole(request, "publisher");
+    auth.requireWriteKnowledge(identityOf(request), knowledgeOwner(request.params.id));
     context.deleteKnowledge(request.params.id);
     record(request, "knowledge.delete", request.params.id);
     return reply.code(204).send();
@@ -283,11 +351,12 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   });
   const vectorSchema = { type: "array", minItems: 1, maxItems: 8192, items: { type: "number" } };
   app.put<{ Params: { id: string }; Body: { model: string; embedding: number[]; sourceHash?: string } }>("/api/v1/knowledge/documents/:id/vector", {
-    schema: { body: { type: "object", required: ["model", "embedding"], properties: { model: { type: "string", minLength: 1, maxLength: 200 }, embedding: vectorSchema, sourceHash: { type: "string", pattern: "^[a-f0-9]{64}$" } } } },
+    schema: { body: { type: "object", required: ["model", "embedding"], additionalProperties: false, properties: { model: { type: "string", minLength: 1, maxLength: 200 }, embedding: vectorSchema, sourceHash: { type: "string", pattern: "^[a-f0-9]{64}$" } } } },
   }, async (request) => {
-    requireRole(request, "publisher");
-    const doc = db.connection.prepare("SELECT title, content FROM knowledge_documents WHERE id = ?").get(request.params.id) as { title: string; content: string } | undefined;
+    const doc = db.connection.prepare("SELECT title, content, package_name FROM knowledge_documents WHERE id = ?").get(request.params.id) as { title: string; content: string; package_name: string | null } | undefined;
     if (!doc) throw new AppError(404, "KNOWLEDGE_NOT_FOUND", "Documento no encontrado");
+    // Vectors are computed by clients: only someone who may write the document (or index its package) replaces them.
+    auth.requireWriteKnowledge(identityOf(request), doc.package_name);
     if (request.body.sourceHash && request.body.sourceHash !== createHash("sha256").update(doc.title + "\n" + doc.content).digest("hex")) throw new AppError(409, "DOCUMENT_CHANGED", "El documento cambió durante la indexación; vuelve a indexarlo.");
     if (!request.body.embedding.some((value) => value !== 0)) throw new AppError(400, "INVALID_VECTOR", "El vector no puede ser cero");
     context.saveVector(request.params.id, request.body.model, request.body.embedding);
@@ -390,6 +459,31 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   });
 
   const namespaceBody = { organizationId: { type: ["string", "null"], minLength: 1, maxLength: 200 }, description: { type: "string", maxLength: 1000 }, visibility: { type: "string", enum: ["internal", "restricted"] } };
+  // ------------------------------------------------------------ categories
+  app.get("/api/v1/categories", async request => ({ categories: categories.list(auth.packageReader(identityOf(request))) }));
+  app.post<{ Body: { name: string; description?: string } }>("/api/v1/categories", {
+    schema: { body: { type: "object", required: ["name"], additionalProperties: false, properties: { name: { type: "string", maxLength: 64 }, description: { type: "string", maxLength: 500 } } } },
+  }, async (request, reply) => {
+    requireRole(request, "admin");
+    const category = categories.create(request.body);
+    record(request, "category.create", category.name);
+    return reply.code(201).send({ category });
+  });
+  app.patch<{ Params: { name: string }; Body: { description?: string } }>("/api/v1/categories/:name", {
+    schema: { body: { type: "object", additionalProperties: false, properties: { description: { type: "string", maxLength: 500 } } } },
+  }, async request => {
+    requireRole(request, "admin");
+    const category = categories.update(request.params.name, request.body);
+    record(request, "category.update", category.name);
+    return { category };
+  });
+  app.delete<{ Params: { name: string } }>("/api/v1/categories/:name", async (request, reply) => {
+    requireRole(request, "admin");
+    categories.remove(request.params.name);
+    record(request, "category.delete", request.params.name);
+    return reply.code(204).send();
+  });
+
   app.get("/api/v1/namespaces", async request => ({ namespaces: directory.listNamespaces(identityOf(request)) }));
   app.post<{ Body: { name: string; organizationId?: string; description?: string; visibility?: "internal" | "restricted" } }>("/api/v1/namespaces", {
     schema: { body: { type: "object", required: ["name"], additionalProperties: false, properties: { name: { type: "string", minLength: 2, maxLength: 65 }, ...namespaceBody } } },
@@ -409,48 +503,6 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     const namespace = directory.deleteNamespace(identityOf(request), request.params.name);
     record(request, "namespace.delete", namespace.name);
     return reply.code(204).send();
-  });
-
-  // ------------------------------------------------------------ templates
-  app.get<{ Querystring: { q?: string } }>("/api/v1/templates", async request => ({ templates: templates.list(auth.packageReader(identityOf(request)), request.query.q) }));
-  app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/template", async request => {
-    auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
-    const { template, files } = templates.files(request.query.name, request.query.version);
-    const publish = auth.publishableNamespaces(identityOf(request)!);
-    return { template, ...templates.manifest(request.query.name, request.query.version), versions: templates.versions(request.query.name), files: files.map(file => ({ path: file.path, size: Buffer.from(file.content, "base64").length })), canPublish: publish.all || publish.namespaces.includes(namespaceOf(template.name)) };
-  });
-  app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/template/files", async request => {
-    auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
-    return templates.files(request.query.name, request.query.version);
-  });
-  app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/template/download", async (request, reply) => {
-    auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
-    const { template, zip } = templates.zip(request.query.name, request.query.version);
-    record(request, "template.download", `${template.name}@${template.version}`);
-    return reply.type("application/zip").header("content-disposition", `attachment; filename="${template.name.split("/")[1]}-${template.version}.zip"`).send(zip);
-  });
-  app.post<{ Body: { name: string; version: string; description: string; tags?: string[]; stack?: string; archive?: string; files?: Array<{ path: string; content: string; sha256: string }> } }>("/api/v1/templates", {
-    bodyLimit: 36 * 1024 * 1024,
-    schema: { body: { type: "object", required: ["name", "version", "description"], additionalProperties: false, properties: {
-      name: { type: "string", maxLength: 214 }, version: { type: "string", maxLength: 100 }, description: { type: "string", maxLength: 2000 },
-      tags: { type: "array", maxItems: 20, items: { type: "string", maxLength: 40 } }, stack: { type: "string", maxLength: 200 },
-      archive: { type: "string", maxLength: 36 * 1024 * 1024 },
-      files: { type: "array", maxItems: 5000, items: { type: "object", required: ["path", "content", "sha256"], additionalProperties: false, properties: { path: { type: "string", maxLength: 1024 }, content: { type: "string" }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" } } } } } } },
-  }, async (request, reply) => {
-    auth.requirePublish(identityOf(request), request.body.name);
-    auth.requireNamespaceExists(request.body.name);
-    if (!request.body.archive && !request.body.files?.length) throw new AppError(400, "INVALID_TEMPLATE", "Envía un ZIP (archive) o la lista de archivos");
-    const template = templates.publish(request.body, identityOf(request)!.label);
-    record(request, "template.publish", `${template.name}@${template.version}`, { files: template.files });
-    return reply.code(201).send({ template });
-  });
-  app.patch<{ Body: { name: string; version: string; status: "active" | "yanked" } }>("/api/v1/templates", {
-    schema: { body: { type: "object", required: ["name", "version", "status"], additionalProperties: false, properties: { name: { type: "string", maxLength: 214 }, version: { type: "string", maxLength: 100 }, status: { type: "string", enum: ["active", "yanked"] } } } },
-  }, async request => {
-    auth.requirePublish(identityOf(request), request.body.name);
-    const template = templates.setStatus(request.body.name, request.body.version, request.body.status);
-    record(request, request.body.status === "yanked" ? "template.yank" : "template.restore", `${template.name}@${template.version}`);
-    return { template };
   });
 
   app.get("/api/v1/agents", async request => { const visible = auth.packageReader(identityOf(request)); return { agents: packages.list().filter(item => visible(item.name) && isAgentPackage(item.manifest)) }; });
@@ -597,7 +649,8 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     record(request, "backup.export", "server");
     return backup.export();
   });
-  app.post<{ Body: Parameters<BackupService["import"]>[0] }>("/api/v1/admin/import", async (request) => {
+  // A real backup carries every artifact: far above the default 1 MiB body limit.
+  app.post<{ Body: Parameters<BackupService["import"]>[0] }>("/api/v1/admin/import", { bodyLimit: 1024 * 1024 * 1024 }, async (request) => {
     requireRole(request, "admin");
     const result = backup.import(request.body);
     record(request, "backup.import", "server", result);

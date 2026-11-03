@@ -81,6 +81,7 @@ export async function resolve<T>(source: ResolveSource<T>, input: ResolveInput):
     let lastError: unknown;
     let featureError: unknown;
     for (const candidate of candidates) {
+      if (candidate.manifest.kind === "Template") throw new AppError(422, "TEMPLATE_NOT_INSTALLABLE", `${requirement.name} es un template de proyecto: no se instala, se usa con modai template use ${requirement.name}`, { chain: requirement.chain });
       const nextSelected = new Map(selected);
       nextSelected.set(requirement.name, candidate);
       const chain = [...requirement.chain, requirement.name];

@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { AppError } from "@modai/contracts/errors";
 import { sha256 } from "@modai/contracts/security";
 import type { PackageManifest, ArtifactFile } from "@modai/contracts/types";
-import type { ManagedEntry } from "@modai/contracts/spec-v1";
+import { UNSAFE_JSON_KEYS, type ManagedEntry } from "@modai/contracts/spec-v1";
 import type { DesiredBlock, DesiredJson, DesiredState } from "./adapters.js";
 import { removeProjectDirectory, removeProjectFile, safeProjectPath, writeProjectFile } from "./fs.js";
 import { computeIntegrity } from "./integrity.js";
@@ -54,11 +54,17 @@ function removeBlock(content: string, id: string): string {
   return (content.slice(0, block.start).replace(/\n+$/, "\n") + content.slice(block.end).replace(/^\n+/, "")).replace(/^\n+/, "");
 }
 
+/** Defense in depth: never walk or create a prototype key, whatever validated the pointer before. */
+function pointerKeys(pointer: string): string[] {
+  const keys = pointer.split(".");
+  if (keys.some(key => UNSAFE_JSON_KEYS.has(key))) throw new AppError(400, "UNSAFE_POINTER", `Puntero JSON no permitido: ${pointer}`);
+  return keys;
+}
 function getPointer(value: unknown, pointer: string): unknown {
-  return pointer.split(".").reduce<unknown>((node, key) => (node && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined), value);
+  return pointerKeys(pointer).reduce<unknown>((node, key) => (node && typeof node === "object" && Object.hasOwn(node, key) ? (node as Record<string, unknown>)[key] : undefined), value);
 }
 function setPointer(value: Record<string, unknown>, pointer: string, next: unknown): void {
-  const keys = pointer.split(".");
+  const keys = pointerKeys(pointer);
   let node = value;
   for (const key of keys.slice(0, -1)) {
     if (!node[key] || typeof node[key] !== "object" || Array.isArray(node[key])) node[key] = {};
@@ -231,13 +237,18 @@ function pruneEmpty(value: Record<string, unknown>): void {
 // ---------------------------------------------------------------------------
 
 export const STORE_DIRECTORY = ".modai/store";
+/**
+ * Integrity record of a stored package. Not `package.json`: npm, editors and workspace tools would read it as an npm
+ * manifest (its `files` is a list of { path, sha256 }, not npm's list of globs). A store with the old name is rebuilt.
+ */
+const STORE_RECORD = "modai-store.json";
 export function storePath(name: string): string { return `${STORE_DIRECTORY}/${name}`; }
-export function storePackageDir(root: string, name: string): string { return join(dirname(safeProjectPath(root, `${storePath(name)}/package.json`)), "files"); }
+export function storePackageDir(root: string, name: string): string { return join(dirname(safeProjectPath(root, `${storePath(name)}/${STORE_RECORD}`)), "files"); }
 
 interface StoreRecord { name: string; version: string; integrity: string; manifest: PackageManifest; files: Array<{ path: string; sha256: string }> }
 
 export function readStoreRecord(root: string, name: string): StoreRecord | undefined {
-  const text = readText(root, `${storePath(name)}/package.json`);
+  const text = readText(root, `${storePath(name)}/${STORE_RECORD}`);
   return text ? JSON.parse(text) as StoreRecord : undefined;
 }
 
@@ -247,7 +258,7 @@ export function writeStore(root: string, artifact: { name: string; version: stri
   removeProjectDirectory(root, storePath(artifact.name));
   for (const file of artifact.files) writeProjectFile(root, `${storePath(artifact.name)}/files/${file.path}`, Buffer.from(file.content, "base64"));
   const record: StoreRecord = { name: artifact.name, version: artifact.version, integrity: artifact.integrity, manifest: artifact.manifest, files: artifact.files.map(({ path, sha256: hash }) => ({ path, sha256: hash })) };
-  writeProjectFile(root, `${storePath(artifact.name)}/package.json`, `${JSON.stringify(record, null, 2)}\n`);
+  writeProjectFile(root, `${storePath(artifact.name)}/${STORE_RECORD}`, `${JSON.stringify(record, null, 2)}\n`);
 }
 
 /** Recomputes the integrity of an extracted package. Executable contributions are refused if it differs from the lock. */

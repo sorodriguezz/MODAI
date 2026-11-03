@@ -27,7 +27,7 @@ modai skill export @skills/code-review ./code-review.skill
 # Templates de proyecto (ver TEMPLATES.md)
 modai template publish ./nestjs-sdd --name @plantillas/nestjs-sdd@1.0.0 --description "…"
 modai template info @plantillas/nestjs-sdd
-modai template yank @plantillas/nestjs-sdd@1.1.0      # y restore
+modai package yank @plantillas/nestjs-sdd@1.1.0 --reason "…"   # un template es un paquete
 modai template use @plantillas/nestjs-sdd ./mi-api
 
 # Conocimiento compartido del servidor

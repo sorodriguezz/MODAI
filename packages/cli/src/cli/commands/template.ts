@@ -2,27 +2,38 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, 
 import { basename, dirname, join, posix, resolve } from "node:path";
 import type { Command } from "commander";
 import { ApiClient } from "@modai/sdk";
+import type { PackageRecord } from "@modai/contracts/types";
 import { assertSafeRelativePath, sha256 } from "@modai/contracts/security";
 import type { ArtifactFile } from "@modai/contracts/types";
 import {
   baseFiles, composeTemplate, createProjectFile, featureHelpLines, isV1Project, loadV1Project, parseFeatureFlags, parseTemplateManifest, requiredAddons, safeProjectPath,
-  saveProjectFile, selectFeatures, suggestFeature, TEMPLATE_MANIFEST, writeZip, type TemplateFile, type TemplateManifest, type TemplatePackage,
+  saveProjectFile, selectFeatures, suggestFeature, TEMPLATE_EXCLUDED, TEMPLATE_MANIFEST, writeZip, type TemplateFile, type TemplateManifest, type TemplatePackage,
 } from "@modai/core";
 import { runSync, summarize } from "../../v1/runtime.js";
+import { installationPolicy, verifyPackage } from "../../agent/trust.js";
+import { askCheckbox, askSearch, askText, hint, interactive } from "../ui.js";
 import { commaList } from "../agent-commands.js";
 import { effectiveConnection } from "../connection.js";
 import { group } from "../groups.js";
 import type { Print } from "../output.js";
 
 const serverApi = () => { const connection = effectiveConnection(); return new ApiClient(connection.server, connection.token); };
-/** Same exclusions as the server: dependencies, build output, VCS data and local secrets. */
-const EXCLUDED = /(^|\/)(node_modules|\.git|dist|build|coverage|\.next|\.turbo|\.modai\/store|\.DS_Store|Thumbs\.db)(\/|$)|(^|\/)\.env(\.(?!example$|sample$|template$)[^/]*)?$/;
+
+/**
+ * A template's files, checked like an installed package before anything is written: file hashes, the artifact hash and
+ * the signature under the strictest policy of this machine, the project and the server.
+ */
+async function verifiedTemplate(api: ApiClient, name: string, version: string | undefined, trust: Awaited<ReturnType<typeof installationPolicy>>) {
+  const loaded = await api.templateFiles(name, version);
+  verifyPackage(loaded.template, loaded, trust.policy, trust.trustedPublishers);
+  return loaded;
+}
 const TEXT = /\.(md|mdx|txt|json|jsonc|ya?ml|toml|ts|tsx|js|jsx|mjs|cjs|css|scss|html|xml|sh|ps1|py|java|kt|go|rs|env\.example|gitignore|dockerignore|editorconfig|properties|gradle|sql|graphql|prisma|vue|svelte)$|(^|\/)(Dockerfile|Makefile|README|LICENSE|\.gitignore|\.npmrc|\.nvmrc)$/i;
 
 function collect(root: string, relative = ""): ArtifactFile[] {
   const absolute = relative ? join(root, relative) : root;
   const info = lstatSync(absolute);
-  if (info.isSymbolicLink() || (relative && EXCLUDED.test(relative))) return [];
+  if (info.isSymbolicLink() || (relative && TEMPLATE_EXCLUDED.test(relative))) return [];
   if (info.isFile()) { const bytes = readFileSync(absolute); return [{ path: relative, content: bytes.toString("base64"), sha256: sha256(bytes) }]; }
   if (!info.isDirectory()) return [];
   return readdirSync(absolute).sort().flatMap(name => collect(root, relative ? posix.join(relative, name) : name));
@@ -54,10 +65,10 @@ function templateChoice(flags: string[], manifest: TemplateManifest, templateNam
   return choice;
 }
 
-function templateHelp(record: { name: string; version: string; description: string; stack?: string }, manifest: TemplateManifest): string {
+function templateHelp(record: PackageRecord, manifest: TemplateManifest): string {
   const features = manifest.features.map(feature => ({ ...feature, notes: [feature.uses ? `usa ${feature.uses}` : "", Object.keys(feature.packages).length ? `instala ${Object.keys(feature.packages).join(", ")}` : ""].filter(Boolean) }));
   return [
-    `${record.name}@${record.version}${record.stack ? ` · ${record.stack}` : ""}`, record.description, "",
+    `${record.name}@${record.version} · ${record.manifest.spec?.category ?? "template"}`, record.description, "",
     `Uso: modai template use ${record.name} [carpeta] [opciones]`, "",
     features.length ? `Opciones de este template:\n${featureHelpLines(features).join("\n")}` : "Este template no declara features: se crea tal cual.",
     ...(manifest.addon ? ["", `Es un add-on${manifest.addon.for.length ? ` para ${manifest.addon.for.join(", ")}` : ""}: se combina con otro template usando --with ${record.name}.`] : []), "",
@@ -82,26 +93,60 @@ function addTemplatePackages(target: string, packages: Record<string, TemplatePa
   saveProjectFile(target, file);
 }
 
-export function registerTemplateCommands(program: Command, print: Print): void {
-  const template = group(program, "template", "Templates de proyecto versionados (por ejemplo NestJS con SDD)");
-  template.command("list").alias("ls").description("Templates publicados en el servidor").argument("[query]", "Filtra por nombre, stack o etiqueta")
-    .action(async (query?: string) => print((await serverApi().templates(query)).map(item => ({ name: item.name, version: item.version, stack: item.stack ?? "—", versions: item.versions, description: item.description }))));
+/** Options of `template use` itself, never a template's feature. */
+const GENERAL_FLAGS = new Set(["--var", "--with", "--force", "--dry-run", "--sync", "--allow", "--help"]);
 
-  template.command("publish").description("Publica una carpeta o un .zip como versión inmutable de un template")
+async function pickTemplate(api: ApiClient): Promise<string> {
+  const templates = await api.templates();
+  if (!templates.length) throw new Error("El servidor no tiene templates publicados. Crea uno con: modai template init ./mi-template");
+  return askSearch({
+    message: "Template (escribe para filtrar)", flag: "@scope/nombre",
+    source: term => templates.filter(item => !term || `${item.name} ${item.description}`.toLowerCase().includes(term.toLowerCase()))
+      .map(item => ({ value: `${item.name}@${item.version}`, name: `${item.name} ${hint(item.version)}`, description: item.description })),
+  });
+}
+
+export function registerTemplateCommands(program: Command, print: Print): void {
+  const template = group(program, "template", "Templates de proyecto: paquetes kind: Template que crean un proyecto nuevo (por ejemplo NestJS con SDD)");
+  template.command("list").alias("ls").description("Templates publicados en el servidor").argument("[query]", "Filtra por nombre, categoría o etiqueta")
+    .action(async (query?: string) => print((await serverApi().templates(query)).map(item => ({ name: item.name, version: item.version, category: item.manifest.spec?.category ?? "template", versions: item.versions, description: item.description }))));
+
+  template.command("init").description("Crea el esqueleto de un template: README, AGENTS.md y un modai.template.yaml comentado")
+    .argument("<directory>", "Carpeta nueva del template")
+    .action((directory: string) => {
+      const root = resolve(directory);
+      if (existsSync(root) && readdirSync(root).length) throw new Error(`${root} no está vacía`);
+      const files: Record<string, string> = {
+        "README.md": "# {{projectName}}\n\nQué es este proyecto, cómo se instala y cómo se ejecuta.\n",
+        "AGENTS.md": "# Instrucciones para agentes de {{projectName}}\n\nConvenciones, comandos de verificación y límites del proyecto.\n",
+        ".gitignore": "node_modules/\ndist/\n.env\n.modai/store/\n",
+        [TEMPLATE_MANIFEST]: [
+          "# Opciones de este template: se activan con flags al usarlo (modai template use <template> --sdd).",
+          "# Añádelas con: modai feature define . sdd --description \"Spec-Driven Development\" --path features/sdd",
+          "# Guía completa: docs/guides/TEMPLATES.md",
+          "features: {}",
+          "",
+        ].join("\n"),
+      };
+      for (const [path, content] of Object.entries(files)) { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), content, { flag: "wx" }); }
+      print(`Template creado en ${root}.\nOpciones:  modai feature define ${directory} <nombre> --description "…" --path features/<nombre>\nPublica:   modai template publish ${directory} --name @equipo/nombre@1.0.0 --description "…"`);
+    });
+
+  template.command("publish").description("Publica una carpeta o un .zip como versión inmutable de un template (un paquete kind: Template)")
     .argument("<source>", "Carpeta del proyecto modelo o archivo .zip")
     .requiredOption("--name <@scope/name@version>", "Nombre y versión del template, por ejemplo @equipo/nestjs-sdd@1.0.0")
     .requiredOption("--description <text>", "Qué incluye y para qué sirve")
-    .option("--stack <text>", "Tecnologías, por ejemplo \"NestJS 11 · SDD · PostgreSQL\"")
-    .option("--tags <tags>", "Etiquetas separadas por comas", (value: string) => value.split(",").map(tag => tag.trim()).filter(Boolean))
-    .action(async (source: string, options: { name: string; description: string; stack?: string; tags?: string[] }) => {
+    .option("--category <category>", "Categoría del catálogo (por defecto template), por ejemplo backend")
+    .option("--tags <tags>", "Etiquetas separadas por comas (tecnologías, por ejemplo nestjs,postgres)", (value: string) => value.split(",").map(tag => tag.trim()).filter(Boolean))
+    .action(async (source: string, options: { name: string; description: string; category?: string; tags?: string[] }) => {
       const { name, version } = splitSpec(options.name);
       if (!version) throw new Error("Indica la versión en --name, por ejemplo @equipo/nestjs-sdd@1.0.0");
       const path = resolve(source);
       const files = statSync(path).isDirectory() ? collect(path) : undefined;
       const content = files ? { files } : { archive: readFileSync(path).toString("base64") };
       if (files && !files.length) throw new Error("La carpeta no tiene archivos publicables (se excluyen node_modules, .git, dist y .env)");
-      const published = await serverApi().publishTemplate({ name, version, description: options.description, stack: options.stack, tags: options.tags, ...content });
-      print(`Publicado el template ${published.name}@${published.version}: ${published.files} archivos. Úsalo con: modai template use ${published.name} ./mi-proyecto`);
+      const published = await serverApi().importTemplate({ name, version, description: options.description, category: options.category, keywords: options.tags, ...content });
+      print(`Publicado el template ${published.name}@${published.version}. Úsalo con: modai template use ${published.name} ./mi-proyecto`);
     });
 
   template.command("use").description("Crea un proyecto nuevo a partir de un template; sus features se activan con --<nombre> (modai template use <template> --help las lista)")
@@ -128,13 +173,20 @@ export function registerTemplateCommands(program: Command, print: Print): void {
         print(templateHelp(record, manifestOf(files)));
         return;
       }
-      if (!spec) throw new Error("Indica el template: modai template use @scope/nombre [carpeta]. Lista los disponibles con: modai template list");
-      const { name, version } = splitSpec(spec);
-      const target = resolve(directory);
-      if (existsSync(target) && readdirSync(target).length && !options.force && !options.dryRun) throw new Error(`${target} no está vacía. Usa otra carpeta o --force.`);
+      // In a terminal, what is missing is asked: which template, where, and (below) which of its options.
       const api = serverApi();
-      const { template: record, files } = await api.templateFiles(name, version);
+      const chosenSpec = spec ?? (interactive() ? await pickTemplate(api) : undefined);
+      if (!chosenSpec) throw new Error("Indica el template: modai template use @scope/nombre [carpeta]. Lista los disponibles con: modai template list");
+      const { name, version } = splitSpec(chosenSpec);
+      const target = resolve(operands[1] ?? (spec || !interactive() ? directory : await askText({ message: "Carpeta del proyecto nuevo", flag: "[carpeta]", default: `./${name.split("/")[1]}` })));
+      if (existsSync(target) && readdirSync(target).length && !options.force && !options.dryRun) throw new Error(`${target} no está vacía. Usa otra carpeta o --force.`);
+      const trust = await installationPolicy(api, isV1Project(process.cwd()) ? { signaturePolicy: loadV1Project(process.cwd()).file.signaturePolicy } : {});
+      const { template: record, files } = await verifiedTemplate(api, name, version, trust);
       const manifest = manifestOf(files);
+      if (!flags.some(flag => flag.startsWith("--") && !GENERAL_FLAGS.has(flag.split("=")[0]!)) && manifest.features.length && interactive()) {
+        const on = await askCheckbox({ message: `Opciones de ${record.name}`, flag: "--<feature>", choices: manifest.features.map(feature => ({ value: feature.name, name: `--${feature.name}`, description: feature.description, checked: feature.default })) });
+        flags.push(...manifest.features.filter(feature => on.includes(feature.name) !== feature.default).map(feature => on.includes(feature.name) ? `--${feature.name}` : `--no-${feature.name}`));
+      }
       const selected = selectFeatures(manifest.features, templateChoice(flags, manifest, record.name), record.name);
 
       // External add-ons: those the chosen features use, then the ones asked with --with.
@@ -142,7 +194,7 @@ export function registerTemplateCommands(program: Command, print: Print): void {
       const addons = new Map<string, TemplateFile[]>();
       for (const addonSpec of new Set(wanted)) {
         const addonRef = splitSpec(addonSpec);
-        const loaded = await api.templateFiles(addonRef.name, addonRef.version);
+        const loaded = await verifiedTemplate(api, addonRef.name, addonRef.version, trust);
         const addonManifest = manifestOf(loaded.files);
         if (addonManifest.addon?.for.length && !addonManifest.addon.for.includes(record.name)) throw new Error(`${addonSpec} no está pensado para ${record.name}: solo para ${addonManifest.addon.for.join(", ")}`);
         addons.set(addonSpec, baseFiles(loaded.files, addonManifest));
@@ -174,31 +226,24 @@ export function registerTemplateCommands(program: Command, print: Print): void {
       print(summarize(report));
     });
 
-  template.command("info").description("Versiones, estado y archivos de un template")
+  template.command("info").description("Versiones, features y archivos de un template")
     .argument("<template>", "@scope/nombre[@versión]")
     .action(async (spec: string) => {
       const { name, version } = splitSpec(spec);
-      const info = await serverApi().templateInfo(name, version);
-      print({ name: info.template.name, version: info.template.version, description: info.template.description, stack: info.template.stack ?? "—", tags: info.template.tags,
-        versions: info.versions.map(item => `${item.version}${item.status === "yanked" ? " (retirada)" : ""}`), ...(info.features?.length ? { features: info.features.map(item => `--${item.name}${item.default ? " (por defecto)" : ""}: ${item.description}`) } : {}), ...(info.addon ? { addon: `para ${info.addon.for.join(", ") || "cualquier template"}` } : {}), files: info.files.map(item => item.path) });
+      const api = serverApi();
+      const info = await api.templateInfo(name, version);
+      const versions = (await api.listPackages(name, true)).filter(item => item.name === name).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+      print({ name: info.package.name, version: info.package.version, description: info.package.description, category: info.package.manifest.spec?.category ?? "template", tags: info.package.manifest.metadata?.keywords ?? [],
+        versions: versions.map(item => `${item.version}${item.status === "yanked" ? " (retirada)" : item.status === "deprecated" ? " (deprecada)" : ""}`), ...(info.features?.length ? { features: info.features.map(item => `--${item.name}${item.default ? " (por defecto)" : ""}: ${item.description}`) } : {}), ...(info.addon ? { addon: `para ${info.addon.for.join(", ") || "cualquier template"}` } : {}), files: info.files.map(item => item.path) });
     });
-  for (const [command, status, label] of [["yank", "yanked", "Retirada"], ["restore", "active", "Restaurada"]] as const) {
-    template.command(command).description(status === "yanked" ? "Retira una versión: deja de ser la última, pero sigue disponible por versión exacta" : "Vuelve a activar una versión retirada")
-      .argument("<template>", "@scope/nombre@versión")
-      .action(async (spec: string) => {
-        const { name, version } = splitSpec(spec);
-        if (!version) throw new Error("Indica la versión: @scope/nombre@1.0.0");
-        const updated = await serverApi().setTemplateStatus(name, version, status);
-        print(`${label} ${updated.name}@${updated.version}.`);
-      });
-  }
 
   template.command("download").description("Descarga un template como .zip sin aplicar variables")
     .argument("<template>", "@scope/nombre[@versión]")
     .argument("[file]", "Archivo destino")
     .action(async (spec: string, file?: string) => {
       const { name, version } = splitSpec(spec);
-      const { template: record, files } = await serverApi().templateFiles(name, version);
+      const api = serverApi();
+      const { template: record, files } = await verifiedTemplate(api, name, version, await installationPolicy(api));
       const folder = record.name.split("/")[1]!;
       const output = resolve(file ?? `${folder}-${record.version}.zip`);
       writeFileSync(output, writeZip(files.map(item => ({ path: `${folder}/${item.path}`, bytes: Buffer.from(item.content, "base64") }))));

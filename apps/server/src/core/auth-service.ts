@@ -23,7 +23,7 @@ export interface Permissions {
   role: Role; global: boolean;
   manage: { users: boolean; apiKeys: boolean; organizations: boolean; createOrganizations: boolean; namespaces: boolean; audit: boolean; publishers: boolean; backup: boolean; packages: boolean };
   assignableRoles: Role[];
-  createProjects: boolean; writeMemory: boolean; submitRuns: boolean;
+  createProjects: boolean; writeKnowledge: boolean; writeMemory: boolean; submitRuns: boolean;
   publish: { all: boolean; namespaces: string[] };
   /** Namespaces whose packages it may deprecate or yank. */
   packages: { all: boolean; namespaces: string[] };
@@ -267,6 +267,7 @@ export class AuthService {
       manage: { users: manager, apiKeys: manager, organizations: manager, createOrganizations: global, namespaces: manager, audit: global, publishers: global, backup: global, packages: global },
       assignableRoles: global ? ROLES : manager ? DELEGABLE_ROLES : [],
       createProjects: this.satisfies(actor.role, "publisher"),
+      writeKnowledge: this.publishableNamespaces(actor).all,
       writeMemory: ["publisher", "worker", "org-admin", "admin"].includes(actor.role),
       submitRuns: this.satisfies(actor.role, "publisher"),
       publish: this.publishableNamespaces(actor),
@@ -321,6 +322,16 @@ export class AuthService {
     const allowed = this.publishableNamespaces(actor);
     const scope = namespaceOf(packageName);
     if (!allowed.all && !allowed.namespaces.includes(scope)) throw new AppError(403, "PACKAGE_FORBIDDEN", `La clave no puede publicar en el namespace ${scope}. Pide acceso a la administración de su organización.`);
+  }
+
+  /**
+   * Manual knowledge is read by every agent that can see it. A document tied to a package (`packageName`) is written by
+   * whoever may publish in its namespace; one shared with the whole server only by those who may publish everywhere.
+   */
+  requireWriteKnowledge(identity: Identity | undefined, packageName?: string | null): void {
+    if (packageName) return this.requirePublish(identity, packageName);
+    const actor = this.require(identity, "publisher");
+    if (!this.publishableNamespaces(actor).all) throw new AppError(403, "KNOWLEDGE_FORBIDDEN", "El conocimiento compartido con todo el servidor lo escribe la administración global. Asócialo a un paquete de tu namespace con packageName.");
   }
 
   /** Registers the namespace of a published package the first time it is used (no owner: global admins decide later). */
@@ -549,12 +560,14 @@ export class AuthService {
 
   /**
    * Verifies credentials. Always spends the same scrypt work and returns the same result for unknown users,
-   * wrong passwords and disabled accounts. Repeated failures lock the username for a while.
+   * wrong passwords and disabled accounts. Repeated failures lock that username *from that address* for a while, so a
+   * stranger cannot lock someone else out of their account just by knowing the username.
    */
-  async verifyLogin(usernameInput: unknown, password: unknown): Promise<{ user?: UserRecord; locked: boolean }> {
+  async verifyLogin(usernameInput: unknown, password: unknown, address = ""): Promise<{ user?: UserRecord; locked: boolean }> {
     const username = typeof usernameInput === "string" ? usernameInput.trim().toLowerCase().slice(0, 64) : "";
     const pass = typeof password === "string" ? password.slice(0, MAX_PASSWORD_LENGTH) : "";
-    const now = Date.now(), entry = this.failures.get(username);
+    const key = `${username}\u0000${address}`;
+    const now = Date.now(), entry = this.failures.get(key);
     const row = username ? this.db.connection.prepare("SELECT * FROM users WHERE username = ?").get(username) as UserRow | undefined : undefined;
     decoyHash ??= hashPassword(randomBytes(18).toString("base64url"));
     const valid = await verifyPassword(pass, row?.password_hash ?? await decoyHash);
@@ -563,11 +576,17 @@ export class AuthService {
       const failure = entry && now - entry.first < 15 * 60_000 ? entry : { count: 0, first: now, lockedUntil: 0 };
       failure.count += 1;
       if (failure.count >= 5) failure.lockedUntil = now + 15 * 60_000;
-      if (this.failures.size > 10_000) this.failures.clear();
-      this.failures.set(username, failure);
+      this.failures.delete(key);
+      this.failures.set(key, failure);
+      // Bounded memory: forget expired entries first, then the oldest ones (a Map keeps insertion order). Never all at once,
+      // which would let someone reset every lock by spraying usernames.
+      if (this.failures.size > 10_000) {
+        for (const [other, value] of this.failures) if (value.lockedUntil <= now && now - value.first >= 15 * 60_000) this.failures.delete(other);
+        for (const other of this.failures.keys()) { if (this.failures.size <= 10_000) break; this.failures.delete(other); }
+      }
       return { locked: false };
     }
-    this.failures.delete(username);
+    this.failures.delete(key);
     return { user: toUser(row), locked: false };
   }
 

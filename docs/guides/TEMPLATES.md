@@ -1,8 +1,8 @@
 # Templates de proyecto
 
-Un **template** es un proyecto completo para empezar con la estructura del equipo, por ejemplo *NestJS con SDD*: carpetas, configuración, `AGENTS.md`, `modai.yaml`, pruebas de ejemplo. Se publica en el servidor con un nombre `@namespace/nombre`, cada versión es inmutable y se usa para crear proyectos nuevos.
+Un **template** es un proyecto completo para empezar con la estructura del equipo, por ejemplo *NestJS con SDD*: carpetas, configuración, `AGENTS.md`, `modai.yaml`, pruebas de ejemplo. Es un **paquete** de `kind: Template`: se publica con un nombre `@namespace/nombre`, cada versión es inmutable, aparece en el catálogo de **Paquetes** (pestaña *Templates*) y se usa para crear proyectos nuevos. No se instala en un proyecto: `modai add` o una dependencia hacia un template falla con `TEMPLATE_NOT_INSTALLABLE`.
 
-Siguen los mismos permisos que los paquetes: publicar exige poder publicar en el namespace, y los templates de un namespace *restringido* solo los ve quien tiene acceso a él.
+Como cualquier paquete, publicar exige poder publicar en el namespace (que debe existir), los de un namespace *restringido* solo los ve quien tiene acceso a él, y una versión se depreca o retira con `modai package deprecate|yank` o desde la pestaña *Versiones* de su detalle.
 
 ## Publicar
 
@@ -11,12 +11,12 @@ Desde una carpeta (o un `.zip`):
 ```sh
 modai template publish ./nestjs-sdd --name @plantillas/nestjs-sdd@1.0.0 \
   --description "API NestJS con Spec-Driven Development, pruebas y CI" \
-  --stack "NestJS 11 · SDD · PostgreSQL" --tags backend,api,sdd
+  --category backend --tags nestjs,postgres,sdd
 ```
 
-Nunca se incluyen `node_modules`, `.git`, `dist`, `build`, `coverage` ni archivos `.env` (sí `.env.example`). Máximo 25 MiB.
+Nunca se incluyen `node_modules`, `.git`, `dist`, `build`, `coverage` ni archivos `.env` (sí `.env.example`). Máximo 25 MiB. Si el `.zip` envuelve todo en una carpeta, esa carpeta se quita. La categoría es `template` si no se indica; las etiquetas van en `metadata.keywords`.
 
-En el panel: **Biblioteca → Templates → Subir template** (archivo `.zip` o carpeta, datos, revisión). Desde el detalle de un template se publica la **nueva versión**, se **descarga el .zip** o se **retira** una versión (deja de ser la última, pero sigue disponible por versión exacta).
+En el panel: **Paquetes → Crear paquete → Template de proyecto** (o **Crear paquete** con la pestaña *Templates* activa). Los pasos son archivos (editor, `.zip` o carpeta), datos, **opciones** (las features, ver abajo) y revisión. Desde el detalle de un template se publica la **nueva versión** (parte de sus archivos y opciones) y se **descarga el .zip**.
 
 ## Usar
 
@@ -65,14 +65,14 @@ features:
 - **Paquetes**: `packages` añade paquetes MODAI (con sus features, si se indican) al `modai.yaml` del proyecto nuevo; si el template no trae uno, se crea apuntando al servidor conectado. Se instalan con `modai sync` dentro de la carpeta, o en el mismo paso con `--sync` (y `--allow project.source` si instalan código). Así `--sdd` no solo copia archivos: instala la metodología.
 - Las reglas de nombres, `default`, `requires` y `conflicts` son las mismas que las de las [features de paquetes](../spec/PACKAGE-SPEC-v1.md#features-specfeatures).
 - `--dry-run` muestra los archivos que se crearían (y lo que se añadiría a `modai.yaml`) sin escribir nada.
+- **En el panel**, el paso *Opciones* del editor crea y edita las features sin escribir YAML: nombre, descripción, si viene activa, carpeta, qué otras activa o excluye, marcadores, add-on y paquetes (elegidos por namespace, paquete y versión). Al publicar genera `modai.template.yaml`. Si no tocas las opciones, se respeta el `modai.template.yaml` que traigan los archivos.
 
 ## API
 
+Un template es un paquete: se lista con `GET /api/v1/packages/catalog?type=templates`, se lee con `GET /api/v1/package` y sus archivos con `GET /api/v1/artifacts/:id`. Además:
+
 | Método | Ruta | Uso |
 |---|---|---|
-| GET | `/api/v1/templates?q=` | Última versión activa de cada template visible |
-| GET | `/api/v1/template?name=&version=` | Detalle, versiones y lista de archivos |
-| GET | `/api/v1/template/files?name=&version=` | Archivos (base64 + sha256), lo que usa la CLI |
-| GET | `/api/v1/template/download?name=&version=` | ZIP |
-| POST | `/api/v1/templates` | Publicar `{ name, version, description, stack?, tags?, archive? (ZIP base64) \| files? }` |
-| PATCH | `/api/v1/templates` | Retirar o restaurar `{ name, version, status: "yanked" \| "active" }` |
+| POST | `/api/v1/packages/import-template` | Publicar `{ name, version, description, category?, keywords?, declaration?, archive? (ZIP base64) \| files? }`. `declaration` (`{ features, addon? }`) reemplaza el `modai.template.yaml` de los archivos |
+| GET | `/api/v1/packages/template?name=&version=` | Opciones (`features`, `addon`) y lista de archivos de una versión |
+| GET | `/api/v1/packages/download?name=&version=` | ZIP de cualquier paquete (un template se descomprime como la carpeta del proyecto) |

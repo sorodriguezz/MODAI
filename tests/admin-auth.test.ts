@@ -179,10 +179,10 @@ test("cambio de contraseña propio y restablecimiento por un admin", async () =>
 });
 
 test("las API keys Bearer siguen funcionando sin cookie ni CSRF", async () => {
-  const key = await app.inject({ method: "POST", url: "/api/v1/admin/api-keys", headers: bearer, payload: { label: "cli", role: "publisher", projectIds: ["proyecto-panel"] } });
+  const key = await app.inject({ method: "POST", url: "/api/v1/admin/api-keys", headers: bearer, payload: { label: "cli", role: "publisher", projectIds: ["proyecto-panel"], packageScopes: ["@cli"] } });
   assert.equal(key.statusCode, 201);
   const auth = { authorization: `Bearer ${key.json().key.token}` };
-  assert.equal((await app.inject({ method: "POST", url: "/api/v1/knowledge/documents", headers: auth, payload: { title: "Desde CLI", content: "ok" } })).statusCode, 201);
+  assert.equal((await app.inject({ method: "POST", url: "/api/v1/knowledge/documents", headers: auth, payload: { title: "Desde CLI", content: "ok", packageName: "@cli/guias" } })).statusCode, 201);
   assert.equal((await app.inject({ method: "GET", url: "/api/v1/auth/me", headers: auth })).json().identity.kind, "api-key");
   // An invalid Bearer never falls back to the cookie.
   assert.equal((await app.inject({ method: "GET", url: "/api/v1/session", headers: { authorization: "Bearer inválido", cookie: adminCookie } })).statusCode, 401);
@@ -194,6 +194,31 @@ test("bloquea el usuario tras varios intentos fallidos", async () => {
   for (let i = 0; i < 5; i++) assert.equal((await app.inject({ method: "POST", url: "/api/v1/auth/login", headers: csrf, payload: { username: "bloqueo", password: "incorrecta-" + i } })).statusCode, 401);
   const locked = await app.inject({ method: "POST", url: "/api/v1/auth/login", headers: csrf, payload: { username: "bloqueo", password: "clave-correcta-01" } });
   assert.equal(locked.statusCode, 429);
+  // The lock is per address: someone else who knows the username cannot lock its owner out.
+  const elsewhere = await app.inject({ method: "POST", url: "/api/v1/auth/login", remoteAddress: "10.0.0.9", headers: csrf, payload: { username: "bloqueo", password: "clave-correcta-01" } });
+  assert.equal(elsewhere.statusCode, 200);
+});
+
+test("/health no revela el runtime sin sesión y validar o importar .skill exige publicar", async () => {
+  const anonymous = (await app.inject({ method: "GET", url: "/health" })).json();
+  assert.equal(anonymous.runtime, undefined);
+  assert.equal(typeof anonymous.signaturePolicy, "string");
+  assert.match((await app.inject({ method: "GET", url: "/health", headers: bearer })).json().runtime, /^v\d+/);
+  const reader = await app.inject({ method: "POST", url: "/api/v1/admin/api-keys", headers: bearer, payload: { label: "lector-skill", role: "reader" } });
+  const readerAuth = { authorization: `Bearer ${reader.json().key.token}` };
+  assert.equal((await app.inject({ method: "POST", url: "/api/v1/packages/import-skill", headers: readerAuth, payload: { archive: "UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==", namespace: "@x", dryRun: true } })).statusCode, 403);
+  assert.equal((await app.inject({ method: "POST", url: "/api/v1/packages/validate", headers: readerAuth, payload: { manifest: {}, files: [] } })).statusCode, 403);
+});
+
+test("importar un backup es todo o nada", async () => {
+  const before = (await app.inject({ method: "GET", url: "/api/v1/projects", headers: bearer })).json().projects.length;
+  // The project is valid; the package fails on publish (its file hash does not match), after the project was written.
+  const broken = await app.inject({ method: "POST", url: "/api/v1/admin/import", headers: bearer, payload: {
+    schemaVersion: 1, projects: [{ id: "restaurado-a-medias", name: "No debe quedar", createdAt: new Date().toISOString() }],
+    packages: [{ manifest: { apiVersion: "modai.dev/v1", kind: "Package", metadata: { name: "@roto/x", version: "1.0.0", description: "paquete con hash incorrecto" }, spec: {} }, files: [{ path: "a.md", content: Buffer.from("a").toString("base64"), sha256: "0".repeat(64) }] }],
+  } });
+  assert.equal(broken.statusCode, 400, broken.body);
+  assert.equal((await app.inject({ method: "GET", url: "/api/v1/projects", headers: bearer })).json().projects.length, before);
 });
 
 test("siembra el administrador inicial desde la configuración y exige contraseña fuerte", async () => {

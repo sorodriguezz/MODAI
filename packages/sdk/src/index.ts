@@ -14,18 +14,18 @@ export interface Permissions {
   role: Role; global: boolean;
   manage: { users: boolean; apiKeys: boolean; organizations: boolean; createOrganizations: boolean; namespaces: boolean; audit: boolean; publishers: boolean; backup: boolean; packages: boolean };
   assignableRoles: Role[];
-  createProjects: boolean; writeMemory: boolean; submitRuns: boolean;
+  createProjects: boolean; writeKnowledge: boolean; writeMemory: boolean; submitRuns: boolean;
   publish: { all: boolean; namespaces: string[] };
   packages: { all: boolean; namespaces: string[] };
   organizations: Array<{ id: string; name: string; manage: boolean }>;
 }
 
 export interface OrganizationRecord { id: string; name: string; description: string; projects: number; namespaces: number; members: number; canManage: boolean }
+export interface CategoryRecord { name: string; description: string; registered: boolean; packages: number; createdAt?: string; updatedAt?: string }
 export interface NamespaceRecord { name: string; organizationId?: string; organizationName?: string; description: string; visibility: "internal" | "restricted"; packages: number; canManage: boolean; canPublish: boolean }
 
 export interface ApiKeyRecord { id: string; label: string; role: Role; createdAt: string; lastUsedAt?: string; revokedAt?: string; ownerId?: string; ownerName?: string; inherit: boolean; projectIds: string[]; organizationIds: string[]; packageScopes: string[] }
 export interface UserRecord { id: string; username: string; displayName: string; role: Role; projectIds: string[]; organizationIds: string[]; packageScopes: string[]; createdAt: string; lastLoginAt?: string; disabledAt?: string }
-export interface TemplateRecord { name: string; version: string; description: string; tags: string[]; stack?: string; files: number; sizeBytes: number; publishedAt: string; publishedBy: string; status: "active" | "yanked"; versions?: number }
 
 export class ApiClient {
   private readonly baseUrl: string;
@@ -229,24 +229,27 @@ export class ApiClient {
     return (await this.request<{ namespace: NamespaceRecord }>("/api/v1/namespaces", { method: "POST", body: JSON.stringify(input) })).namespace;
   }
 
-  async templates(query?: string): Promise<TemplateRecord[]> {
-    return (await this.request<{ templates: TemplateRecord[] }>(`/api/v1/templates${query ? `?q=${encodeURIComponent(query)}` : ""}`)).templates;
+  // ------------------------------------------------------------- templates (packages of kind Template)
+  async templates(query?: string): Promise<Array<PackageRecord & { versions: number }>> {
+    return (await this.catalog({ type: "templates", q: query, limit: 100 })).items;
   }
-  async templateFiles(name: string, version?: string): Promise<{ template: TemplateRecord; files: ArtifactFile[] }> {
-    return this.request(`/api/v1/template/files?name=${encodeURIComponent(name)}${version ? `&version=${encodeURIComponent(version)}` : ""}`);
+  /** The files of a template version (the newest one still in use when `version` is omitted). */
+  async templateFiles(name: string, version?: string): Promise<{ template: PackageRecord; files: ArtifactFile[]; sha256: string }> {
+    const template = await this.getPackage(name, version);
+    if (template.manifest.kind !== "Template") throw new Error(`${name} no es un template de proyecto: instálalo con modai add ${name}`);
+    const artifact = await this.artifact(template.artifactId);
+    return { template, files: artifact.files, sha256: artifact.sha256 };
   }
-  async publishTemplate(input: { name: string; version: string; description: string; tags?: string[]; stack?: string; files?: ArtifactFile[]; archive?: string }): Promise<TemplateRecord> {
+  /** Features and add-on declaration (modai.template.yaml) of a template version, and its files. */
+  async templateInfo(name: string, version?: string): Promise<{ package: PackageRecord; features: Array<{ name: string; description: string; default: boolean; requires: string[]; conflicts: string[]; uses?: string; path?: string; vars: Record<string, string> }>; addon?: { for: string[] }; manifestError?: string; files: Array<{ path: string; size: number }> }> {
+    return this.request(`/api/v1/packages/template?name=${encodeURIComponent(name)}${version ? `&version=${encodeURIComponent(version)}` : ""}`);
+  }
+  /** Publishes a folder (files) or a .zip (archive) as a new `kind: Template` package version. */
+  async importTemplate(input: { name: string; version: string; description: string; category?: string; keywords?: string[]; files?: ArtifactFile[]; archive?: string }): Promise<PackageRecord> {
     const namespace = input.name.split("/")[0]!;
     const { permissions } = await this.session();
     if (!permissions.publish.all && !permissions.publish.namespaces.includes(namespace)) throw new Error(`PACKAGE_FORBIDDEN: no puedes publicar en ${namespace}. ${permissions.publish.namespaces.length ? `Puedes publicar en: ${permissions.publish.namespaces.join(", ")}.` : ""}`);
-    return (await this.request<{ template: TemplateRecord }>("/api/v1/templates", { method: "POST", body: JSON.stringify(input) })).template;
-  }
-
-  async templateInfo(name: string, version?: string): Promise<{ template: TemplateRecord; features: Array<{ name: string; description: string; default: boolean; requires: string[]; conflicts: string[]; uses?: string; path?: string; vars: Record<string, string> }>; addon?: { for: string[] }; versions: TemplateRecord[]; files: Array<{ path: string; size: number }>; canPublish: boolean }> {
-    return this.request(`/api/v1/template?name=${encodeURIComponent(name)}${version ? `&version=${encodeURIComponent(version)}` : ""}`);
-  }
-  async setTemplateStatus(name: string, version: string, status: "active" | "yanked"): Promise<TemplateRecord> {
-    return (await this.request<{ template: TemplateRecord }>("/api/v1/templates", { method: "PATCH", body: JSON.stringify({ name, version, status }) })).template;
+    return (await this.request<{ package: PackageRecord }>("/api/v1/packages/import-template", { method: "POST", body: JSON.stringify(input) })).package;
   }
 
   // ------------------------------------------------------------- packages & skills
@@ -295,6 +298,29 @@ export class ApiClient {
     return (await this.request<{ namespace: NamespaceRecord }>(`/api/v1/namespaces/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify(input) })).namespace;
   }
   async deleteNamespace(name: string): Promise<void> { await this.request(`/api/v1/namespaces/${encodeURIComponent(name)}`, { method: "DELETE" }); }
+  // ------------------------------------------------------------- categories, usage, projects, publishers
+  async categories(): Promise<CategoryRecord[]> { return (await this.request<{ categories: CategoryRecord[] }>("/api/v1/categories")).categories; }
+  async createCategory(input: { name: string; description?: string }): Promise<CategoryRecord> {
+    return (await this.request<{ category: CategoryRecord }>("/api/v1/categories", { method: "POST", body: JSON.stringify(input) })).category;
+  }
+  async updateCategory(name: string, input: { description: string }): Promise<CategoryRecord> {
+    return (await this.request<{ category: CategoryRecord }>(`/api/v1/categories/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify(input) })).category;
+  }
+  async deleteCategory(name: string): Promise<void> { await this.request(`/api/v1/categories/${encodeURIComponent(name)}`, { method: "DELETE" }); }
+  /** Projects linked to this server that reported installing `name` (only those the credential may see). */
+  async packageUsage(name: string): Promise<Array<{ projectId: string; projectName: string; version: string; direct: boolean; reportedAt: string }>> {
+    return (await this.request<{ projects: never[] }>(`/api/v1/packages/usage?name=${encodeURIComponent(name)}`)).projects;
+  }
+  async updateProject(id: string, input: { name?: string; organizationId?: string | null }): Promise<ProjectRecord> {
+    return (await this.request<{ project: ProjectRecord }>(`/api/v1/projects/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) })).project;
+  }
+  async publishers(): Promise<Array<{ fingerprint: string; label?: string; trusted: boolean; createdAt: string }>> {
+    return (await this.request<{ publishers: never[] }>("/api/v1/admin/publishers")).publishers;
+  }
+  async setPublisherTrust(fingerprint: string, trusted: boolean, label?: string): Promise<void> {
+    await this.request(`/api/v1/admin/publishers/${encodeURIComponent(fingerprint)}`, { method: "PATCH", body: JSON.stringify({ trusted, ...(label ? { label } : {}) }) });
+  }
+
   async audit(limit = 100): Promise<Array<{ id: string; actor: string; action: string; resource: string; details: unknown; createdAt: string }>> {
     return (await this.request<{ events: never[] }>(`/api/v1/admin/audit?limit=${limit}`)).events;
   }

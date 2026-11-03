@@ -1,15 +1,18 @@
-import { resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join, posix, resolve } from "node:path";
+import YAML from "yaml";
 import type { Command } from "commander";
 import semver from "semver";
 import type { PackageManifestV1 } from "@modai/contracts/spec-v1";
 import {
-  HttpRegistry, featureHelpLines, isV1Project, loadPackageSource, loadV1Project, normalizeManifest, readStoreRecord, packageFeatureRules, parseFeatureFlags,
+  HttpRegistry, TEMPLATE_MANIFEST, featureHelpLines, parseTemplateManifest, validateTemplateManifest, isV1Project, loadPackageSource, loadV1Project, normalizeManifest, readStoreRecord, packageFeatureRules, parseFeatureFlags,
   selectPackageFeatures, suggestFeature, type Registry,
 } from "@modai/core";
 import { effectiveConnection } from "../cli/connection.js";
 import { group } from "../cli/groups.js";
 import type { Print } from "../cli/output.js";
 import { parseSpec } from "./commands.js";
+import { askText } from "../cli/ui.js";
 import { projectRegistry, requireV1Project, runSync, summarize, tokenFor } from "./runtime.js";
 
 /**
@@ -131,4 +134,77 @@ export function registerFeatureCommands(program: Command, print: Print): void {
     .action((name: string, names: string[]) => change(name, (choice, manifest) => { known(manifest, names); for (const value of names) choice[value] = false; }, `Quitado ${names.join(", ")}`));
   feature.command("reset").description("Vuelve a los valores por defecto del paquete (todas o las indicadas)").argument("<package>").argument("[features...]")
     .action((name: string, names: string[] = []) => change(name, (choice, manifest) => { known(manifest, names); for (const value of names.length ? names : Object.keys(choice)) delete choice[value]; }, names.length ? `Restablecido ${names.join(", ")}` : "Restablecidas las features"));
+
+  // Authoring: the options a package or a template offers, without editing YAML by hand.
+  const listOption = (value: string, previous: string[] = []) => [...previous, ...value.split(",").map(item => item.trim()).filter(Boolean)];
+  const repeatable = (value: string, previous: string[] = []) => [...previous, value];
+  feature.command("define").description("Crea o reemplaza una feature en la carpeta de un paquete (modai.package.yaml) o de un template (modai.template.yaml)")
+    .argument("<directory>", "Carpeta del paquete o del template")
+    .argument("<name>", "Nombre de la feature: se activa con --<nombre>")
+    .option("--description <text>", "Qué hace (lo que se ve en --help); sin ella, se pregunta")
+    .option("--path <folder>", "Carpeta con sus archivos: en un template se copian sobre el proyecto; en un paquete se añaden al componente")
+    .option("--component <name>", "Paquete con varios componentes: a cuál se añaden los archivos de --path")
+    .option("--default", "Activada salvo --no-<nombre>")
+    .option("--requires <features>", "Features que activa también (separadas por comas)", listOption)
+    .option("--conflicts <features>", "Features con las que no se combina (separadas por comas)", listOption)
+    .option("--package <@scope/nombre@rango>", "Paquete que añade mientras está activa (repetible)", repeatable)
+    .option("--var <clave=valor>", "Solo templates: valor de un marcador {{clave}} (repetible)", repeatable)
+    .option("--uses <@scope/nombre[@versión]>", "Solo templates: add-on que se aplica antes de la carpeta")
+    .action(async (directory: string, name: string, options: { description?: string; path?: string; component?: string; default?: boolean; requires?: string[]; conflicts?: string[]; package?: string[]; var?: string[]; uses?: string }) => {
+      const root = resolve(directory);
+      options.description ??= await askText({ message: `¿Qué hace --${name}?`, flag: "--description", example: "Añade Spec-Driven Development (specs/ y plantillas)" });
+      const packages = Object.fromEntries((options.package ?? []).map(spec => { const parsed = parseSpec(spec, root); return [parsed.name, parsed.value || "*"]; }));
+      const isPackage = existsSync(join(root, "modai.package.yaml"));
+      if (isPackage && (options.var?.length || options.uses)) throw new Error("--var y --uses solo existen en templates");
+      const file = join(root, isPackage ? "modai.package.yaml" : TEMPLATE_MANIFEST);
+      // An empty or missing file still needs a map at the top for setIn.
+      const text = existsSync(file) ? readFileSync(file, "utf8") : "";
+      const document = YAML.parseDocument(text.trim() && YAML.parse(text) ? text : `${text}${text && !text.endsWith("\n") ? "\n" : ""}{}\n`);
+      if (isPackage) {
+        const components = (document.getIn(["spec", "contributes", "components"]) as YAML.YAMLSeq | undefined)?.toJSON() as Array<{ name: string }> | undefined;
+        const component = options.component ?? components?.[0]?.name;
+        if (options.path && !component) throw new Error("--path añade archivos a un componente y este paquete no declara ninguno (spec.contributes.components)");
+        document.setIn(["spec", "features", name], {
+          description: options.description!, ...(options.default ? { default: true } : {}),
+          ...(options.requires?.length ? { requires: options.requires } : {}), ...(options.conflicts?.length ? { conflicts: options.conflicts } : {}),
+          ...(Object.keys(packages).length ? { dependencies: packages } : {}), ...(options.path ? { overlays: [{ component, path: options.path }] } : {}),
+        });
+      } else {
+        const vars = Object.fromEntries((options.var ?? []).map(pair => { const index = pair.indexOf("="); if (index < 1) throw new Error(`Variable inválida: ${pair}. Usa clave=valor.`); return [pair.slice(0, index), pair.slice(index + 1)]; }));
+        document.setIn(["features", name], {
+          description: options.description, ...(options.path ? { path: options.path } : {}), ...(options.default ? { default: true } : {}),
+          ...(options.requires?.length ? { requires: options.requires } : {}), ...(options.conflicts?.length ? { conflicts: options.conflicts } : {}),
+          ...(options.uses ? { uses: options.uses } : {}), ...(Object.keys(vars).length ? { vars } : {}), ...(Object.keys(packages).length ? { packages } : {}),
+        });
+        // Same checks as the server on publish: folders exist, requires/conflicts make sense.
+        validateTemplateManifest(parseTemplateManifest(document.toString()), filesUnder(root));
+      }
+      // Block style ("features: {}" from template init, or "{}" for an empty file, would otherwise stay inline).
+      YAML.visit(document, { Map: (_key, node) => { node.flow = false; }, Seq: (_key, node) => { node.flow = false; } });
+      if (isPackage) normalizeManifest(YAML.parse(document.toString()));
+      writeFileSync(file, document.toString(), "utf8");
+      print(`Feature --${name} definida en ${file}.${isPackage ? `\nValida el paquete: modai package validate ${directory}` : `\nPruébala: modai template use <template> --${name} --dry-run (tras publicar)`}`);
+    });
+  feature.command("undefine").description("Quita una feature de la carpeta de un paquete o de un template")
+    .argument("<directory>", "Carpeta del paquete o del template").argument("<name>", "Nombre de la feature")
+    .action((directory: string, name: string) => {
+      const root = resolve(directory);
+      const isPackage = existsSync(join(root, "modai.package.yaml"));
+      const file = join(root, isPackage ? "modai.package.yaml" : TEMPLATE_MANIFEST);
+      if (!existsSync(file)) throw new Error(`No existe ${file}`);
+      const document = YAML.parseDocument(readFileSync(file, "utf8"));
+      const path = isPackage ? ["spec", "features", name] : ["features", name];
+      if (!document.hasIn(path)) throw new Error(`${file} no declara la feature ${name}`);
+      document.deleteIn(path);
+      writeFileSync(file, document.toString(), "utf8");
+      print(`Feature --${name} quitada de ${file}. Revisa las que la requerían o se oponían a ella.`);
+    });
+}
+
+/** Relative paths of every file under `root` (for checking a template's feature folders before publishing). */
+function filesUnder(root: string, relative = ""): string[] {
+  return readdirSync(join(root, relative)).flatMap(entry => {
+    const path = relative ? posix.join(relative, entry) : entry;
+    return statSync(join(root, path)).isDirectory() ? (/(^|\/)(node_modules|\.git)$/.test(path) ? [] : filesUnder(root, path)) : [path];
+  });
 }

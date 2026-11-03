@@ -4,6 +4,9 @@ import { icon } from "../lib/icons.js";
 import { get, post, del } from "../lib/api.js";
 import { base64ToBytes, bytesToText, formatBytes } from "../lib/files.js";
 import { openPackageEditor } from "./package-editor.js";
+import { openTemplateEditor, mountTemplateUsage } from "./templates.js";
+import { collectAgents, openAgent } from "./agents.js";
+import { qualityPanel } from "../lib/quality.js";
 import { openDialog, closeDialog, confirmDialog, promptDialog, toast, toastError, statusBadge, formatDate, timeTag, skeletonCards, emptyState, errorState, codeBlock, debounce, bindTabs } from "../lib/ui.js";
 import { store, can, describeManifest } from "../state.js";
 
@@ -22,16 +25,17 @@ const permissionLabels = {
 
 const filters = { q: "", type: "", category: "", status: "latest" };
 
-/** "What is it?" filter: contributions and kinds, independent of the free-form category. */
+/** "What is it?" tabs: contributions and kinds, independent of the free-form category (the server applies them). */
 const TYPES = {
-  components: { label: "Componentes de código", test: (info) => info.contributes.components.length > 0 || info.category === "component" },
-  harness: { label: "Harnesses", test: (info) => info.category === "harness" },
-  skills: { label: "Skills", test: (info) => info.contributes.skills.length > 0 },
-  tools: { label: "Herramientas y MCP", test: (info) => info.contributes.tools.length + info.contributes.mcpServers.length > 0 },
-  agents: { label: "Agentes", test: (info) => info.contributes.agents.length > 0 },
-  knowledge: { label: "Conocimiento", test: (info) => info.contributes.knowledge.length > 0 },
-  profiles: { label: "Perfiles", test: (info) => info.kind === "Profile" || info.category === "profile" },
-  adapters: { label: "Adaptadores", test: (info) => info.kind === "Adapter" || info.category === "adapter" },
+  components: { label: "Componentes", icon: "code", create: "component" },
+  harness: { label: "Harness", icon: "layers", create: "harness" },
+  skills: { label: "Skills", icon: "spark", create: "skill" },
+  tools: { label: "Herramientas y MCP", icon: "plug" },
+  agents: { label: "Agentes", icon: "bot" },
+  knowledge: { label: "Conocimiento", icon: "book", create: "knowledge" },
+  profiles: { label: "Perfiles", icon: "user", create: "profile" },
+  adapters: { label: "Adaptadores", icon: "plug" },
+  templates: { label: "Templates", icon: "copy", create: "template" },
 };
 const INSTALL_PERMISSIONS = ["project.instructions", "project.files", "project.source"];
 
@@ -49,7 +53,7 @@ function capabilityList(items, emptyText) {
 function card(item) {
   const info = describeManifest(item);
   return html`<button type="button" class="card package-card" data-action="open" data-name="${item.name}" data-version="${item.version}">
-    <span class="card-top"><span class="card-icon">${icon(categoryIcons[info.category] || "package")}</span>
+    <span class="card-top"><span class="card-icon">${icon(info.kind === "Template" ? "copy" : categoryIcons[info.category] || "package")}</span>
       <span class="card-badges"><span class="badge">${info.category}</span>${info.kind && info.kind !== "Package" ? html`<span class="badge tone-info">${info.kind}</span>` : ""}${item.status !== "active" ? statusBadge(item.status) : ""}</span></span>
     <span class="card-title">${item.name}</span>
     <span class="card-text">${item.description}</span>
@@ -79,10 +83,26 @@ function contributionsSummary(info) {
     : html`<p class="muted small">Este paquete no declara contribuciones.</p>`;
 }
 
+/** A template creates projects instead of installing into one: its overview is how to use it. */
+function templateOverviewPanel(item, info) {
+  return html`
+    <p class="lead">${info.description}</p>
+    ${item.deprecatedMessage ? html`<div class="callout tone-${item.status === "yanked" ? "danger" : "warning"}">${icon("alert")}<span><b>${item.status === "yanked" ? "Versión retirada" : "Versión deprecada"}:</b> ${item.deprecatedMessage}</span></div>` : ""}
+    ${info.keywords?.length ? html`<ul class="chip-list">${info.keywords.map((tag) => html`<li class="chip">${tag}</li>`)}</ul>` : ""}
+    <div id="templateUsage"><p class="muted small">Cargando opciones…</p></div>
+    <dl class="definition-grid">
+      <div><dt>Tipo (kind)</dt><dd>Template de proyecto</dd></div>
+      <div><dt>Categoría</dt><dd>${info.category}</dd></div>
+      <div><dt>Publicado</dt><dd>${formatDate(item.publishedAt)}</dd></div>
+      ${info.license ? html`<div><dt>Licencia</dt><dd>${info.license}</dd></div>` : ""}
+    </dl>`;
+}
+
 function overviewPanel(item, info) {
   const deps = Object.entries(info.dependencies || {});
   return html`
     <p class="lead">${info.description}</p>
+    ${info.contributes.agents.length ? html`<div class="callout tone-info">${icon("bot")}<span>Incluye ${info.contributes.agents.length === 1 ? "un agente" : info.contributes.agents.length + " agentes"}: actívalo en tu editor o envíale una tarea a un worker.</span><span class="row-actions">${info.contributes.agents.map((agent, index) => html`<button type="button" class="btn small" data-action="useAgent" data-index="${index}">${icon("play", 16)}Usar ${agent.name || "agente"}</button>`)}</span></div>` : ""}
     ${item.deprecatedMessage ? html`<div class="callout tone-${item.status === "yanked" ? "danger" : "warning"}">${icon("alert")}<span><b>${item.status === "yanked" ? "Versión retirada" : "Versión deprecada"}:</b> ${item.deprecatedMessage}</span></div>` : ""}
     ${featurePicker("packageFeatures", featureList(item.manifest?.spec?.features), html`Marca lo que quieres y el comando se arma solo. En la CLI: <code>modai add ${item.name} --help</code>; después se cambian con <code>modai feature enable|disable</code>.`)}
     ${codeBlock("installCommand", installCommand(item, info), "Copiar")}
@@ -123,15 +143,6 @@ function versionsPanel(versions) {
     ${manage ? html`<p class="hint">Deprecar avisa a quien instale la versión. Retirar (yank) impide nuevas resoluciones. Solo una versión retirada puede eliminarse definitivamente.</p>` : ""}`;
 }
 
-function qualityPanel(item) {
-  if (!item.quality) return html`<p class="muted">Esta versión no tiene evaluación estructural.</p>`;
-  const tone = { error: "danger", warning: "warning", info: "info" };
-  return html`<div class="quality-score"><strong>${item.quality.score}</strong><span>/100</span></div>
-    <p class="hint">Evalúa la estructura del paquete; no sustituye pruebas funcionales.</p>
-    ${Object.keys(item.quality.dimensions || {}).length ? html`<dl class="definition-grid">${Object.entries(item.quality.dimensions).map(([key, value]) => html`<div><dt>${key}</dt><dd>${value}</dd></div>`)}</dl>` : ""}
-    ${item.quality.findings?.length ? html`<ul class="findings">${item.quality.findings.map((finding) => html`<li class="tone-${tone[finding.severity] || "info"}">${icon(finding.severity === "info" ? "info" : "alert", 16)}<span><code>${finding.code}</code> ${finding.message}</span></li>`)}</ul>` : html`<p class="muted small">Sin observaciones.</p>`}`;
-}
-
 export async function openPackage(name, version, onChange, onPublished = onChange) {
   let versions;
   try {
@@ -142,6 +153,7 @@ export async function openPackage(name, version, onChange, onPublished = onChang
   const item = versions.find((entry) => entry.version === version) || versions[0];
   if (!item) return toastError(new Error("El paquete ya no existe."));
   const info = describeManifest(item);
+  const template = info.kind === "Template";
   const body = openDialog({
     title: item.name,
     description: "Versión " + item.version + " · " + info.category + (info.kind ? " · " + info.kind : ""),
@@ -150,18 +162,19 @@ export async function openPackage(name, version, onChange, onPublished = onChang
         <button role="tab" type="button" data-tab="overview" aria-selected="true">Resumen</button>
         <button role="tab" type="button" data-tab="versions" aria-selected="false" tabindex="-1">Versiones <span class="count">${versions.length}</span></button>
         <button role="tab" type="button" data-tab="files" aria-selected="false" tabindex="-1">Archivos</button>
-        <button role="tab" type="button" data-tab="usage" aria-selected="false" tabindex="-1">Proyectos</button>
+        ${template ? "" : html`<button role="tab" type="button" data-tab="usage" aria-selected="false" tabindex="-1">Proyectos</button>`}
         <button role="tab" type="button" data-tab="quality" aria-selected="false" tabindex="-1">Calidad</button>
         <button role="tab" type="button" data-tab="manifest" aria-selected="false" tabindex="-1">Manifiesto</button>
       </div>
-      <div role="tabpanel" data-panel="overview" class="tab-panel">${overviewPanel(item, info)}</div>
+      <div role="tabpanel" data-panel="overview" class="tab-panel">${template ? templateOverviewPanel(item, info) : overviewPanel(item, info)}</div>
       <div role="tabpanel" data-panel="versions" class="tab-panel" hidden>${versionsPanel(versions)}</div>
       <div role="tabpanel" data-panel="files" class="tab-panel" hidden><div id="packageFiles">${html`<p class="muted small">Cargando archivos…</p>`}</div></div>
       <div role="tabpanel" data-panel="usage" class="tab-panel" hidden><div id="packageUsage">${html`<p class="muted small">Cargando proyectos…</p>`}</div></div>
-      <div role="tabpanel" data-panel="quality" class="tab-panel" hidden>${qualityPanel(item)}</div>
+      <div role="tabpanel" data-panel="quality" class="tab-panel" hidden>${qualityPanel(item.quality)}</div>
       ${can.publish() ? html`<div class="dialog-actions"><button type="button" class="btn" data-action="newVersion">${icon("edit")}Editar y publicar nueva versión</button></div>` : ""}
       <div role="tabpanel" data-panel="manifest" class="tab-panel" hidden>${codeBlock("manifestJson", JSON.stringify(item.manifest, null, 2), "Copiar JSON")}</div>`,
   });
+  if (template) mountTemplateUsage(body.querySelector("#templateUsage"), item);
   const features = featureList(item.manifest?.spec?.features);
   bindFeaturePicker(body, "packageFeatures", features, (flags) => { const code = body.querySelector("#installCommand"); if (code) code.textContent = installCommand(item, info, flags); });
   let files = null, usageLoaded = false;
@@ -207,7 +220,13 @@ export async function openPackage(name, version, onChange, onPublished = onChang
       mount(body.querySelector("#fileViewer"), html`<h4><code>${file.path}</code></h4>${text === null ? html`<p class="muted small">Archivo binario.</p>` : html`<pre class="pre-wrap document">${text}</pre>`}`);
       body.querySelector("#fileViewer").scrollIntoView({ block: "nearest" });
     },
-    newVersion: () => openPackageEditor({ base: item, onPublished }),
+    newVersion: () => (template ? openTemplateEditor({ base: item, onPublished }) : openPackageEditor({ base: item, onPublished })),
+    useAgent: async (button) => {
+      const entry = collectAgents([item])[Number(button.dataset.index)];
+      const projects = await store.projects().catch(() => []);
+      // Same as a #/runs link: the router listens to history changes.
+      openAgent(entry, projects, (id, { params } = {}) => { history.pushState(null, "", "#/" + id + (params ? "?" + new URLSearchParams(params) : "")); dispatchEvent(new PopStateEvent("popstate")); });
+    },
     deprecate: (button) => promptDialog({
       title: "Deprecar " + name + "@" + button.dataset.version,
       message: "La versión seguirá instalable, pero la CLI mostrará este aviso.",
@@ -254,28 +273,35 @@ export default {
   label: "Paquetes",
   icon: "package",
   title: "Paquetes",
-  subtitle: "Componentes de código, harnesses, skills, herramientas, conocimiento y agentes publicados en este servidor.",
+  subtitle: "Todo lo que se publica y versiona bajo un namespace: componentes, harnesses, skills, herramientas, agentes, conocimiento, perfiles, adaptadores y templates de proyecto.",
   async render(root, { params, isCurrent, actions }) {
     if (can.publish()) mount(actions, html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>`);
     mount(root, html`
       <div class="toolbar">
         <div class="search-field">${icon("search")}<label class="sr-only" for="packageSearch">Buscar paquetes</label><input id="packageSearch" type="search" placeholder="Buscar por nombre, descripción o capacidad…" value="${filters.q}"></div>
-        <label class="sr-only" for="packageType">Tipo</label><select id="packageType"><option value="">Todos los tipos</option>${Object.entries(TYPES).map(([id, type]) => html`<option value="${id}">${type.label}</option>`)}</select>
         <label class="sr-only" for="packageCategory">Categoría</label><select id="packageCategory"><option value="">Todas las categorías</option></select>
         <label class="sr-only" for="packageStatus">Estado</label><select id="packageStatus"><option value="latest">Última versión activa</option><option value="all">Todas las versiones</option><option value="deprecated">Deprecadas</option><option value="yanked">Retiradas</option></select>
       </div>
+      <div class="type-tabs" role="toolbar" aria-label="Tipo de paquete" id="packageTypes">
+        <button type="button" data-action="type" data-type="" aria-pressed="false">Todos</button>
+        ${Object.entries(TYPES).map(([id, type]) => html`<button type="button" data-action="type" data-type="${id}" aria-pressed="false">${icon(type.icon, 16)}${type.label}</button>`)}
+      </div>
       <p class="results-meta" id="packageMeta" aria-live="polite"></p>
       <div id="packageResults">${skeletonCards()}</div>`);
-    const $type = root.querySelector("#packageType");
-    $type.value = filters.type;
+    // Links from other views (#/packages?type=agents, ?category=backend, ?q=@equipo/) open with that filter.
+    if (params.has("type")) filters.type = TYPES[params.get("type")] ? params.get("type") : "";
+    if (params.has("q")) filters.q = params.get("q");
+    let wantedCategory = params.get("category");
+    const drawTypes = () => root.querySelectorAll("#packageTypes [data-type]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.type === filters.type)));
+    drawTypes();
     const $q = root.querySelector("#packageSearch"), $category = root.querySelector("#packageCategory"), $status = root.querySelector("#packageStatus");
     $status.value = filters.status;
     let page = 1, request = 0, items = [], total = 0;
     // The server filters and paginates: the browser only receives the page it shows.
     const load = async () => {
       filters.q = $q.value.trim();
-      filters.category = $category.value;
-      filters.type = $type.value;
+      filters.category = wantedCategory ?? $category.value;
+      wantedCategory = null;
       filters.status = $status.value;
       const token = ++request;
       const query = new URLSearchParams({ status: filters.status, limit: String(PAGE_SIZE), offset: String((page - 1) * PAGE_SIZE) });
@@ -291,7 +317,7 @@ export default {
       ({ items, total } = result);
       const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
       if (page > pages) { page = pages; return load(); }
-      const selected = $category.value;
+      const selected = filters.category;
       mount($category, html`<option value="">Todas las categorías</option>${result.categories.map((category) => html`<option value="${category}">${category}</option>`)}`);
       $category.value = result.categories.includes(selected) ? selected : "";
       const filtered = Boolean(filters.q || filters.type || filters.category || filters.status !== "latest");
@@ -300,25 +326,28 @@ export default {
         ? html`<div class="card-grid">${items.map(card)}</div>${pager(page, pages)}`
         : filtered
           ? emptyState({ iconName: "search", title: "Sin resultados", text: "Prueba con otra búsqueda o cambia los filtros.", action: html`<button class="btn" data-action="clear">Limpiar filtros</button>` })
-          : emptyState({ iconName: "package", title: "Aún no hay paquetes", text: "Publica capacidades con la CLI (modai package publish ./mi-paquete) o créalas aquí: componentes de código, harnesses, skills y conocimiento.", action: can.publish() ? html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>` : "" }));
+          : emptyState({ iconName: "package", title: "Aún no hay paquetes", text: "Publica con la CLI (modai package publish ./mi-paquete, modai template publish ./proyecto) o créalos aquí: componentes, harnesses, skills, conocimiento, perfiles y templates de proyecto.", action: can.publish() ? html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>` : "" }));
     };
     const reload = () => { page = 1; return load(); };
     $q.addEventListener("input", debounce(reload, 250));
-    [$type, $category, $status].forEach((select) => select.addEventListener("change", reload));
+    [$category, $status].forEach((select) => select.addEventListener("change", reload));
     const published = async (record) => {
       store.invalidate("summary", "agents");
       await load();
       if (isCurrent()) openPackage(record.name, record.version, load, published);
     };
-    const create = () => openPackageEditor({ template: filters.type === "harness" ? "harness" : filters.type === "skills" ? "skill" : filters.type === "knowledge" ? "knowledge" : "component", onPublished: published });
+    // Creating from a type tab starts with that type already chosen.
+    const create = () => (filters.type === "templates" ? openTemplateEditor({ onPublished: published }) : openPackageEditor({ template: TYPES[filters.type]?.create || "component", onPublished: published }));
     delegate(actions, { create });
     delegate(root, {
       create,
       open: (button) => openPackage(button.dataset.name, button.dataset.version, load, published),
+      type: (button) => { filters.type = button.dataset.type; drawTypes(); reload(); },
       page: (button) => { page = Number(button.dataset.page); load().then(() => root.querySelector("#packageResults")?.scrollIntoView({ block: "start" })); },
       clear: () => {
         $q.value = "";
-        $type.value = "";
+        filters.type = "";
+        drawTypes();
         $category.value = "";
         $status.value = "latest";
         reload();

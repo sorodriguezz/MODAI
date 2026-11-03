@@ -148,7 +148,11 @@ modai component create ./mi-modulo --name @equipo/mi-modulo --from ./src/modules
 modai harness init                                                              # harness en el proyecto actual
 modai package validate ./mi-skill                                               # calidad estructural 0-100
 modai package publish ./mi-skill --registry ~/.modai/registry                           # o la URL de tu servidor
+modai template init ./mi-template                                               # esqueleto de un template de proyecto
+modai feature define ./mi-template sdd --description "Spec-Driven" --path features/sdd   # opciones (--sdd) sin escribir YAML
 ```
+
+`modai feature define <carpeta> <nombre>` sirve igual para un paquete (escribe `spec.features` en `modai.package.yaml`) y para un template (escribe `modai.template.yaml`): `--path` es la carpeta con sus archivos, `--requires`/`--conflicts` las relaciones con otras opciones, `--package @x/y@^1` lo que instala, y en templates también `--var clave=valor` y `--uses`. `modai feature undefine` la quita.
 
 También puedes crear y versionar paquetes desde el **panel web** del servidor (Paquetes → Crear paquete). Las versiones publicadas son inmutables. Referencia del formato: [especificación de paquetes v1](https://github.com/sorodriguezz/MODAI/blob/main/docs/spec/PACKAGE-SPEC-v1.md) y [guía de autoría](https://github.com/sorodriguezz/MODAI/blob/main/docs/guides/AUTHORING-PACKAGES.md).
 
@@ -167,7 +171,9 @@ modai server connect https://modai.tu-equipo.cl     # pide tu API key (créala e
 modai init --project <id>                    # usa el servidor como registry y comparte la memoria del proyecto
 ```
 
-Para eliminar un proyecto del servidor con su memoria y ejecuciones: `modai project delete <id>` (pide confirmación; solo administradores o quien lo creó).
+Para eliminar un proyecto del servidor con su memoria y ejecuciones: `modai project delete <id>` (pide confirmación; solo administradores o quien lo creó). Para renombrarlo o cambiar su organización: `modai project update <id> --name … --organization …`.
+
+**Credenciales.** La API key solo viaja al servidor al que pertenece: la guardada, al servidor con que la guardaste; `MODAI_API_TOKEN`, a `MODAI_SERVER` (o al servidor configurado). Un `modai.yaml` o un template que apunte a otro registry no la recibe, así que en CI define **ambas** variables. Tampoco se envía por `http://` salvo a `localhost`; en una red de confianza puedes permitirlo con `MODAI_ALLOW_INSECURE_HTTP=1`.
 
 Para cambiar de servidor, `modai server logout` borra el servidor y la API key guardados (conserva tus publicadores de confianza) y luego `modai server connect <otra-url>`.
 
@@ -181,15 +187,21 @@ Los comandos del día a día del proyecto van sueltos; el resto está agrupado p
 
 | Grupo | Comandos |
 |---|---|
-| Proyecto | `init`, `add`, `remove`, `update [--keep-mine]`, `outdated`, `sync [--frozen]`, `status`, `list [tipo] [--available]` (`ls`), `override` |
+| Proyecto | `init`, `template init/list/use/info/publish/download`, `feature list/enable/disable/reset/define/undefine`, `add`, `remove`, `update [--keep-mine]`, `outdated`, `sync [--frozen]`, `status`, `list [tipo] [--available]` (`ls`), `override` |
 | Muchos repositorios | `workspace list/add/remove/update/sync` (`ws`) |
 | Lo que instalan los paquetes | `component create/list`, `harness init/audit`, `adapter list/add/remove`, `capability list/tools/run/providers/use`, `permissions list/grant/revoke/trust/signatures` |
 | Contexto y memoria | `context search/show`, `memory add/search/list/update/remove` |
-| Publicar paquetes | `package scaffold/validate/keygen/publish/deprecate/yank/unpublish`, `registry list/add/remove/packages` |
-| Servidor | `server connect/ping/whoami/logout`, `project list/create/delete`, `agent list/compose/activate/deactivate/run/submit/runs/worker`, `admin …` |
+| Publicar paquetes | `package scaffold/validate/keygen/publish/usage/download/deprecate/yank/unpublish`, `category list/create/update/delete`, `registry list/add/remove/packages` |
+| Servidor | `server connect/ping/whoami/logout`, `project list/create/update/delete`, `agent list/compose/activate/deactivate/run/submit/runs/worker`, `admin …` |
 | Este equipo | `client doctor/setup/benchmark/embed`, `upgrade [--check] [--tag next]` |
 
-`modai <comando> --help` muestra las opciones de cada uno. Todas las salidas son tablas legibles; añade `--json` a cualquier comando para usarlo en scripts.
+`modai <comando> --help` muestra las opciones de cada uno. Todas las salidas son tablas legibles; añade `--json` a cualquier comando para usarlo en scripts. `modai list templates --available` lista los templates publicados; `modai admin publishers` y `admin untrust-publisher <huella>` gestionan los publicadores de confianza.
+
+### Modo interactivo
+
+En una terminal, la CLI pregunta lo que falta en vez de fallar: `modai init` sin opciones te guía (nombre, agentes, proyecto del servidor, perfil), `modai add` sin paquete abre un buscador del catálogo y luego sus opciones, `modai template use` sin template deja elegirlo, la carpeta y sus opciones, y `server connect`, `feature define` y `category create` piden los datos que no pasaste. Las confirmaciones y la API key también son preguntas (la clave no se muestra). Ctrl+C cancela sin cambios.
+
+Nada de esto ocurre en scripts: con `--json`, en CI, sin terminal o con `MODAI_NO_PROMPT=1`, un dato que falte produce un error que dice qué flag pasar. Los colores se adaptan a la terminal (Linux, macOS y Windows) y se desactivan con `NO_COLOR=1`.
 
 ## Actualizar
 

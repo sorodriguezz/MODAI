@@ -7,9 +7,13 @@ import { openDialog, closeDialog, setBusy, toast, toastError } from "../lib/ui.j
 import { base64ToBytes, bytesToText, cleanPath, formatBytes, textToBytes, toArtifactFiles } from "../lib/files.js";
 import { store, can, state } from "../state.js";
 import { wizard } from "../lib/wizard.js";
-import { namespaceField, bindNamespaceSearch } from "../lib/namespace-picker.js";
+import { namespaceField, bindNamespaceSearch, categoryField, bindCategorySearch } from "../lib/namespace-picker.js";
 import { bindVersionCheck } from "../lib/versions.js";
+import { dependencyPicker, resetDependencyCatalog } from "../lib/dependency-picker.js";
+import { featureEditor } from "../lib/feature-editor.js";
 import { openSkillImport } from "./skill-import.js";
+import { qualityMarkup } from "../lib/quality.js";
+import { openTemplateEditor } from "./templates.js";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 const IGNORED = /(^|\/)(node_modules|\.git|dist|\.DS_Store|Thumbs\.db)(\/|$)/;
@@ -44,6 +48,16 @@ const TEMPLATES = {
     label: "Conocimiento", icon: "book", category: "knowledge", root: "knowledge",
     text: "Documentos que el agente consulta con búsqueda, sin cargarlos completos en el prompt.",
     starter: () => ({ "knowledge/README.md": "# Guía\n\nConocimiento que el agente recupera bajo demanda.\n" }),
+  },
+  profile: {
+    label: "Perfil", icon: "user", category: "profile", kind: "Profile", root: "",
+    text: "Compone otros paquetes (skills, harness, conocimiento…) en un conjunto que se instala de una vez. Sin archivos propios.",
+    starter: () => ({}),
+  },
+  template: {
+    label: "Template de proyecto", icon: "copy", category: "template", kind: "Template", root: "",
+    text: "Un proyecto completo para empezar (por ejemplo NestJS con SDD), con opciones como --sdd. Se usa con modai template use.",
+    starter: () => ({}),
   },
   blank: { label: "Paquete vacío", icon: "package", category: "general", root: "", text: "Edita el manifiesto a mano: perfiles, herramientas, adaptadores…", starter: () => ({}) },
 };
@@ -83,28 +97,26 @@ function buildManifest(s) {
   }
   if (Object.keys(contributes).length) spec.contributes = contributes;
   if (Object.keys(s.dependencies).length) spec.dependencies = { ...s.dependencies };
+  if (Object.keys(s.features).length) spec.features = s.features;
   if (permissions.size) spec.permissions = [...permissions].sort();
-  return { apiVersion: "modai.dev/v1", kind: "Package", metadata: { name: s.meta.name, version: s.meta.version, description: s.meta.description, ...(s.meta.license ? { license: s.meta.license } : {}) }, spec };
+  return { apiVersion: "modai.dev/v1", kind: TEMPLATES[s.template].kind || "Package", metadata: { name: s.meta.name, version: s.meta.version, description: s.meta.description, ...(s.meta.license ? { license: s.meta.license } : {}) }, spec };
 }
 
 /** Applies the form's identity fields to a hand-edited or existing manifest. */
-function withIdentity(manifest, meta, dependencies) {
+function withIdentity(manifest, meta, { dependencies, features } = {}) {
   const next = structuredClone(manifest);
   Object.assign((next.metadata ??= {}), { name: meta.name, version: meta.version, description: meta.description });
-  // The Dependencies step owns spec.dependencies once touched.
-  if (dependencies) { next.spec ??= {}; if (Object.keys(dependencies).length) next.spec.dependencies = { ...dependencies }; else delete next.spec.dependencies; }
+  next.spec ??= {};
+  if (meta.category) next.spec.category = meta.category;
+  // The Dependencies and Options steps own spec.dependencies and spec.features once touched.
+  if (dependencies) { if (Object.keys(dependencies).length) next.spec.dependencies = { ...dependencies }; else delete next.spec.dependencies; }
+  if (features) { if (Object.keys(features).length) next.spec.features = features; else delete next.spec.features; }
   return next;
 }
 
 function bumpPatch(version) {
   const match = String(version).match(/^(\d+)\.(\d+)\.(\d+)/);
   return match ? `${match[1]}.${match[2]}.${Number(match[3]) + 1}` : "0.1.0";
-}
-
-export function qualityMarkup(quality) {
-  const tone = { error: "danger", warning: "warning", info: "info" };
-  return html`<div class="callout tone-${quality.score >= 80 ? "success" : quality.score >= 50 ? "warning" : "danger"}">${icon(quality.score >= 50 ? "check" : "alert")}<span><b>Calidad estructural ${quality.score}/100.</b> ${quality.findings?.some((f) => f.severity === "error") ? "Corrige los errores antes de publicar." : "Puedes publicar."}</span></div>
-    ${quality.findings?.length ? html`<ul class="findings">${quality.findings.map((f) => html`<li class="tone-${tone[f.severity] || "info"}">${icon(f.severity === "info" ? "info" : "alert", 16)}<span><code>${f.code}</code> ${f.message}</span></li>`)}</ul>` : ""}`;
 }
 
 /**
@@ -114,12 +126,13 @@ export function qualityMarkup(quality) {
 export async function openPackageEditor({ base, template = "component", onPublished } = {}) {
   const s = {
     template: base ? "existing" : template,
-    meta: { name: base?.name || "", version: base ? bumpPatch(base.version) : "0.1.0", description: base?.description || "", category: "", license: "" },
+    meta: { name: base?.name || "", version: base ? bumpPatch(base.version) : "0.1.0", description: base?.description || "", category: base?.manifest?.spec?.category || "", license: "" },
     component: { name: "", target: "src/modules/{component}", language: "" },
     skill: "mi-skill",
     files: new Map(),
     dependencies: { ...(base?.manifest?.spec?.dependencies ?? {}) },
-    dependenciesTouched: false,
+    // spec.features: the options (--flags) a component package offers at install time.
+    features: {},
     manifestText: "",
     manifestDirty: Boolean(base),
     starter: new Set(),
@@ -138,6 +151,9 @@ export async function openPackageEditor({ base, template = "component", onPublis
 
   const publish = state.permissions?.publish || { all: false, namespaces: [] };
   const pkgNamespaces = base ? [] : publish.all ? (await store.namespaces().catch(() => [])).map((n) => n.name) : publish.namespaces;
+  const categories = await get("/categories").then((result) => result.categories).catch(() => []);
+  // Component packages (new or an existing one with components) can offer options; overlays need a component.
+  const baseComponents = base?.manifest?.spec?.contributes?.components ?? [];
   const [pkgScope, pkgShort = ""] = String(s.meta.name || "").split("/").length === 2 ? String(s.meta.name).split("/") : ["", String(s.meta.name || "")];
 
   const body = openDialog({
@@ -173,11 +189,14 @@ export async function openPackageEditor({ base, template = "component", onPublis
         <div id="fileEditor"></div>
         <div id="fileList"></div>
       </div></section>
+      <section data-step="features" data-title="Opciones"><div class="stack">
+        <p class="hint">Opciones que quien instala activa con <code>modai add ${base?.name || "@equipo/paquete"} --nombre</code> (y <code>--no-nombre</code> quita una activada por defecto). Cada una puede añadir una carpeta de archivos al componente e instalar paquetes extra. Después se cambian con <code>modai feature enable|disable</code>.</p>
+        <div id="featureEditor"></div>
+      </div></section>
       <section data-step="dependencies" data-title="Dependencias"><div class="stack">
-        <p class="hint">Otros paquetes que este necesita. Se instalan junto con él. El rango usa SemVer: <code>^1.2.0</code> acepta 1.x desde 1.2.0.</p>
-        <datalist id="depCatalog"></datalist>
+        <p class="hint" id="depHint"></p>
         <div id="depList" class="stack"></div>
-        <div><button type="button" class="btn small" data-action="addDependency">${icon("plus", 16)}Añadir dependencia</button></div>
+        <div><button type="button" class="btn small" data-action="addDependency">${icon("plus", 16)}<span id="addDependencyLabel">Añadir dependencia</span></button></div>
       </div></section>
       <section data-step="review" data-title="Revisión"><div class="stack">
       <p class="hint">Se valida automáticamente al llegar aquí. Las versiones publicadas son inmutables.</p>
@@ -200,6 +219,17 @@ export async function openPackageEditor({ base, template = "component", onPublis
   const clearError = () => (form.querySelector(".form-error").hidden = true);
 
   const pkgFullName = () => `${$("pkgNamespace").value.trim()}/${$("pkgName").value.trim()}`;
+  const deps = dependencyPicker($("depList"), {
+    id: "dep", initial: s.dependencies, exclude: pkgFullName,
+    emptyText: () => s.template === "profile" ? "Un perfil necesita al menos un paquete." : "Sin dependencias.",
+    onChange: () => syncManifest(),
+  });
+  const features = featureEditor($("featureEditor"), {
+    id: "pkgFeatures", mode: "package", initial: base?.manifest?.spec?.features, exclude: pkgFullName,
+    folders: () => [...new Set([...s.files.keys()].filter((path) => path.includes("/")).map((path) => path.slice(0, path.lastIndexOf("/"))))].sort(),
+    onChange: () => syncManifest(),
+  });
+  const componentName = () => slug(s.component.name, "component");
   const versionCheck = bindVersionCheck({
     name: pkgFullName, input: $("pkgVersion"), hint: $("pkgVersionHint"),
     fetchVersions: async (name) => (await get("/packages?includeYanked=true&name=" + encodeURIComponent(name))).packages.map((item) => item.version),
@@ -213,14 +243,15 @@ export async function openPackageEditor({ base, template = "component", onPublis
     if ($("pkgCategory")) s.meta.category = $("pkgCategory").value.trim();
     if ($("compName")) Object.assign(s.component, { name: $("compName").value.trim(), target: $("compTarget").value.trim(), language: $("compLanguage").value.trim() });
     if ($("skillName")) s.skill = slug($("skillName").value, "mi-skill");
-    s.dependencies = Object.fromEntries([...form.querySelectorAll("#depList .dep-row")].map((row) => [row.querySelector("[data-dep-name]").value.trim(), row.querySelector("[data-dep-range]").value.trim() || "*"]).filter(([name]) => name));
+    s.dependencies = deps.value;
+    s.features = features.size ? features.packageFeatures(baseComponents[0]?.name || componentName()) : {};
   };
   const currentManifest = () => {
     readForm();
     if (s.manifestDirty) {
       let parsed;
       try { parsed = JSON.parse($("pkgManifest").value); } catch (error) { throw new Error("El manifiesto no es JSON válido: " + error.message); }
-      return withIdentity(parsed, s.meta, s.dependenciesTouched ? s.dependencies : undefined);
+      return withIdentity(parsed, s.meta, { dependencies: deps.touched ? s.dependencies : undefined, features: features.touched ? s.features : undefined });
     }
     return buildManifest(s);
   };
@@ -240,23 +271,22 @@ export async function openPackageEditor({ base, template = "component", onPublis
 
   const drawTemplateFields = () => {
     const t = TEMPLATES[s.template];
-    const category = html`<div class="field"><label for="pkgCategory">Categoría</label><input id="pkgCategory" pattern="[a-z][a-z0-9\\-]{0,63}" placeholder="${t?.category || "general"}" value="${s.meta.category}"><p class="hint">Informativa: backend, frontend, testing… Sirve para filtrar y para <code>modai list &lt;categoría&gt;</code>.</p></div>`;
+    const category = categoryField({ id: "pkgCategory", categories, selected: s.meta.category, fallback: t?.category || base?.manifest?.spec?.category || "general" });
     if (s.template === "component") {
-      mount($("templateFields"), html`<div class="field-row">
+      mount($("templateFields"), html`<div class="stack"><div class="field-row">
           <div class="field"><label for="compName">Nombre del componente</label><input id="compName" required pattern="[a-z0-9][a-z0-9\\-]{0,63}" placeholder="auth" value="${s.component.name}"></div>
           <div class="field"><label for="compLanguage">Lenguaje o framework</label><input id="compLanguage" maxlength="64" placeholder="nestjs, express, react, python…" value="${s.component.language}"></div>
         </div>
         <div class="field-row">
           <div class="field"><label for="compTarget">Destino en el proyecto</label><input id="compTarget" required placeholder="src/modules/{component}" value="${s.component.target}"><p class="hint">Carpeta donde <code>modai add</code> copia los archivos de <code>component/</code>. Admite {component} y {package}.</p></div>
           ${category}
-        </div>`);
+        </div></div>`);
     } else if (s.template === "skill") {
       mount($("templateFields"), html`<div class="field-row"><div class="field"><label for="skillName">Nombre de la skill</label><input id="skillName" pattern="[a-z0-9][a-z0-9\\-]{0,63}" value="${s.skill}"><p class="hint">Cada carpeta <code>skills/&lt;nombre&gt;/</code> con un SKILL.md es una skill.</p></div>${category}</div>`);
-    } else if (s.template === "existing") {
-      mount($("templateFields"), "");
     } else {
       mount($("templateFields"), html`<div class="field-row">${category}</div>`);
     }
+    bindCategorySearch(form, "pkgCategory", categories, s.meta.category);
     const root = t?.root;
     $("uploadHint").textContent = s.template === "existing" ? "Edita, añade o elimina archivos; el manifiesto declara cuáles se instalan."
       : s.template === "component" ? "Sube la carpeta con tu código: se guarda en component/ y se instalará en el destino indicado."
@@ -339,15 +369,18 @@ export async function openPackageEditor({ base, template = "component", onPublis
     refresh();
   };
 
-  const drawDependencies = () => mount($("depList"), Object.keys(s.dependencies).length
-    ? Object.entries(s.dependencies).map(([name, range]) => html`<div class="field-row dep-row">
-        <div class="field"><label class="sr-only">Paquete</label><input data-dep-name list="depCatalog" value="${name}" placeholder="@equipo/paquete" pattern="@[a-z0-9][a-z0-9._\-]*\/[a-z0-9][a-z0-9._\-]*" required></div>
-        <div class="field"><label class="sr-only">Rango de versión</label><input data-dep-range value="${range}" placeholder="^1.0.0" required></div>
-        <button type="button" class="icon-button small danger" data-action="removeDependency" aria-label="Quitar ${name || "dependencia"}">${icon("trash", 16)}</button></div>`)
-    : html`<p class="muted small">Sin dependencias.</p>`);
-  drawDependencies();
-  get("/packages/catalog?limit=100").then((page) => mount($("depCatalog"), page.items.filter((item) => item.name !== s.meta.name).map((item) => html`<option value="${item.name}">${item.description}</option>`))).catch(() => {});
-  form.addEventListener("input", (event) => { if (event.target.closest?.("#depList")) s.dependenciesTouched = true; });
+
+  // The type decides which steps the wizard shows and how the dependencies step is worded.
+  const applyKind = () => {
+    const profile = s.template === "profile";
+    form.querySelector('[data-step="dependencies"]').dataset.title = profile ? "Composición" : "Dependencias";
+    $("depHint").innerHTML = profile
+      ? "Un perfil <b>compone</b> otros paquetes: al instalarlo se instalan todos. Elige cada uno por namespace, nombre y versión. El rango usa SemVer: <code>^1.2.0</code> acepta 1.x desde 1.2.0."
+      : "Otros paquetes que este necesita. Se instalan junto con él. El rango usa SemVer: <code>^1.2.0</code> acepta 1.x desde 1.2.0.";
+    $("addDependencyLabel").textContent = profile ? "Añadir paquete" : "Añadir dependencia";
+    deps.draw();
+    steps?.show(steps.current);
+  };
 
   form.querySelectorAll('input[name="template"]').forEach((radio) => radio.addEventListener("change", () => {
     const mode = form.querySelector("[data-skill-mode]");
@@ -357,11 +390,12 @@ export async function openPackageEditor({ base, template = "component", onPublis
     if (!s.meta.category) s.meta.category = "";
     loadStarter();
     drawTemplateFields();
+    applyKind();
     refresh();
   }));
   form.addEventListener("input", (event) => {
     if (event.target.id === "pkgManifest") { s.manifestDirty = true; return; }
-    if (["editPath", "editContent"].includes(event.target.id) || event.target.type === "file") return;
+    if (["editPath", "editContent"].includes(event.target.id) || event.target.type === "file" || event.target.closest("#depList, #featureEditor")) return;
     if (event.target.id === "compName" || event.target.id === "skillName") {
       readForm();
       // Keep untouched starter files in sync with the component or skill name.
@@ -413,8 +447,7 @@ export async function openPackageEditor({ base, template = "component", onPublis
       refresh();
     },
     regenerate: () => { s.manifestDirty = false; syncManifest(); },
-    addDependency: () => { readForm(); s.dependencies[""] = "^1.0.0"; s.dependenciesTouched = true; drawDependencies(); form.querySelector("#depList .dep-row:last-child [data-dep-name]")?.focus(); },
-    removeDependency: (button) => { button.closest(".dep-row").remove(); s.dependenciesTouched = true; readForm(); drawDependencies(); syncManifest(); },
+    addDependency: () => deps.add(),
     validate: async (button) => {
       clearError();
       setBusy(button, true);
@@ -425,11 +458,16 @@ export async function openPackageEditor({ base, template = "component", onPublis
     },
   });
 
-  wizard(form, {
+  const steps = wizard(form, {
+    skip: {
+      files: () => s.template === "profile",
+      features: () => !(s.template === "component" || (s.template === "existing" && baseComponents.length)),
+    },
     validate: {
-      // "Skill" → "Subir un archivo .skill" continues in the import flow, in the same dialog.
+      // "Skill" → "Subir un archivo .skill" and "Template de proyecto" continue in their own flow, in the same dialog.
       type: () => {
         if (s.template === "skill" && form.querySelector('input[name="skillMode"]:checked')?.value === "upload") openSkillImport({ onPublished });
+        if (s.template === "template") openTemplateEditor({ onPublished });
         return "";
       },
       identity: () => {
@@ -441,9 +479,16 @@ export async function openPackageEditor({ base, template = "component", onPublis
         return namespace && !can.publishTo(namespace) ? `No tienes permiso para publicar en ${namespace}. Elige uno de tus namespaces o pide acceso a la administración de su organización.` : "";
       },
       files: () => s.files.size || s.template === "blank" || s.template === "existing" ? "" : "Añade al menos un archivo.",
-      dependencies: () => { readForm(); return Object.keys(s.dependencies).includes(s.meta.name) ? "Un paquete no puede depender de sí mismo." : ""; },
+      features: () => features.issue([...s.files.keys()]),
+      dependencies: () => {
+        readForm();
+        return deps.issue() || (s.template === "profile" && !Object.keys(s.dependencies).length ? "Un perfil compone paquetes: añade al menos uno." : "");
+      },
     },
-    onEnter: { review: () => { readForm(); syncManifest(); form.querySelector('[data-action="validate"]').click(); } },
+    onEnter: {
+      features: () => features.refresh(),
+      review: () => { readForm(); syncManifest(); form.querySelector('[data-action="validate"]').click(); },
+    },
   });
   const submit = form.querySelector('button[type="submit"]');
   form.addEventListener("submit", async (event) => {
@@ -457,6 +502,7 @@ export async function openPackageEditor({ base, template = "component", onPublis
       if (namespace && !can.publishTo(namespace)) throw new Error(`No tienes permiso para publicar en ${namespace}. Pide acceso a la administración de su organización.`);
       const { package: published } = await post("/packages", { manifest, files: await toArtifactFiles([...s.files].map(([path, file]) => ({ path, bytes: file.bytes }))) });
       store.invalidate("summary", "agents", "documents");
+      resetDependencyCatalog();
       // The shared <dialog> clears its body on the (async) close event: wait for it before another view reuses it.
       const dialog = document.getElementById("dialog");
       await new Promise((resolve) => { dialog.addEventListener("close", resolve, { once: true }); closeDialog(); });
@@ -471,5 +517,6 @@ export async function openPackageEditor({ base, template = "component", onPublis
 
   loadStarter();
   drawTemplateFields();
+  applyKind();
   refresh();
 }

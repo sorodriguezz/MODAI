@@ -123,6 +123,44 @@ export const packageFeatureSchema = z.object({
 }).strict();
 export type PackageFeature = z.output<typeof packageFeatureSchema>;
 
+/** Keys that would reach Object.prototype when a pointer or a value is written into a JSON file. */
+export const UNSAFE_JSON_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const MCP_COMMAND_KEYS = ["command", "cmd", "executable", "program", "bin"];
+/**
+ * What an adapter may register in a client's MCP config: the MODAI gateway and nothing else. Any other command (or an
+ * `env` such as NODE_OPTIONS) would make an agent client run code that no permission covered.
+ */
+export function mcpGatewayValueProblem(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "value debe ser un objeto";
+  const walk = (node: unknown, depth: number): string | undefined => {
+    if (depth > 4) return "value tiene demasiados niveles";
+    if (typeof node === "string") return node.length > 500 ? "value contiene textos demasiado largos" : undefined;
+    if (node === null || typeof node !== "object") return undefined;
+    for (const [key, child] of Object.entries(node)) {
+      if (UNSAFE_JSON_KEYS.has(key)) return `value no admite la clave ${key}`;
+      const problem = walk(child, depth + 1);
+      if (problem) return problem;
+    }
+    return undefined;
+  };
+  const shape = walk(value, 0);
+  if (shape) return shape;
+  // Each client names the command its own way (command, cmd, executable…): every such key must start the gateway.
+  const record = value as Record<string, unknown>;
+  const commands = MCP_COMMAND_KEYS.filter(key => key in record);
+  if (!commands.length) return `value debe indicar el comando (${MCP_COMMAND_KEYS.join(", ")}) con "modai-mcp"`;
+  for (const key of commands) {
+    const command = record[key];
+    const list = Array.isArray(command) ? command : [command];
+    if (list[0] !== "modai-mcp" || list.some(item => typeof item !== "string")) return `value.${key} debe ser "modai-mcp" (o una lista de textos que empiece por él): un adaptador solo registra el gateway de MODAI`;
+  }
+  if (record.args !== undefined && (!Array.isArray(record.args) || record.args.some(item => typeof item !== "string"))) return "value.args debe ser una lista de textos";
+  const hasEnv = (node: unknown): boolean => Boolean(node) && typeof node === "object" && Object.entries(node as object).some(([key, child]) => /^(env|environment)$/i.test(key) || hasEnv(child));
+  if (hasEnv(record)) return "value no admite env: el gateway recibe su entorno del cliente";
+  return undefined;
+}
+
 const blockTarget = z.object({ mode: z.literal("block"), file: relativePathSchema }).strict();
 const fileTarget = z.object({ mode: z.literal("file"), path: relativePathSchema, header: z.string().max(4000).optional() }).strict();
 export const adapterDefinitionSchema = z.object({
@@ -136,13 +174,17 @@ export const adapterDefinitionSchema = z.object({
     /** Managed block summarising installed skills, rules, tools and knowledge. */
     index: blockTarget.optional(),
     /** JSON file where the MODAI gateway is registered. `pointer` is a dotted path; `value` is a JSON template. */
-    mcp: z.object({ file: relativePathSchema, pointer: z.string().regex(/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/).default("mcpServers.modai"), value: z.unknown().optional() }).strict().optional(),
+    mcp: z.object({
+      file: relativePathSchema,
+      pointer: z.string().regex(/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/).refine(pointer => pointer.split(".").every(key => !UNSAFE_JSON_KEYS.has(key)), "pointer no admite __proto__, constructor ni prototype").default("mcpServers.modai"),
+      value: z.unknown().optional().superRefine((value, ctx) => { const problem = mcpGatewayValueProblem(value); if (problem) ctx.addIssue({ code: "custom", message: problem }); }),
+    }).strict().optional(),
   }).strict(),
 }).strict();
 
 export const packageManifestV1Schema = z.object({
   apiVersion: z.literal(API_VERSION),
-  kind: z.enum(["Package", "Profile", "Adapter"]).default("Package"),
+  kind: z.enum(["Package", "Profile", "Adapter", "Template"]).default("Package"),
   metadata: z.object({
     name: packageNameSchema,
     version: semverSchema,
@@ -177,6 +219,12 @@ export const packageManifestV1Schema = z.object({
 }).strict().superRefine((manifest, ctx) => {
   if (manifest.kind === "Adapter" && !manifest.spec.adapter) ctx.addIssue({ code: "custom", path: ["spec", "adapter"], message: "Un paquete Adapter necesita spec.adapter" });
   if (manifest.kind !== "Adapter" && manifest.spec.adapter) ctx.addIssue({ code: "custom", path: ["spec", "adapter"], message: "spec.adapter solo se admite con kind: Adapter" });
+  // A Template is a whole starter project, used with `modai template use`: it never installs into a project.
+  if (manifest.kind === "Template") {
+    const contributes = Object.values(manifest.spec.contributes).some(list => list.length);
+    if (contributes || Object.keys(manifest.spec.dependencies).length || Object.keys(manifest.spec.features).length || manifest.spec.permissions.length)
+      ctx.addIssue({ code: "custom", path: ["spec"], message: "Un Template no instala nada en un proyecto: sin contributes, dependencies, features ni permissions (sus features van en modai.template.yaml)" });
+  }
 });
 
 export type PackageManifestV1 = z.output<typeof packageManifestV1Schema>;
@@ -234,7 +282,7 @@ export const lockedPackageSchema = z.object({
   source: z.string(),
   integrity: z.string().regex(/^sha256-[a-f0-9]{64}$/),
   signer: z.string().optional(),
-  kind: z.enum(["Package", "Profile", "Adapter"]),
+  kind: z.enum(["Package", "Profile", "Adapter", "Template"]),
   category: z.string(),
   dependencies: z.record(z.string(), z.string()).default({}),
   provides: z.array(z.string()).default([]),

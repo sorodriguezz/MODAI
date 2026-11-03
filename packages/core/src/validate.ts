@@ -8,6 +8,7 @@ import { assertFeatureRules } from "./features.js";
 import { normalizeManifest } from "./normalize.js";
 import { packageFeatureRules } from "./package-features.js";
 import { adapterTargetPermission, componentTargetPermission, expandTemplate } from "./targets.js";
+import { parseTemplateManifest, TEMPLATE_MANIFEST, validateTemplateManifest } from "./template-spec.js";
 
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
@@ -139,6 +140,14 @@ export function validatePackage(raw: PackageManifest, files: ArtifactFile[]): Pa
   }
   if (manifest.kind === "Profile") {
     invariant(all.every(item => item.tools.length === 0 && item.mcpServers.length === 0), 400, "INVALID_PROFILE", "Un Profile compone paquetes; las herramientas viven en paquetes propios");
+  }
+  if (manifest.kind === "Template") {
+    invariant(files.length > 0, 400, "INVALID_TEMPLATE", "El template no tiene archivos");
+    const declaration = files.find(file => file.path === TEMPLATE_MANIFEST);
+    if (declaration) {
+      try { validateTemplateManifest(parseTemplateManifest(Buffer.from(declaration.content, "base64").toString("utf8")), [...paths]); }
+      catch (error) { throw new AppError(400, "INVALID_TEMPLATE_MANIFEST", (error as Error).message); }
+    }
   }
   return manifest;
 }

@@ -282,3 +282,15 @@ test("autorizar un paquete vale para sus features de ese momento: activar otra e
   assert.match(regrant, /Herramientas: safe → .*; extra →/);
   assert.match(await ok(project, "capability", "run", "extra"), /extra/);
 });
+
+test("la calidad explica una descripción corta en vez de solo bajar la nota", async () => {
+  const { analyzePackageQuality } = await import("@modai/contracts/package-quality");
+  const manifest = (description: string) => ({ apiVersion: "modai.dev/v1", kind: "Package", metadata: { name: "@q/guia", version: "1.0.0", description }, spec: {} }) as never;
+  const short = analyzePackageQuality(manifest("Guía corta"), []);
+  assert.equal(short.score, 80);
+  assert.deepEqual(short.dimensions, { manifest: 100, documentation: 60 });
+  assert.match(short.findings.find(finding => finding.code === "DESCRIPTION_SHORT")!.message, /10 caracteres/);
+  const long = analyzePackageQuality(manifest("Guía de despliegue: pasos, rollback y verificación"), []);
+  assert.equal(long.score, 100);
+  assert.ok(!long.findings.some(finding => finding.code === "DESCRIPTION_SHORT"));
+});

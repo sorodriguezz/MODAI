@@ -156,7 +156,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRouteOptio
   }, async (request, reply) => {
     assertCsrf(request, publicUrl);
     const attempted = String(request.body.username ?? "").trim().toLowerCase().slice(0, 64);
-    const result = await auth.verifyLogin(request.body.username, request.body.password);
+    const result = await auth.verifyLogin(request.body.username, request.body.password, request.ip);
     if (!result.user) {
       await failDelay();
       audit.record(attempted || "anonymous", "auth.login-failed", `user:${attempted}`, { ip: request.ip, locked: result.locked });

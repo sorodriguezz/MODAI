@@ -694,9 +694,50 @@ button.card:hover { border-color: var(--border-strong); box-shadow: var(--shadow
 .combo-list li.active { background: var(--surface-3); }
 .combo-list li.selected { color: var(--primary-text); font-weight: 600; }
 .combo-list li.empty { color: var(--muted); cursor: default; }
+.combo-list li { display: grid; gap: 2px; }
+.combo-value { font-weight: 600; }
+.combo-hint { font-size: 12.5px; color: var(--muted); font-weight: 400; }
 
 /* While a modal is open only the modal scrolls, never the page behind it. */
 html:has(dialog[open]), body:has(dialog[open]) { overflow: hidden; }
 .dialog { overscroll-behavior: contain; }
 .dialog-body { overscroll-behavior: contain; }
 .hint.invalid { color: var(--danger); }
+
+/* Dependency picker: namespace → package → version → range */
+.dep-row { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.dep-grid { display: grid; grid-template-columns: 1fr 1.4fr 1fr 1fr auto; gap: 12px; align-items: end; }
+.dep-row .hint { margin: 0; }
+@media (max-width: 720px) { .dep-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Type tabs of the catalog (Paquetes) */
+.type-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.type-tabs button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font: inherit; font-size: 13.5px; cursor: pointer;
+  color: var(--text-2); background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+}
+.type-tabs button:hover { border-color: var(--border-strong); color: var(--text); }
+.type-tabs button[aria-pressed="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-text); font-weight: 600; }
+
+/* Feature (flag) editor */
+.feature-card { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.feature-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.feature-head b { flex: 1; font-family: var(--mono); }
+.check-inline { display: inline-flex; align-items: center; gap: 8px; font-weight: 400; color: var(--text); font-size: 14px; }
+.field .check-inline { font-weight: 400; }
+.check-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.check-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; font-family: var(--mono); font-size: 12.5px; font-weight: 400 !important; cursor: pointer; background: var(--surface); }
+.check-chip:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-text); }
+.feature-card .label { font-weight: 600; font-size: 13px; color: var(--text-2); }
+
+/* Quality breakdown: one row per dimension with its score */
+.quality-dimensions { margin-top: 16px; }
+.quality-dimensions ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+.quality-dimensions li { display: grid; grid-template-columns: minmax(0, 1fr) 120px 36px; gap: 12px; align-items: center; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.quality-dimension-name { display: grid; gap: 2px; min-width: 0; }
+.quality-bar { height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.quality-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--success); }
+.quality-dimensions li.tone-warning .quality-bar > span { background: var(--warning); }
+.quality-dimensions li.tone-danger .quality-bar > span { background: var(--danger); }
+.quality-value { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+@media (max-width: 560px) { .quality-dimensions li { grid-template-columns: minmax(0, 1fr) 36px; } .quality-bar { display: none; } }

@@ -7,7 +7,8 @@ import { signaturePolicySchema } from "@modai/contracts/schemas";
 import { publicKeyFingerprint } from "@modai/contracts/security";
 import { isV1Project, loadV1Project } from "@modai/core";
 import { clientConfigPath, loadClientConfig, saveClientConfig } from "../config.js";
-import { effectiveConnection } from "../connection.js";
+import { effectiveConnection, insecureTransport } from "../connection.js";
+import { askText, interactive, ok } from "../ui.js";
 import { readAccessToken } from "../credentials.js";
 import { commaList } from "../agent-commands.js";
 import { group } from "../groups.js";
@@ -63,12 +64,15 @@ export function registerServerCommands(program: Command, print: Print): void {
   const server = program.command("server").description("Conexión con un servidor MODAI: conectar, comprobar y cerrar sesión");
   server.command("connect")
     .description("Conecta la CLI a un servidor MODAI")
-    .argument("<url>", "URL del servidor")
+    .argument("[url]", "URL del servidor (sin ella, se pregunta)")
     .option("--token <token>", "Token Bearer (prefiere la entrada oculta o --token-stdin)")
     .option("--token-stdin", "Lee la API key por stdin para automatizaciones")
-    .action(async (url: string, options: { token?: string; tokenStdin?: boolean }) => {
-      const target = url.replace(/\/+$/, "");
+    .action(async (url: string | undefined, options: { token?: string; tokenStdin?: boolean }) => {
+      const target = (url ?? await askText({ message: "URL del servidor MODAI", flag: "la URL (modai server connect <url>)", example: "https://modai.miempresa.com",
+        ...(interactive() ? { default: process.env.MODAI_SERVER || loadClientConfig()?.server || "http://localhost:8787" } : {}),
+        validate: value => { try { return /^https?:$/.test(new URL(value).protocol) || "Usa una URL http(s)"; } catch { return "No es una URL válida"; } } })).replace(/\/+$/, "");
       if (options.token && options.tokenStdin) throw new Error("Usa --token o --token-stdin, no ambos");
+      if (insecureTransport(target)) throw new Error(`${target} usa http: la API key viajaría sin cifrar. Usa https (o MODAI_ALLOW_INSECURE_HTTP=1 si es una red de confianza).`);
       const token = options.token ?? (options.tokenStdin ? await readAccessToken(true) : effectiveConnection(target).token ?? await readAccessToken());
       const api = new ApiClient(target, token);
       await api.assertCompatible();
@@ -76,7 +80,7 @@ export function registerServerCommands(program: Command, print: Print): void {
       const identity = await api.session();
       const projects = await api.projects();
       saveClientConfig({ ...loadClientConfig(), server: target, token });
-      print(`Conectado a ${target} (MODAI ${health.version}) como ${identity.label} · ${identity.role}. Configuración: ${clientConfigPath}`);
+      print(ok(`Conectado a ${target} (MODAI ${health.version}) como ${identity.label} · ${identity.role}. Configuración: ${clientConfigPath}`));
       print(projects.length ? projects.map(project => `${project.name}: modai init --project ${shellQuote(project.id)}`).join("\n") : "No hay proyectos asignados. Pide acceso a quien administra el servidor.");
     });
 
@@ -169,7 +173,7 @@ export function registerServerCommands(program: Command, print: Print): void {
       print({ signaturePolicy: config.signaturePolicy });
     });
 
-  const project = program.command("project").description("Proyectos del servidor: listar, crear y eliminar");
+  const project = program.command("project").description("Proyectos del servidor: listar, crear, editar y eliminar");
   project.command("list", { isDefault: true }).alias("ls").description("Proyectos a los que tienes acceso").action(async () => {
     print((await serverApi().projects()).map(item => ({ id: item.id, name: item.name, organization: item.organizationId ?? "", created: item.createdAt })));
   });
@@ -178,6 +182,17 @@ export function registerServerCommands(program: Command, print: Print): void {
     .action(async (options: { name: string; id?: string; organization?: string }) => {
       const created = await serverApi().createProject({ id: options.id, name: options.name, organizationId: options.organization });
       print(isJsonMode() ? created : `Proyecto ${created.name} creado (${created.id}).\nVincula un repositorio con: modai init --project ${shellQuote(created.id)}`);
+    });
+  project.command("update").description("Renombra un proyecto o cambia su organización")
+    .argument("<id>", "Identificador del proyecto")
+    .option("--name <name>", "Nombre visible nuevo")
+    .option("--organization <id>", "Organización (para compartir memoria de organización)")
+    .option("--no-organization", "Quita la organización")
+    .action(async (id: string, options: { name?: string; organization?: string | false }) => {
+      const input = { ...(options.name ? { name: options.name } : {}), ...(options.organization === false ? { organizationId: null } : options.organization ? { organizationId: options.organization } : {}) };
+      if (!Object.keys(input).length) throw new Error("Indica qué cambiar: --name, --organization o --no-organization");
+      const updated = await serverApi().updateProject(id, input);
+      print(isJsonMode() ? updated : `Proyecto ${updated.name} (${updated.id}) actualizado.`);
     });
   project.command("delete").alias("rm").description("Elimina un proyecto con su memoria, ejecuciones y registro de instalaciones (irreversible)")
     .argument("<id>", "Identificador del proyecto")
@@ -233,8 +248,14 @@ export function registerServerCommands(program: Command, print: Print): void {
     .option("--description <text>", "Descripción")
     .action(async (name: string, options: { organization?: string; restricted?: boolean; description?: string }) =>
       print(await serverApi().createNamespace({ name, organizationId: options.organization, visibility: options.restricted ? "restricted" : "internal", description: options.description })));
-  admin.command("trust-publisher").argument("<public-key>").option("--label <label>", "Nombre del publicador", "publisher")
+  admin.command("trust-publisher").description("Registra la clave pública de un publicador como de confianza (política trusted)")
+    .argument("<public-key>", "Archivo .pem con la clave pública").option("--label <label>", "Nombre del publicador", "publisher")
     .action(async (path: string, options: { label: string }) => print(await serverApi().registerPublisher(readFileSync(resolve(path), "utf8"), options.label, true)));
+  admin.command("publishers").description("Publicadores conocidos por el servidor y si son de confianza")
+    .action(async () => print((await serverApi().publishers()).map(item => ({ fingerprint: item.fingerprint, label: item.label ?? "", trusted: item.trusted ? "sí" : "no", created: item.createdAt }))));
+  admin.command("untrust-publisher").description("Quita la confianza a un publicador: con la política trusted, sus paquetes nuevos se rechazan")
+    .argument("<fingerprint>", "Huella del publicador (modai admin publishers)")
+    .action(async (fingerprint: string) => { await serverApi().setPublisherTrust(fingerprint, false); print(`Publicador ${fingerprint} ya no es de confianza.`); });
   admin.command("prune").description("Borra memorias y/o eventos de auditoría antiguos (sin opciones: memorias de más de 365 días y auditoría de más de 90)")
     .option("--memory-days <days>", "Borra memorias sin cambios hace más de N días (0 = todas)")
     .option("--audit-days <days>", "Borra eventos de auditoría de hace más de N días (0 = todos)")

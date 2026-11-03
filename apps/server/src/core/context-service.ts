@@ -24,8 +24,7 @@ export class ContextService {
     const now = new Date().toISOString();
     this.assertContentBudget(input.content);
     const tags = input.tags ?? [];
-    this.db.connection.exec("BEGIN IMMEDIATE");
-    try {
+    this.db.connection.transaction(() => {
       this.db.connection
         .prepare(`INSERT INTO knowledge_documents
           (id, package_name, package_version, title, content, tags_json, created_at, updated_at)
@@ -34,11 +33,7 @@ export class ContextService {
       this.db.connection
         .prepare("INSERT INTO knowledge_fts (id, package_name, title, content, tags) VALUES (?, ?, ?, ?, ?)")
         .run(id, input.packageName ?? null, input.title.trim(), input.content, tags.join(" "));
-      this.db.connection.exec("COMMIT");
-    } catch (error) {
-      this.db.connection.exec("ROLLBACK");
-      throw error;
-    }
+    }).immediate();
     return { id, ...input, tags, createdAt: now };
   }
 
@@ -59,19 +54,14 @@ export class ContextService {
     this.assertContentBudget(content);
     const tags = input.tags ?? JSON.parse(existing.tags_json as string) as string[];
     const now = new Date().toISOString();
-    this.db.connection.exec("BEGIN IMMEDIATE");
-    try {
+    this.db.connection.transaction(() => {
       this.db.connection.prepare(`UPDATE knowledge_documents SET title = ?, content = ?, tags_json = ?, updated_at = ? WHERE id = ?`)
         .run(title, content, JSON.stringify(tags), now, id);
       this.db.connection.prepare("DELETE FROM knowledge_fts WHERE id = ?").run(id);
       this.db.connection.prepare("INSERT INTO knowledge_fts (id, package_name, title, content, tags) VALUES (?, ?, ?, ?, ?)")
         .run(id, existing.package_name ?? null, title, content, tags.join(" "));
       this.db.connection.prepare("DELETE FROM knowledge_vectors WHERE document_id = ?").run(id);
-      this.db.connection.exec("COMMIT");
-    } catch (error) {
-      this.db.connection.exec("ROLLBACK");
-      throw error;
-    }
+    }).immediate();
     return { id, title, content, tags, updatedAt: now };
   }
 
@@ -79,15 +69,10 @@ export class ContextService {
     const existing = this.db.connection.prepare("SELECT package_version FROM knowledge_documents WHERE id = ?").get(id) as { package_version: string | null } | undefined;
     if (!existing) throw new AppError(404, "KNOWLEDGE_NOT_FOUND", `Documento no encontrado: ${id}`);
     invariant(!existing.package_version, 409, "PACKAGE_KNOWLEDGE_IMMUTABLE", "Retira o elimina la versión del paquete propietario");
-    this.db.connection.exec("BEGIN IMMEDIATE");
-    try {
+    this.db.connection.transaction(() => {
       this.db.connection.prepare("DELETE FROM knowledge_fts WHERE id = ?").run(id);
       this.db.connection.prepare("DELETE FROM knowledge_documents WHERE id = ?").run(id);
-      this.db.connection.exec("COMMIT");
-    } catch (error) {
-      this.db.connection.exec("ROLLBACK");
-      throw error;
-    }
+    }).immediate();
   }
 
   searchKnowledge(input: { query: string; limit?: number; packageNames?: string[] }): unknown[] {
@@ -125,8 +110,7 @@ export class ContextService {
     const kind = input.kind?.trim() || "note";
     this.assertContentBudget(input.content);
     const metadata = input.metadata ?? {};
-    this.db.connection.exec("BEGIN IMMEDIATE");
-    try {
+    this.db.connection.transaction(() => {
       this.db.connection
         .prepare(`INSERT INTO memories
           (id, project_id, scope, kind, content, metadata_json, created_at, updated_at, organization_id, session_id, created_by)
@@ -135,11 +119,7 @@ export class ContextService {
       this.db.connection
         .prepare("INSERT INTO memories_fts (id, project_id, scope, kind, content) VALUES (?, ?, ?, ?, ?)")
         .run(id, input.projectId, scope, kind, input.content);
-      this.db.connection.exec("COMMIT");
-    } catch (error) {
-      this.db.connection.exec("ROLLBACK");
-      throw error;
-    }
+    }).immediate();
     return { id, projectId: input.projectId, scope, kind, content: input.content, metadata, createdAt: now, updatedAt: now };
   }
 
@@ -188,15 +168,10 @@ export class ContextService {
   deleteMemory(id: string): void {
     const exists = this.db.connection.prepare("SELECT 1 FROM memories WHERE id = ?").get(id);
     if (!exists) throw new AppError(404, "MEMORY_NOT_FOUND", `Memoria no encontrada: ${id}`);
-    this.db.connection.exec("BEGIN IMMEDIATE");
-    try {
+    this.db.connection.transaction(() => {
       this.db.connection.prepare("DELETE FROM memories WHERE id = ?").run(id);
       this.db.connection.prepare("DELETE FROM memories_fts WHERE id = ?").run(id);
-      this.db.connection.exec("COMMIT");
-    } catch (error) {
-      this.db.connection.exec("ROLLBACK");
-      throw error;
-    }
+    }).immediate();
   }
 
   updateMemory(id: string, input: { content?: string; kind?: string; scope?: string; metadata?: Record<string, unknown> }): unknown {
@@ -209,18 +184,13 @@ export class ContextService {
     this.assertContentBudget(content);
     const metadata = input.metadata ?? JSON.parse(existing.metadata_json as string) as Record<string, unknown>;
     const updatedAt = new Date().toISOString();
-    this.db.connection.exec("BEGIN IMMEDIATE");
-    try {
+    this.db.connection.transaction(() => {
       this.db.connection.prepare(`UPDATE memories SET content = ?, kind = ?, scope = ?, metadata_json = ?, updated_at = ? WHERE id = ?`)
         .run(content, kind, scope, JSON.stringify(metadata), updatedAt, id);
       this.db.connection.prepare("DELETE FROM memories_fts WHERE id = ?").run(id);
       this.db.connection.prepare("INSERT INTO memories_fts (id, project_id, scope, kind, content) VALUES (?, ?, ?, ?, ?)")
         .run(id, existing.project_id, scope, kind, content);
-      this.db.connection.exec("COMMIT");
-    } catch (error) {
-      this.db.connection.exec("ROLLBACK");
-      throw error;
-    }
+    }).immediate();
     return { id, projectId: existing.project_id, content, kind, scope, metadata, updatedAt };
   }
 
@@ -229,15 +199,10 @@ export class ContextService {
     const cutoff = new Date(Date.now() - Math.max(days, 0) * 86_400_000).toISOString();
     const ids = this.db.connection.prepare("SELECT id FROM memories WHERE updated_at < ?").all(cutoff) as Array<{ id: string }>;
     if (dryRun) return ids.length;
-    this.db.connection.exec("BEGIN IMMEDIATE");
-    try {
+    this.db.connection.transaction(() => {
       for (const item of ids) this.db.connection.prepare("DELETE FROM memories_fts WHERE id = ?").run(item.id);
       this.db.connection.prepare("DELETE FROM memories WHERE updated_at < ?").run(cutoff);
-      this.db.connection.exec("COMMIT");
-    } catch (error) {
-      this.db.connection.exec("ROLLBACK");
-      throw error;
-    }
+    }).immediate();
     return ids.length;
   }
 

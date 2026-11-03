@@ -2,6 +2,7 @@ import { deflateRawSync, inflateRawSync } from "node:zlib";
 import YAML from "yaml";
 import { assertSafeRelativePath, sha256 } from "@modai/contracts/security";
 import type { ArtifactFile, PublishPackageInput } from "@modai/contracts/types";
+import { TEMPLATE_MANIFEST } from "./template-spec.js";
 
 /**
  * Minimal ZIP support for `.skill` files and project templates: stored and deflate entries, no encryption,
@@ -135,5 +136,39 @@ export function skillArchiveToPackage(archive: Buffer, options: SkillImportOptio
     } as unknown as PublishPackageInput["manifest"],
     files,
     skill: { name, description },
+  };
+}
+
+/** Never part of a template: dependencies, build output, VCS data and local secrets (`.env.example` stays). */
+export const TEMPLATE_EXCLUDED = /(^|\/)(node_modules|\.git|dist|build|coverage|\.next|\.turbo|\.modai\/store|\.DS_Store|Thumbs\.db)(\/|$)|(^|\/)\.env(\.(?!example$|sample$|template$)[^/]*)?$/;
+
+export interface TemplateImportOptions {
+  name: string; version: string; description: string; category?: string; keywords?: string[]; license?: string;
+  /** When given, replaces the template's modai.template.yaml (an empty map and no add-on removes it). */
+  declaration?: { features?: Record<string, Record<string, unknown>>; addon?: { for: string[] } };
+}
+
+/**
+ * A project template as a `kind: Template` package: the files of a whole starter project, from a ZIP or a file list.
+ * A ZIP that wraps everything in one folder loses that folder; dependencies, build output and secrets are left out.
+ */
+export function templateToPackage(source: { archive?: Buffer; entries?: ArchiveEntry[] }, options: TemplateImportOptions): PublishPackageInput {
+  let entries = source.archive ? stripSingleRoot(readZip(source.archive)).entries : (source.entries ?? []);
+  entries = entries.map(entry => ({ path: entry.path.replaceAll("\\", "/"), bytes: entry.bytes })).filter(entry => !TEMPLATE_EXCLUDED.test(entry.path)).sort(byPath);
+  if (options.declaration) {
+    entries = entries.filter(entry => entry.path !== TEMPLATE_MANIFEST);
+    const { features = {}, addon } = options.declaration;
+    if (Object.keys(features).length || addon) entries.push({ path: TEMPLATE_MANIFEST, bytes: Buffer.from(YAML.stringify({ ...(Object.keys(features).length ? { features } : {}), ...(addon ? { addon } : {}) }), "utf8") });
+    entries.sort(byPath);
+  }
+  if (!entries.length) throw new Error("El template no tiene archivos (se excluyen node_modules, .git, dist y .env)");
+  const keywords = [...new Set((options.keywords ?? []).map(word => String(word).trim().toLowerCase().slice(0, 64)).filter(Boolean))].slice(0, 50);
+  return {
+    manifest: {
+      apiVersion: "modai.dev/v1", kind: "Template",
+      metadata: { name: options.name, version: options.version, description: options.description.trim().slice(0, 5000), ...(keywords.length ? { keywords } : {}), ...(options.license ? { license: options.license } : {}) },
+      spec: { category: options.category || "template" },
+    } as unknown as PublishPackageInput["manifest"],
+    files: toArtifactFiles(entries),
   };
 }

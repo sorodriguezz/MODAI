@@ -1,4 +1,4 @@
-import { createInterface } from "node:readline/promises";
+import { askConfirm, interactive } from "../cli/ui.js";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { ApiClient } from "@modai/sdk";
 import type { ProjectFile, RegistrySource } from "@modai/contracts/spec-v1";
@@ -11,7 +11,8 @@ import { loadClientConfig } from "../cli/config.js";
 import { effectiveConnection } from "../cli/connection.js";
 
 export function tokenFor(url: string): string | undefined {
-  try { return effectiveConnection(url).token; } catch { return undefined; }
+  // No server configured means no credential; refusing to send one over plain http must reach the person.
+  try { return effectiveConnection(url).token; } catch (error) { if ((error as Error).message.startsWith("No se envían credenciales")) throw error; return undefined; }
 }
 
 export function defaultLocalRegistry(): string { return join(configDirectory(), "registry"); }
@@ -117,8 +118,6 @@ export function memoryProvider(project: V1Project): MemoryProvider | undefined {
 
 export async function confirm(question: string, assumeYes?: boolean): Promise<boolean> {
   if (assumeYes) return true;
-  if (!process.stdin.isTTY) throw new Error("Confirmación requerida: repite con --yes en entornos no interactivos");
-  const reader = createInterface({ input: process.stdin, output: process.stderr });
-  try { return /^(s|si|sí|y|yes)$/i.test((await reader.question(`${question} [s/N] `)).trim()); }
-  finally { reader.close(); }
+  if (!interactive()) throw new Error("Confirmación requerida: repite con --yes en entornos no interactivos");
+  return askConfirm(question);
 }

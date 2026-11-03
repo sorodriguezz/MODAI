@@ -89,7 +89,7 @@ modai package publish ./mi-paquete
 | `MODAI_HOST` | `0.0.0.0` | Interfaz de escucha dentro del proceso. Con Compose, la IP publicada se fija con `MODAI_BIND_IP` (por defecto `127.0.0.1`). |
 | `MODAI_PUBLIC_URL` | — | URL que el panel muestra a los clientes (por ejemplo, `https://modai.tu-equipo.cl`). |
 | `MODAI_TRUST_PROXY` | `false` | Actívalo detrás de un proxy inverso, Cloudflare Tunnel o Tailscale (`true`, número de saltos o IP/CIDR). |
-| `MODAI_SIGNATURE_POLICY` | `optional` | `optional`, `signed` (exige firma) o `trusted` (solo publicadores de confianza). |
+| `MODAI_SIGNATURE_POLICY` | `optional` | `optional`, `signed` (exige firma) o `trusted` (solo publicadores de confianza). `signed` comprueba integridad, pero acepta cualquier clave, incluida una recién generada: solo `trusted` garantiza **quién** publica. |
 | `MODAI_ARTIFACT_QUOTA_BYTES` | `1073741824` | Espacio máximo para artefactos de paquetes (1 GiB). |
 | `MODAI_DATABASE_PATH`, `MODAI_ARTIFACT_DIR` | `var/data/modularai.db`, `var/artifacts` | Dónde se guardan los datos. En Docker son volúmenes. |
 

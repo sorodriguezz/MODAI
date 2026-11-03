@@ -24,7 +24,7 @@ function frame(content) {
           <li>${icon("shield")}Roles, API keys individuales y auditoría</li>
         </ul>
       </div>
-      <p class="auth-foot">${state.health ? html`Servidor ${state.health.version} · ${state.health.runtime}` : ""}</p>
+      <p class="auth-foot">${state.health ? html`Servidor MODAI ${state.health.version}` : ""}</p>
     </section>
     <section class="auth-main">
       <div class="auth-top">${themeSwitcher()}</div>

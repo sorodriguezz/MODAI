@@ -10,7 +10,7 @@ export const HELP_SECTIONS: Array<[heading: string, commands: string[]]> = [
   ["Proyecto:", ["init", "template", "add", "feature", "remove", "sync", "update", "outdated", "status", "list", "override", "workspace"]],
   ["Lo que instalan los paquetes:", ["component", "harness", "capability", "adapter", "permissions"]],
   ["Contexto y memoria:", ["context", "memory", "knowledge"]],
-  ["Publicar paquetes:", ["package", "skill", "registry"]],
+  ["Publicar paquetes:", ["package", "skill", "category", "registry"]],
   ["Servidor:", ["server", "project", "agent", "admin"]],
   ["Este equipo:", ["client", "upgrade"]],
 ];

@@ -1,9 +1,9 @@
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import semver from "semver";
 import { ApiClient } from "@modai/sdk";
-import { isV1Project, loadPackageSource, loadV1Project, validatePackage } from "@modai/core";
+import { isV1Project, loadPackageSource, loadV1Project, validatePackage, writeZip } from "@modai/core";
 import { resolveNamespace, skillSourceToPackage } from "./library.js";
 import type { PublishPackageInput } from "@modai/contracts/types";
 import { publishV1 } from "../../v1/commands.js";
@@ -12,7 +12,7 @@ import { registryFromArgument, registrySource, requireV1Project, runSync, summar
 import { effectiveConnection } from "../connection.js";
 import { signPackage } from "../package-authoring.js";
 import { group } from "../groups.js";
-import type { Print } from "../output.js";
+import { isJsonMode, type Print } from "../output.js";
 
 export function splitPackageSpec(spec: string): { name: string; range: string } {
   const separator = spec.lastIndexOf("@");
@@ -70,6 +70,26 @@ export function registerRegistryCommands(program: Command, print: Print): void {
       print(`Publicado ${published.name}@${published.version}, calidad ${published.quality?.score ?? "—"}/100${published.signerFingerprint ? ", firmado" : ""}.`);
     });
 
+  pkg.command("usage").description("Proyectos vinculados a este servidor que usan un paquete, con su versión")
+    .argument("<package>", "@scope/nombre")
+    .action(async (spec: string) => {
+      const { name } = splitPackageSpec(spec);
+      const projects = await serverApi().packageUsage(name);
+      print(projects.length || isJsonMode() ? projects.map(item => ({ project: item.projectName, id: item.projectId, version: item.version, how: item.direct ? "directa" : "dependencia", reported: item.reportedAt }))
+        : `Ningún proyecto que puedas ver informa usar ${name} (los proyectos lo informan al sincronizar con modai init --project).`);
+    });
+  pkg.command("download").description("Descarga una versión publicada como .zip (sus archivos tal cual)")
+    .argument("<package>", "@scope/nombre[@versión]").argument("[file]", "Archivo destino")
+    .action(async (spec: string, file?: string) => {
+      const { name, range } = splitPackageSpec(spec);
+      const api = serverApi();
+      const item = await api.getPackage(name, range === "*" ? undefined : range);
+      const { files } = await api.artifact(item.artifactId);
+      const folder = item.name.split("/")[1]!;
+      const output = resolve(file ?? `${folder}-${item.version}.zip`);
+      writeFileSync(output, writeZip(files.map(entry => ({ path: `${folder}/${entry.path}`, bytes: Buffer.from(entry.content, "base64") }))));
+      print(`Descargado ${item.name}@${item.version} en ${output}`);
+    });
   pkg.command("deprecate").description("Marca una versión como deprecada").argument("<package>", "@scope/nombre@versión").requiredOption("--message <message>")
     .action(async (spec: string, options: { message: string }) => { const item = exactVersion(spec); await serverApi().deprecate(item.name, item.version, options.message); print(`Deprecada ${item.name}@${item.version}.`); });
   pkg.command("yank").description("Retira una versión de nuevas resoluciones").argument("<package>", "@scope/nombre@versión").requiredOption("--reason <reason>")

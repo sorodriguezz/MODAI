@@ -7,7 +7,6 @@ import { renderLogin, renderSetup } from "./views/auth.js";
 import { openChangePassword } from "./views/account.js";
 import dashboard from "./views/dashboard.js";
 import packages from "./views/packages.js";
-import agents from "./views/agents.js";
 import knowledge from "./views/knowledge.js";
 import projects from "./views/projects.js";
 import memories from "./views/memories.js";
@@ -18,15 +17,19 @@ import audit from "./views/audit.js";
 import connect from "./views/connect.js";
 import organizations from "./views/organizations.js";
 import namespaces from "./views/namespaces.js";
-import templates from "./views/templates.js";
+import categories from "./views/categories.js";
 import myKeys from "./views/my-keys.js";
 
-const views = [dashboard, packages, templates, agents, knowledge, projects, memories, runs, connect, myKeys, organizations, namespaces, users, access, audit];
+const views = [dashboard, packages, knowledge, projects, memories, runs, connect, myKeys, organizations, namespaces, categories, users, access, audit];
+// Biblioteca is what gets published and versioned under a namespace (every kind lives in Paquetes);
+// Proyectos is what gets used: runs, memories and the searchable knowledge base agents read.
 const sections = [
-  { id: "library", label: "Biblioteca", views: ["dashboard", "packages", "templates", "agents", "knowledge"] },
-  { id: "work", label: "Proyectos", views: ["projects", "memories", "runs", "connect", "my-keys"] },
-  { id: "admin", label: "Administración", views: ["organizations", "namespaces", "users", "access", "audit"] },
+  { id: "library", label: "Biblioteca", views: ["dashboard", "packages"] },
+  { id: "work", label: "Proyectos", views: ["projects", "runs", "memories", "knowledge", "connect", "my-keys"] },
+  { id: "admin", label: "Administración", views: ["organizations", "namespaces", "categories", "users", "access", "audit"] },
 ];
+/** Former menus that are now a type tab of Paquetes: old links and bookmarks still land there. */
+const MOVED = { agents: { type: "agents" }, templates: { type: "templates" } };
 const byId = Object.fromEntries(views.map((view) => [view.id, view]));
 let current = null;
 let renderToken = 0;
@@ -89,10 +92,12 @@ async function enterApp(status) {
   store.invalidate();
   renderUser();
   renderNav();
+  // Signed in, /health also reports the runtime (anonymous callers do not get it).
+  state.health = await health().catch(() => state.health);
   renderServerStatus();
   show("app");
   const target = parseHash();
-  await navigate(target && isVisible(byId[target]) ? target : "dashboard", { replace: true });
+  await navigate(target && (isVisible(byId[target]) || MOVED[target]) ? target : "dashboard", { params: MOVED[target] ? Object.fromEntries(hashParams()) : undefined, replace: true });
 }
 
 window.addEventListener("modai:unauthorized", () => {
@@ -212,6 +217,7 @@ export function hashParams() {
 }
 
 export async function navigate(id, { params, replace = false } = {}) {
+  if (MOVED[id]) { params = { ...MOVED[id], ...params }; id = "packages"; replace = true; }
   const view = isVisible(byId[id]) ? byId[id] : byId.dashboard;
   const query = params ? "?" + new URLSearchParams(params).toString() : "";
   const hash = "#/" + view.id + query;
@@ -266,7 +272,8 @@ async function renderView(view, { keepFocus = false } = {}) {
 window.addEventListener("popstate", () => {
   if ($("appShell").hidden) return;
   const id = parseHash();
-  if (id && isVisible(byId[id])) renderView(byId[id]);
+  if (MOVED[id]) navigate(id, { params: Object.fromEntries(hashParams()) });
+  else if (id && isVisible(byId[id])) renderView(byId[id]);
 });
 // Plain anchors (#/view) are handled here to keep history consistent.
 document.addEventListener("click", (event) => {

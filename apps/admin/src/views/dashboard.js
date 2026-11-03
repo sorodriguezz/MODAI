@@ -82,7 +82,7 @@ export default {
     if (!isCurrent()) return;
     mount(root.querySelector("#stats"), [
       stat({ label: "Paquetes", value: summary ? summary.packages : "—", hint: summary ? summary.versions + " versiones publicadas" : "No disponible", iconName: "package", href: "#/packages" }),
-      stat({ label: "Agentes", value: summary ? summary.agents : "—", hint: "Listos para activar", iconName: "bot", href: "#/agents" }),
+      stat({ label: "Agentes", value: summary ? summary.agents : "—", hint: "Listos para activar", iconName: "bot", href: "#/packages?type=agents" }),
       stat({ label: "Conocimiento", value: documentsResult.status === "fulfilled" ? documentsResult.value.length : "—", hint: "Documentos compartidos", iconName: "book", href: "#/knowledge" }),
       stat({ label: "Proyectos", value: projectList.length, hint: can.admin() ? "En el servidor" : "Con acceso", iconName: "folder", href: "#/projects" }),
       stat({ label: "Memorias", value: memory.total + (memory.capped ? "+" : ""), hint: memory.capped ? `Muestra de ${Math.min(projectList.length, MEMORY_PROJECT_SAMPLE)} proyectos` : "En tus proyectos", iconName: "brain", href: "#/memories" }),

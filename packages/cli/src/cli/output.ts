@@ -1,4 +1,5 @@
 // Every command prints through here: readable text by default, machine output with the global --json.
+import chalk from "chalk";
 
 type Scalar = string | number | boolean | null | undefined;
 export type Row = Record<string, unknown>;
@@ -24,8 +25,9 @@ export function formatTable(rows: Row[], maxWidth = 60): string {
   const columns = [...new Set(rows.flatMap(row => Object.keys(row).filter(key => row[key] !== undefined)))];
   const widths = columns.map(column => Math.min(maxWidth, Math.max(column.length, ...rows.map(row => cell(row[column]).length))));
   const fit = (text: string, width: number) => (text.length > width ? `${text.slice(0, width - 1)}…` : text).padEnd(width);
-  return [columns.map((column, index) => fit(column.toUpperCase(), widths[index])).join("  "), ...rows.map(row => columns.map((column, index) => fit(cell(row[column]), widths[index])).join("  "))]
-    .map(line => line.trimEnd()).join("\n");
+  // Colors go on after padding, so escape codes never count towards a column's width.
+  const header = columns.map((column, index) => fit(column.toUpperCase(), widths[index])).join("  ").trimEnd();
+  return [jsonMode ? header : chalk.bold.dim(header), ...rows.map(row => columns.map((column, index) => fit(cell(row[column]), widths[index])).join("  ").trimEnd())].join("\n");
 }
 
 const label = (key: string) => key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, char => char.toUpperCase());
@@ -43,7 +45,7 @@ export function render(value: unknown, indent = ""): string {
   const lines: string[] = [];
   for (const [key, item] of Object.entries(value as Row)) {
     if (item === undefined) continue;
-    if (isScalar(item) || (Array.isArray(item) && item.every(isScalar))) lines.push(`${indent}${label(key)}: ${cell(item) || "—"}`);
+    if (isScalar(item) || (Array.isArray(item) && item.every(isScalar))) lines.push(`${indent}${jsonMode ? label(key) : chalk.bold(label(key))}: ${cell(item) || "—"}`);
     else if (Array.isArray(item) || Object.keys(item as Row).length) lines.push(`${indent}${label(key)}:`, render(item, `${indent}  `));
     else lines.push(`${indent}${label(key)}: —`);
   }

@@ -148,7 +148,8 @@ export class PackageService {
       const rows = this.db.connection
         .prepare("SELECT * FROM packages WHERE name = ?")
         .all(name) as unknown as PackageRow[];
-      row = rows.sort((a, b) => semver.rcompare(a.version, b.version))[0];
+      // Without a version: the newest one still in use; a yanked version only when nothing else is left.
+      row = rows.sort((a, b) => Number(a.status === "yanked") - Number(b.status === "yanked") || semver.rcompare(a.version, b.version))[0];
     }
     if (!row) throw new AppError(404, "PACKAGE_NOT_FOUND", `No existe ${name}${version ? `@${version}` : ""}`);
     return this.decorate(row);
@@ -192,58 +193,56 @@ export class PackageService {
 
     const now = new Date().toISOString();
     const connection = this.db.connection;
+    // A savepoint when called inside another transaction (a backup import), so the whole import can roll back.
     try {
-      connection.exec("BEGIN IMMEDIATE");
-      connection
-        .prepare("INSERT INTO artifacts (id, sha256, size_bytes, created_at) VALUES (?, ?, ?, ?)")
-        .run(artifactId, artifactHash, Buffer.byteLength(body), now);
-      connection
-        .prepare(`
-          INSERT INTO packages
-            (name, version, type, description, manifest_json, artifact_id, published_at,
-             status, signer_fingerprint, signature, quality_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
-        `)
-        .run(
-          identity.name,
-          identity.version,
-          normalized.spec.category,
-          normalized.metadata.description,
-          JSON.stringify(manifest),
-          artifactId,
-          now,
-          signerFingerprint,
-          input.signature?.signature ?? null,
-          JSON.stringify(quality),
-        );
-      if (input.signature && signerFingerprint) {
-        connection.prepare(`INSERT INTO publishers (fingerprint, public_key, created_at)
-          VALUES (?, ?, ?) ON CONFLICT(fingerprint) DO UPDATE SET public_key = excluded.public_key`)
-          .run(signerFingerprint, input.signature.publicKey, now);
-      }
-
-      const byPath = new Map(files.map((file) => [file.path, file]));
-      for (const rule of normalized.spec.contributes.knowledge) {
-        const file = byPath.get(rule.path)!;
-        const content = Buffer.from(file.content, "base64").toString("utf8");
-        const id = randomUUID();
-        const tags = rule.tags ?? [];
+      connection.transaction(() => {
+        connection
+          .prepare("INSERT INTO artifacts (id, sha256, size_bytes, created_at) VALUES (?, ?, ?, ?)")
+          .run(artifactId, artifactHash, Buffer.byteLength(body), now);
         connection
           .prepare(`
-            INSERT INTO knowledge_documents
-              (id, package_name, package_version, title, content, tags_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO packages
+              (name, version, type, description, manifest_json, artifact_id, published_at,
+               status, signer_fingerprint, signature, quality_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
           `)
-          .run(id, identity.name, identity.version, rule.title, content, JSON.stringify(tags), now, now);
-        connection
-          .prepare("INSERT INTO knowledge_fts (id, package_name, title, content, tags) VALUES (?, ?, ?, ?, ?)")
-          .run(id, identity.name, rule.title, content, tags.join(" "));
-      }
-      connection.exec("COMMIT");
+          .run(
+            identity.name,
+            identity.version,
+            normalized.spec.category,
+            normalized.metadata.description,
+            JSON.stringify(manifest),
+            artifactId,
+            now,
+            signerFingerprint,
+            input.signature?.signature ?? null,
+            JSON.stringify(quality),
+          );
+        if (input.signature && signerFingerprint) {
+          connection.prepare(`INSERT INTO publishers (fingerprint, public_key, created_at)
+            VALUES (?, ?, ?) ON CONFLICT(fingerprint) DO UPDATE SET public_key = excluded.public_key`)
+            .run(signerFingerprint, input.signature.publicKey, now);
+        }
+
+        const byPath = new Map(files.map((file) => [file.path, file]));
+        for (const rule of normalized.spec.contributes.knowledge) {
+          const file = byPath.get(rule.path)!;
+          const content = Buffer.from(file.content, "base64").toString("utf8");
+          const id = randomUUID();
+          const tags = rule.tags ?? [];
+          connection
+            .prepare(`
+              INSERT INTO knowledge_documents
+                (id, package_name, package_version, title, content, tags_json, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `)
+            .run(id, identity.name, identity.version, rule.title, content, JSON.stringify(tags), now, now);
+          connection
+            .prepare("INSERT INTO knowledge_fts (id, package_name, title, content, tags) VALUES (?, ?, ?, ?, ?)")
+            .run(id, identity.name, rule.title, content, tags.join(" "));
+        }
+      }).immediate();
     } catch (error) {
-      try {
-        connection.exec("ROLLBACK");
-      } catch {}
       rmSync(artifactPath, { force: true });
       throw error;
     }
@@ -298,19 +297,14 @@ export class PackageService {
     const record = this.get(name, version);
     invariant(record.status === "yanked", 409, "PACKAGE_NOT_YANKED", "Primero retira la versión con yank");
     const connection = this.db.connection;
-    connection.exec("BEGIN IMMEDIATE");
-    try {
+    connection.transaction(() => {
       const docs = connection.prepare("SELECT id FROM knowledge_documents WHERE package_name = ? AND package_version = ?").all(name, version) as Array<{ id: string }>;
       for (const doc of docs) connection.prepare("DELETE FROM knowledge_fts WHERE id = ?").run(doc.id);
       connection.prepare("DELETE FROM knowledge_documents WHERE package_name = ? AND package_version = ?").run(name, version);
       connection.prepare("DELETE FROM packages WHERE name = ? AND version = ?").run(name, version);
       connection.prepare("DELETE FROM artifacts WHERE id = ?").run(record.artifactId);
-      connection.exec("COMMIT");
-      rmSync(join(this.artifactDirectory, `${record.artifactId}.json`), { force: true });
-    } catch (error) {
-      connection.exec("ROLLBACK");
-      throw error;
-    }
+    }).immediate();
+    rmSync(join(this.artifactDirectory, `${record.artifactId}.json`), { force: true });
   }
 
   listPublishers(): unknown[] {
@@ -334,5 +328,6 @@ const CATALOG_TYPES: Record<string, (manifest: ReturnType<typeof normalizeManife
   agents: manifest => manifest.spec.contributes.agents.length > 0,
   knowledge: manifest => manifest.spec.contributes.knowledge.length > 0,
   profiles: manifest => manifest.kind === "Profile" || manifest.spec.category === "profile",
+  templates: manifest => manifest.kind === "Template",
   adapters: manifest => manifest.kind === "Adapter" || manifest.spec.category === "adapter",
 };

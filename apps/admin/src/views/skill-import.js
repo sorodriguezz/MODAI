@@ -6,7 +6,7 @@ import { openDialog, closeDialog, closeDialogAndWait, bindForm, toast } from "..
 import { bytesToBase64, formatBytes } from "../lib/files.js";
 import { wizard, reviewList } from "../lib/wizard.js";
 import { store, state } from "../state.js";
-import { qualityMarkup } from "./package-editor.js";
+import { qualityMarkup } from "../lib/quality.js";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 

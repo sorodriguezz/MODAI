@@ -7,6 +7,7 @@ import { registerClientCommands } from "./client-commands.js";
 import { effectiveConnection } from "./connection.js";
 import { applyHelpSections } from "./groups.js";
 import { print, setJsonMode } from "./output.js";
+import { isPromptCancel, paint } from "./ui.js";
 import { registerUpgradeCommand, startUpdateNotice } from "./upgrade.js";
 import { registerAuthoringCommands } from "./commands/authoring.js";
 import { registerContextCommands } from "./commands/context.js";
@@ -57,8 +58,11 @@ const showUpdateNotice = quiet ? () => {} : startUpdateNotice(program.version()!
 try {
   await program.parseAsync(argv);
 } catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`Error: ${message}\n`);
-  process.exitCode = 1;
+  if (isPromptCancel(error)) { process.stderr.write(`${paint().dim("Cancelado.")}\n`); process.exitCode = 130; }
+  else {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${paint().red.bold("Error:")} ${message}\n`);
+    process.exitCode = 1;
+  }
 }
 showUpdateNotice();

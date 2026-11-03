@@ -12,7 +12,7 @@ La API requiere siempre `Authorization: Bearer <token>`. `/health`, el HTML de `
 | POST | `/api/v1/packages` | Publicar manifiesto y artefacto inmutable |
 | POST | `/api/v1/resolve` | Resolver dependencias transitivas |
 | GET | `/api/v1/artifacts/:id` | Descargar archivos con hashes |
-| POST | `/api/v1/knowledge/documents` | Añadir conocimiento independiente |
+| POST | `/api/v1/knowledge/documents` | Añadir conocimiento manual `{ title, content, tags?, packageName? }`. Con `packageName` hace falta poder publicar en su namespace; sin él (compartido con todo el servidor), poder publicar en todos (administración global o una key con `*`) |
 | POST | `/api/v1/knowledge/search` | Buscar con FTS5 y filtro de paquetes |
 | POST | `/api/v1/memories` | Guardar memoria |
 | GET | `/api/v1/memories?projectId=` | Listar memoria de un proyecto |
@@ -20,8 +20,8 @@ La API requiere siempre `Authorization: Bearer <token>`. `/health`, el HTML de `
 | DELETE | `/api/v1/memories/:id` | Eliminar memoria |
 | PATCH | `/api/v1/memories/:id` | Actualizar memoria |
 | GET | `/api/v1/knowledge/documents?limit=&offset=` | Listar conocimiento paginado; devuelve `nextOffset` o null |
-| PATCH/DELETE | `/api/v1/knowledge/documents/:id` | Gestionar conocimiento manual |
-| PUT | `/api/v1/knowledge/documents/:id/vector` | Guardar `{ model, embedding, sourceHash? }` generado en el cliente |
+| PATCH/DELETE | `/api/v1/knowledge/documents/:id` | Gestionar conocimiento manual (mismo permiso que para crearlo) |
+| PUT | `/api/v1/knowledge/documents/:id/vector` | Guardar `{ model, embedding, sourceHash? }` generado en el cliente (mismo permiso que para escribir el documento) |
 | POST | `/api/v1/knowledge/vector-search` | Buscar con `{ model, embedding, limit?, packageNames? }` generado en el cliente |
 | GET | `/api/v1/session` | Identidad, rol, grants y `permissions` (qué puede hacer la conexión) |
 | GET/POST/DELETE | `/api/v1/me/api-keys[/:id]` | Tus API keys: listar, crear `{ label, role, inherit?, projectIds?, organizationIds?, packageScopes? }` (solo con sesión del panel) y revocar. Nunca superan los permisos de tu usuario |
@@ -32,7 +32,9 @@ La API requiere siempre `Authorization: Bearer <token>`. `/health`, el HTML de `
 | GET/POST | `/api/v1/admin/export`, `/import` | Backup portable |
 | POST | `/api/v1/admin/prune` | Retención `{ memoryDays?, auditDays?, dryRun? }`: solo depura los campos presentes (0 = todo); sin cuerpo, 365 y 90 días. `dryRun` cuenta sin borrar |
 | POST | `/api/v1/packages/import-skill` | Convierte un `.skill` `{ archive (ZIP base64), namespace, version?, name?, dryRun? }` en un paquete y lo publica; `dryRun` devuelve manifiesto, archivos y calidad |
-| GET/POST/PATCH | `/api/v1/templates`, `/api/v1/template*` | Templates de proyecto: ver [TEMPLATES.md](TEMPLATES.md) |
+| POST/GET | `/api/v1/packages/import-template`, `/api/v1/packages/template` | Templates de proyecto (paquetes `kind: Template`): ver [TEMPLATES.md](TEMPLATES.md) |
+| GET | `/api/v1/packages/download?name=&version=` | Una versión de un paquete como ZIP |
+| GET/POST/PATCH/DELETE | `/api/v1/categories[/:name]` | Categorías del catálogo: todas las identidades las leen (registradas y las que usan paquetes sin registrar, con su número de paquetes); solo la administración crea `{ name, description? }`, edita `{ description }` y elimina |
 | GET | `/api/v1/admin/audit` | Auditoría |
 | GET | `/metrics` | Métricas Prometheus |
 
@@ -80,7 +82,7 @@ Un namespace `internal` es visible para cualquier identidad autenticada; uno `re
 
 Las rutas de contexto y tareas verifican el proyecto tanto al consultar como al escribir. Un rol worker no concede publicación de paquetes. La memoria admite `scope: project|organization|session`, `sessionId` y consultas con `includeOrganization`; compartir organización exige grants explícitos. El catálogo y el conocimiento publicado son compartidos entre clientes autenticados; no almacenes documentos privados de un proyecto como conocimiento global.
 
-`GET /health` incluye `apiVersion: 1` y la política de firmas. La búsqueda vectorial puede responder `413 VECTOR_CANDIDATE_LIMIT` o `429 VECTOR_BUSY`; limita los paquetes de la consulta. Las entradas generales se limitan a 1 MiB; publicación usa un límite específico y cada artefacto tiene un máximo decodificado de 25 MiB.
+`GET /health` incluye `apiVersion: 1` y la política de firmas; la versión de Node (`runtime`) solo se devuelve con una credencial. La búsqueda vectorial puede responder `413 VECTOR_CANDIDATE_LIMIT` o `429 VECTOR_BUSY`; limita los paquetes de la consulta. Las entradas generales se limitan a 1 MiB; publicación usa un límite específico y cada artefacto tiene un máximo decodificado de 25 MiB.
 
 `/health` incluye `publicUrl` cuando se configura `MODAI_PUBLIC_URL`. Esa dirección debe ser un origen HTTP(S), sin credenciales ni prefijo de ruta.
 

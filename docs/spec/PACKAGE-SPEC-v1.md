@@ -8,7 +8,7 @@ Esta especificación define qué es un paquete, cómo declara lo que ofrece y lo
 
 ```yaml
 apiVersion: modai.dev/v1
-kind: Package                 # Package | Profile | Adapter
+kind: Package                 # Package | Profile | Adapter | Template
 metadata:
   name: "@testing/regression" # @scope/nombre
   version: 1.0.0              # SemVer exacta; una versión publicada es inmutable
@@ -47,6 +47,7 @@ spec:
 | `Package` | Conocimiento, procedimientos, reglas, herramientas o combinaciones de ellos. |
 | `Profile` | Compone otros paquetes mediante `dependencies`. No puede aportar herramientas propias. |
 | `Adapter` | Describe con datos cómo materializar contribuciones para un agente (§5). Requiere `spec.adapter`. |
+| `Template` | Un proyecto completo para empezar (ver [TEMPLATES.md](../guides/TEMPLATES.md)). No se instala: lo usa `modai template use`, y resolverlo como dependencia falla con `TEMPLATE_NOT_INSTALLABLE`. Sin `contributes`, `dependencies`, `features` ni `permissions`; sus opciones van en `modai.template.yaml`. |
 
 Naturaleza de un paquete según lo que contribuye (no según su categoría):
 
@@ -58,6 +59,7 @@ Naturaleza de un paquete según lo que contribuye (no según su categoría):
 | Ejecutable | regresión con Playwright | `tools` / `mcpServers`, con permisos |
 | Composición | perfil fullstack | `kind: Profile` |
 | Adaptador | Cursor, OpenCode | `kind: Adapter` |
+| Proyecto inicial | NestJS con SDD | `kind: Template` |
 
 ## 2. Capacidades
 
@@ -186,6 +188,7 @@ spec:
       mcp:    { file: .cursor/mcp.json, pointer: mcpServers.modai, value: { command: modai-mcp, args: [--project, .] } }
 ```
 
+- `mcp` solo registra el **gateway de MODAI**: el comando de `value` (`command`, `cmd`, `executable`, `program` o `bin`, como lo llame el cliente) debe ser `modai-mcp` o una lista que empiece por él; no admite `env` ni las claves `__proto__`, `constructor` o `prototype` (tampoco en `pointer`). Así un adaptador no puede hacer que el agente ejecute otro programa con solo el permiso `project.instructions`.
 - `rules` admite `mode: block` (un bloque administrado `<!-- modai:begin rules -->…<!-- modai:end rules -->` en un archivo) o `mode: file` (un archivo por regla).
 - Marcadores: `{skill}`, `{package}` (`@scope/name` → `scope-name`), `{rule}`; los valores se sanean y no pueden introducir segmentos de ruta.
 - Un adaptador solo escribe dentro de carpetas ocultas de configuración (`.cursor/`, `.claude/`…) o en documentos/configuración de la raíz (`.md`, `.mdc`, `.json`, `.yaml`, `.toml`, `.txt`); nunca en árboles de código ni en ubicaciones que ejecutan código automáticamente (`.husky/`, `.devcontainer/`, `package.json`, `Makefile`, CI…).

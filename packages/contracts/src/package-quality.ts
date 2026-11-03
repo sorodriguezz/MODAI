@@ -45,6 +45,7 @@ function analyzeV1(raw: unknown, files: ArtifactFile[]): QualityReport {
   const { contributes } = manifest.spec;
   dimensions.manifest = 100;
   dimensions.documentation = manifest.metadata.description.length >= 30 ? 100 : 60;
+  if (dimensions.documentation < 100) findings.push({ severity: "warning", code: "DESCRIPTION_SHORT", message: `La descripción tiene ${manifest.metadata.description.length} caracteres: con 30 o más (qué aporta y cuándo usarlo) la documentación sube de 60 a 100.` });
   for (const skill of contributes.skills) {
     const base = skill.path === "." ? "" : `${skill.path}/`;
     const entry = content.get(`${base}SKILL.md`);

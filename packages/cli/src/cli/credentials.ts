@@ -1,5 +1,4 @@
-import { createInterface } from "node:readline";
-import { Writable } from "node:stream";
+import { askSecret } from "./ui.js";
 
 export async function readAccessToken(fromStdin = false): Promise<string> {
   let token: string;
@@ -16,31 +15,7 @@ export async function readAccessToken(fromStdin = false): Promise<string> {
       throw new Error(
         "Falta una API key. Usa MODAI_API_TOKEN o modai server connect <url> --token-stdin.",
       );
-    process.stderr.write("API key de MODAI (entrada oculta): ");
-    const hidden = new Writable({
-      write(_chunk, _encoding, done) {
-        done();
-      },
-    });
-    const reader = createInterface({
-      input: process.stdin,
-      output: hidden,
-      terminal: true,
-      historySize: 0,
-    });
-    try {
-      token = await new Promise<string>((resolve, reject) => {
-        reader.once("SIGINT", () => reject(new Error("Conexión cancelada")));
-        reader.once("close", () =>
-          reject(new Error("Entrada de token cancelada")),
-        );
-        reader.question("", resolve);
-      });
-    } finally {
-      reader.close();
-      process.stderr.write("\n");
-    }
-    token = token.trim();
+    token = await askSecret("API key de MODAI (no se muestra)", "--token-stdin o MODAI_API_TOKEN");
   }
   if (!token || token.length > 4096 || /\s/.test(token))
     throw new Error("API key vacía o inválida");

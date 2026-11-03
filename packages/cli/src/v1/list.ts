@@ -27,9 +27,9 @@ const CONTRIBUTIONS: Record<string, { aliases: string[]; rows: (entry: Entry) =>
   files: { aliases: ["file", "archivos"], rows: e => e.manifest.spec.contributes.files.map(item => ({ target: item.target, package: e.name, version: e.version })) },
 };
 /** Listings over packages filtered by kind; anything else is treated as a category (harness, testing, frontend...). */
-const KINDS: Record<string, string> = { profiles: "Profile", profile: "Profile", perfiles: "Profile" };
+const KINDS: Record<string, string> = { profiles: "Profile", profile: "Profile", perfiles: "Profile", templates: "Template", template: "Template", plantillas: "Template" };
 const CATEGORY_ALIASES: Record<string, string> = { harnesses: "harness", arneses: "harness", components: "component" };
-export const LIST_TYPES = ["packages", ...Object.keys(CONTRIBUTIONS), "profiles", "adapters", "registries", "capabilities", "<categoría>"];
+export const LIST_TYPES = ["packages", ...Object.keys(CONTRIBUTIONS), "profiles", "templates", "adapters", "registries", "capabilities", "<categoría>"];
 
 function packageRow(entry: Entry): Row {
   return { package: entry.name, version: entry.version, kind: entry.manifest.kind, category: entry.manifest.spec.category, ...(entry.registry ? { registry: entry.registry, installed: entry.installed } : {}), description: entry.manifest.metadata.description };
@@ -52,8 +52,13 @@ function availableRegistry(options: { registry?: string }): Registry {
   const project = isV1Project(root) ? loadV1Project(root) : undefined;
   if (options.registry) return registryFromArgument(options.registry, project);
   if (project) return projectRegistry(project);
-  const server = loadClientConfig()?.server;
+  const server = process.env.MODAI_SERVER || loadClientConfig()?.server;
   return server ? new HttpRegistry(server, tokenFor(server)) : new LocalRegistry(defaultLocalRegistry());
+}
+
+/** What the project's registries (or the connected server) publish, for pickers that let the person choose a package. */
+export async function availableEntries(query?: string): Promise<Array<{ name: string; version: string; manifest: PackageManifestV1 }>> {
+  return entriesFor({ available: true, query });
 }
 
 async function entriesFor(options: { available?: boolean; registry?: string; query?: string }): Promise<Entry[]> {

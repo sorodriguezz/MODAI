@@ -68,7 +68,10 @@ export const can = {
   publish: () => perm().publish.all || perm().publish.namespaces.length > 0,
   publishTo: (namespace) => perm().publish.all || perm().publish.namespaces.includes(namespace),
   /** Manual knowledge documents follow the publisher role, not namespaces. */
-  writeKnowledge: () => Boolean(perm().createProjects),
+  // Manual knowledge: shared with the whole server only by who may publish everywhere; tied to a package, by who may
+  // publish in its namespace (same rule as the server).
+  writeKnowledge: (packageName) => packageName ? can.publishTo(String(packageName).split("/")[0]) : Boolean(perm().writeKnowledge),
+  createKnowledge: () => Boolean(perm().publish?.all || perm().publish?.namespaces?.length),
   writeMemory: () => Boolean(perm().writeMemory),
   submitRuns: () => Boolean(perm().submitRuns),
   createProject: () => Boolean(perm().createProjects),

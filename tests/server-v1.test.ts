@@ -59,8 +59,10 @@ test("un proyecto vinculado informa lo que instala y el servidor lo muestra solo
   const project = join(root, "usage");
   mkdirSync(project);
   saveProjectFile(project, createProjectFile("usage", { registries: [{ name: "central", url: server }], adapters: [], dependencies: { "@skills/design-patterns": "^1.0.0" }, context: { memory: "remote", server, projectId: "usage-project" } }));
+  // As in CI: the token goes with the server it belongs to (MODAI_API_TOKEN alone never travels to a modai.yaml's registry).
+  process.env.MODAI_SERVER = server;
   process.env.MODAI_API_TOKEN = "v1-secret";
-  try { await runSync(project); } finally { delete process.env.MODAI_API_TOKEN; }
+  try { await runSync(project); } finally { delete process.env.MODAI_API_TOKEN; delete process.env.MODAI_SERVER; }
 
   const usage = await app.inject({ method: "GET", url: "/api/v1/packages/usage?name=@skills/design-patterns", headers: { authorization: "Bearer v1-secret" } });
   const rows = usage.json().projects.map((item: { projectId: string; version: string; direct: boolean }) => [item.projectId, item.version, item.direct]);
