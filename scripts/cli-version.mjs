@@ -21,7 +21,7 @@ const MANIFESTS = [
 const SOURCES = [
   { file: "packages/cli/src/cli/index.ts", pattern: /(\.version\(")([^"]+)("\))/ },
   { file: "packages/cli/src/agent/capabilities.ts", pattern: /(name: "modai-capabilities", version: ")([^"]+)(")/ },
-  { file: "packages/core/src/version.ts", pattern: /(CORE_VERSION = ")([^"]+)(")/ },
+  { file: "packages/core/src/resolution/version.ts", pattern: /(CORE_VERSION = ")([^"]+)(")/ },
   { file: "apps/server/src/http/app.ts", pattern: /(service: "modularai", version: ")([^"]+)(")/ },
 ];
 const INTERNAL = /^@modai\//;

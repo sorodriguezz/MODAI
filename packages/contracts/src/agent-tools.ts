@@ -1,7 +1,3 @@
-/**
- * Tools built into MODAI. Agents select them by name in `capabilities`; they are implemented by the
- * Context Gateway and the agent runtime, so no package has to ship them.
- */
 const query = {
   type: "object",
   properties: { query: { type: "string", minLength: 1, maxLength: 2000 } },

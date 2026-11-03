@@ -636,7 +636,7 @@ test("autorizar un paquete vale para sus features de ese momento: activar otra e
 });
 
 test("la calidad explica una descripción corta en vez de solo bajar la nota", async () => {
-  const { analyzePackageQuality } = await import("@modai/contracts/package-quality");
+  const { analyzePackageQuality } = await import("@modai/contracts/quality");
   const manifest = (description: string) =>
     ({
       apiVersion: "modai.dev/v1",

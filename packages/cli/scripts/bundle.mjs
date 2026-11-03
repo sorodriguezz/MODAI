@@ -25,18 +25,17 @@ await build({
     "@modai/contracts": resolve(root, "../contracts/src/index.ts"),
     "@modai/contracts/types": resolve(root, "../contracts/src/types.ts"),
     "@modai/contracts/errors": resolve(root, "../contracts/src/errors.ts"),
-    "@modai/contracts/security": resolve(root, "../contracts/src/security.ts"),
     "@modai/contracts/schemas": resolve(root, "../contracts/src/schemas.ts"),
-    "@modai/contracts/package-quality": resolve(root, "../contracts/src/package-quality.ts"),
-    "@modai/contracts/spec-v1": resolve(root, "../contracts/src/spec-v1.ts"),
-    "@modai/contracts/base-schemas": resolve(root, "../contracts/src/base-schemas.ts"),
     "@modai/contracts/agent-tools": resolve(root, "../contracts/src/agent-tools.ts"),
+    "@modai/contracts/manifest": resolve(root, "../contracts/src/manifest/index.ts"),
+    "@modai/contracts/security": resolve(root, "../contracts/src/security/index.ts"),
+    "@modai/contracts/quality": resolve(root, "../contracts/src/quality/package-quality.ts"),
     "@modai/sdk": resolve(root, "../sdk/src/index.ts"),
     "@modai/core": resolve(root, "../core/src/index.ts"),
     ...Object.fromEntries(
-      globSync("../core/src/*.ts", { cwd: root }).map((file) => [
-        "@modai/core/" + file.split("/").pop().replace(/\.ts$/, ""),
-        resolve(root, file),
+      globSync("**/*.ts", { cwd: resolve(root, "../core/src") }).map((file) => [
+        "@modai/core/" + file.replaceAll("\\", "/").replace(/\.ts$/, ""),
+        resolve(root, "../core/src", file),
       ]),
     ),
   },
@@ -45,14 +44,21 @@ for (const file of ["dist/cli/index.js", "dist/mcp.js"]) chmodSync(resolve(root,
 
 // Keep the authoring export's declarations usable without installing private workspaces.
 mkdirSync(resolve(root, "dist/internal"), { recursive: true });
-copyFileSync(resolve(root, "../contracts/dist/types.d.ts"), resolve(root, "dist/internal/contracts-types.d.ts"));
-copyFileSync(resolve(root, "../sdk/dist/index.d.ts"), resolve(root, "dist/internal/sdk.d.ts"));
+for (const [from, into] of [
+  ["../contracts/dist", "dist/internal/contracts"],
+  ["../sdk/dist", "dist/internal/sdk"],
+]) {
+  for (const file of globSync("**/*.d.ts", { cwd: resolve(root, from) })) {
+    mkdirSync(dirname(resolve(root, into, file)), { recursive: true });
+    copyFileSync(resolve(root, from, file), resolve(root, into, file));
+  }
+}
 for (const file of globSync("dist/**/*.d.ts", { cwd: root })) {
   const declaration = resolve(root, file);
   let content = readFileSync(declaration, "utf8");
   for (const [name, target] of [
-    ["@modai/contracts/types", "contracts-types.js"],
-    ["@modai/sdk", "sdk.js"],
+    ["@modai/contracts/types", "contracts/types.js"],
+    ["@modai/sdk", "sdk/index.js"],
   ]) {
     let destination = relative(dirname(declaration), resolve(root, "dist/internal", target)).replaceAll("\\", "/");
     if (!destination.startsWith(".")) destination = "./" + destination;

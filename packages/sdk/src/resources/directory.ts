@@ -1,0 +1,67 @@
+import type { NamespaceRecord, OrganizationRecord } from "../types.js";
+import { ProjectsApi } from "./projects.js";
+
+export class DirectoryApi extends ProjectsApi {
+  async createOrganization(name: string, description?: string): Promise<{ id: string; name: string }> {
+    return (
+      await this.request<{ organization: { id: string; name: string } }>("/api/v1/organizations", {
+        method: "POST",
+        body: JSON.stringify({ name, ...(description ? { description } : {}) }),
+      })
+    ).organization;
+  }
+
+  async organizations(): Promise<OrganizationRecord[]> {
+    return (await this.request<{ organizations: OrganizationRecord[] }>("/api/v1/organizations")).organizations;
+  }
+
+  async updateOrganization(id: string, input: { name?: string; description?: string }): Promise<OrganizationRecord> {
+    return (
+      await this.request<{ organization: OrganizationRecord }>(`/api/v1/organizations/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      })
+    ).organization;
+  }
+
+  async deleteOrganization(id: string, confirmation: string): Promise<void> {
+    await this.request(`/api/v1/organizations/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      body: JSON.stringify({ confirmation }),
+    });
+  }
+
+  async namespaces(): Promise<NamespaceRecord[]> {
+    return (await this.request<{ namespaces: NamespaceRecord[] }>("/api/v1/namespaces")).namespaces;
+  }
+
+  async createNamespace(input: {
+    name: string;
+    organizationId?: string;
+    description?: string;
+    visibility?: "internal" | "restricted";
+  }): Promise<NamespaceRecord> {
+    return (
+      await this.request<{ namespace: NamespaceRecord }>("/api/v1/namespaces", {
+        method: "POST",
+        body: JSON.stringify(input),
+      })
+    ).namespace;
+  }
+
+  async updateNamespace(
+    name: string,
+    input: { organizationId?: string | null; description?: string; visibility?: "internal" | "restricted" },
+  ): Promise<NamespaceRecord> {
+    return (
+      await this.request<{ namespace: NamespaceRecord }>(`/api/v1/namespaces/${encodeURIComponent(name)}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      })
+    ).namespace;
+  }
+
+  async deleteNamespace(name: string): Promise<void> {
+    await this.request(`/api/v1/namespaces/${encodeURIComponent(name)}`, { method: "DELETE" });
+  }
+}

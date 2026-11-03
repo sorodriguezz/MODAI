@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { API_VERSION, type PackageManifestV1 } from "@modai/contracts/spec-v1";
+import { API_VERSION, type PackageManifestV1 } from "@modai/contracts/manifest";
 import {
   availableAdapters,
   BUILTIN_ADAPTERS,

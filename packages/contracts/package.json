@@ -21,13 +21,12 @@
   "exports": {
     ".": "./dist/index.js",
     "./types": "./dist/types.js",
-    "./security": "./dist/security.js",
     "./errors": "./dist/errors.js",
-    "./package-quality": "./dist/package-quality.js",
     "./schemas": "./dist/schemas.js",
-    "./spec-v1": "./dist/spec-v1.js",
-    "./base-schemas": "./dist/base-schemas.js",
-    "./agent-tools": "./dist/agent-tools.js"
+    "./agent-tools": "./dist/agent-tools.js",
+    "./manifest": "./dist/manifest/index.js",
+    "./security": "./dist/security/index.js",
+    "./quality": "./dist/quality/package-quality.js"
   },
   "private": true
 }

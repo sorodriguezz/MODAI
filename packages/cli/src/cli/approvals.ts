@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFil
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { sha256 } from "@modai/contracts/security";
-import type { PermissionV1 } from "@modai/contracts/spec-v1";
+import type { PermissionV1 } from "@modai/contracts/manifest";
 
 export interface LocalApproval {
   permissions: PermissionV1[];

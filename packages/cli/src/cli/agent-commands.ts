@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { signaturePolicySchema } from "@modai/contracts/schemas";
-import { type PermissionV1, permissionV1Schema } from "@modai/contracts/spec-v1";
+import { type PermissionV1, permissionV1Schema } from "@modai/contracts/manifest";
 import type { Activation, SignaturePolicy } from "@modai/contracts/types";
 import { ApiClient } from "@modai/sdk";
 import type { Command } from "commander";

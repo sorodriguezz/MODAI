@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
-import type { PackageManifestV1 } from "@modai/contracts/spec-v1";
+import type { PackageManifestV1 } from "@modai/contracts/manifest";
 import {
   authorize,
   type Candidate,
@@ -719,7 +719,7 @@ test("un harness que instala AGENTS.md convive con el bloque del adaptador agent
 });
 
 test("un adaptador solo registra el gateway de MODAI y nunca escribe claves de prototipo", async () => {
-  const { adapterDefinitionSchema } = await import("@modai/contracts/spec-v1");
+  const { adapterDefinitionSchema } = await import("@modai/contracts/manifest");
   const adapter = (mcp: Record<string, unknown>) =>
     adapterDefinitionSchema.safeParse({ id: "x", description: "x", targets: { mcp: { file: ".mcp.json", ...mcp } } });
   assert.ok(adapter({ pointer: "mcpServers.modai" }).success, "sin value usa el gateway por defecto");

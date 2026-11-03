@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { createApp } from "../apps/server/src/http/app.js";
 import { applyVariables } from "../packages/cli/src/cli/commands/template.js";
-import { sha256 } from "../packages/contracts/src/security.js";
+import { sha256 } from "../packages/contracts/src/security/index.js";
 import { readZip, skillArchiveToPackage, writeZip } from "../packages/core/src/index.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-library-"));

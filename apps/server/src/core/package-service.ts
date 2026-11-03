@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AppError, invariant } from "@modai/contracts/errors";
-import { analyzePackageQuality } from "@modai/contracts/package-quality";
+import { analyzePackageQuality } from "@modai/contracts/quality";
 import { parseInput, publishSchema } from "@modai/contracts/schemas";
 import { publicKeyFingerprint, sha256, signaturePayload, verifyEd25519 } from "@modai/contracts/security";
 import type {

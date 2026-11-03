@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, posix, resolve } from "node:path";
-import type { PackageManifestV1 } from "@modai/contracts/spec-v1";
+import type { PackageManifestV1 } from "@modai/contracts/manifest";
 import {
   featureHelpLines,
   HttpRegistry,

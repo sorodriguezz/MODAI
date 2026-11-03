@@ -1,6 +1,6 @@
 import type { BuiltinToolName } from "./agent-tools.js";
-import type { PackageManifestV1Input, PermissionV1 } from "./spec-v1.js";
-/** A package manifest exactly as published (apiVersion: modai.dev/v1). */
+import type { PackageManifestV1Input } from "./manifest/package.js";
+import type { PermissionV1 } from "./manifest/permissions.js";
 export type PackageManifest = PackageManifestV1Input;
 
 export type PackageStatus = "active" | "deprecated" | "yanked";
@@ -38,7 +38,6 @@ export interface PublishPackageInput {
 export interface PackageRecord {
   name: string;
   version: string;
-  /** Package category (spec.category); informative only. */
   type: string;
   description: string;
   artifactId: string;
@@ -69,7 +68,6 @@ export interface MemoryInput {
 }
 
 export type SignaturePolicy = "optional" | "signed" | "trusted";
-/** What an activated agent may call, resolved from its definition and the packages it depends on. */
 export type AgentCapability =
   | { kind: "builtin"; name: BuiltinToolName; description: string; inputSchema: Record<string, unknown> }
   | {
@@ -92,7 +90,7 @@ export interface ProjectRecord {
   id: string;
   name: string;
   organizationId?: string;
-  createdAt: string /** Whether the caller may delete it (admin or creator). */;
+  createdAt: string;
   canDelete?: boolean;
 }
 export interface AgentBundle {

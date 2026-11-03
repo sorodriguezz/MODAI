@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
-import { API_VERSION, type ProjectFile } from "@modai/contracts/spec-v1";
+import { API_VERSION, type ProjectFile } from "@modai/contracts/manifest";
 import type { SyncReport } from "@modai/core";
 import {
   availableAdapters,

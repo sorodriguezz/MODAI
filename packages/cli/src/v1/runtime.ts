@@ -1,5 +1,5 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
-import type { ProjectFile, RegistrySource } from "@modai/contracts/spec-v1";
+import type { ProjectFile, RegistrySource } from "@modai/contracts/manifest";
 import type { SignaturePolicy } from "@modai/contracts/types";
 import {
   CompositeRegistry,

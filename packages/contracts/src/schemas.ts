@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { AppError } from "./errors.js";
+import { packageManifestV1Schema } from "./manifest/package.js";
+import { packageNameSchema } from "./manifest/shared.js";
 
-export * from "./base-schemas.js";
+export { agentDefinitionSchema } from "./manifest/agent-definition.js";
+export { packageNameSchema, signaturePolicySchema } from "./manifest/shared.js";
 
-import { packageNameSchema } from "./base-schemas.js";
-import { packageManifestV1Schema } from "./spec-v1.js";
 export const publishSchema = z
   .object({
     manifest: packageManifestV1Schema,

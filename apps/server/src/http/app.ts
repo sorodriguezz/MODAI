@@ -4,7 +4,7 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { BUILTIN_TOOLS } from "@modai/contracts/agent-tools";
 import { AppError } from "@modai/contracts/errors";
-import { analyzePackageQuality } from "@modai/contracts/package-quality";
+import { analyzePackageQuality } from "@modai/contracts/quality";
 import {
   composeSchema,
   keySchema,

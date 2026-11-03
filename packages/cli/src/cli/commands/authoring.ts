@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { analyzePackageQuality } from "@modai/contracts/package-quality";
+import { analyzePackageQuality } from "@modai/contracts/quality";
 import { parseInput, publishSchema } from "@modai/contracts/schemas";
 import { loadPackageSource, validatePackage } from "@modai/core";
 import type { Command } from "commander";

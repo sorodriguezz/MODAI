@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { sha256 } from "@modai/contracts/security";
-import type { PermissionV1 } from "@modai/contracts/spec-v1";
+import type { PermissionV1 } from "@modai/contracts/manifest";
 import type { Activation, AgentBundle } from "@modai/contracts/types";
 import { agentDefinitionOf, loadV1Project, normalizeManifest, resolveAgentCapabilities } from "@modai/core";
 import type { ApiClient } from "@modai/sdk";
