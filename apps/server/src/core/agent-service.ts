@@ -1,8 +1,8 @@
-import type { AgentBundle, CapabilityDefinition, Permission } from "@modai/contracts/types";
-import { agentDefinitionSchema, capabilitySchema, parseInput } from "@modai/contracts/schemas";
+import type { AgentBundle } from "@modai/contracts/types";
+import { agentDefinitionSchema, parseInput } from "@modai/contracts/schemas";
 import { invariant } from "@modai/contracts/errors";
 import { sha256 } from "@modai/contracts/security";
-import { agentDefinitionOf, contributesSkills, legacyCapabilities, normalizeManifest, skillFiles } from "@modai/core";
+import { agentDefinitionOf, contributesSkills, normalizeManifest, resolveAgentCapabilities, skillFiles } from "@modai/core";
 import { PackageService } from "./package-service.js";
 
 const INSTRUCTION_FILE = /(^|\/)(SKILL|AGENTS|CLAUDE)\.md$/i;
@@ -17,18 +17,7 @@ export class AgentService {
     invariant(rawDefinition, 400, "NOT_AN_AGENT", `${name} no es un agente`);
     const definition = parseInput(agentDefinitionSchema, rawDefinition);
     for (const skill of definition.skills) invariant(resolved.some(item => item.name === skill && contributesSkills(item.manifest)), 400, "INVALID_SKILL", `${skill} no resuelve a una skill`);
-    const available = new Map<string, CapabilityDefinition>();
-    for (const item of resolved) for (const raw of legacyCapabilities(item.manifest)) {
-      const capability = parseInput(capabilitySchema, raw);
-      invariant(!available.has(capability.name), 409, "CAPABILITY_COLLISION", `Capacidad duplicada: ${capability.name}`);
-      available.set(capability.name, capability);
-    }
-    const capabilities = definition.capabilities.map(capabilityName => {
-      const capability = available.get(capabilityName);
-      invariant(capability, 400, "CAPABILITY_NOT_FOUND", `Capacidad no resuelta: ${capabilityName}`);
-      invariant(!(capability.kind === "tool" && capability.binding === "memory.remember") || definition.memory.write, 400, "MEMORY_POLICY", "El agente solicita escritura de memoria pero su política no lo permite");
-      return capability;
-    });
+    const capabilities = resolveAgentCapabilities(definition, resolved);
     // Instructions come from contributions (skills, rules and instruction files), never from a package category.
     const instructions: AgentBundle["instructions"] = [];
     for (const item of resolved) {
@@ -47,7 +36,7 @@ export class AgentService {
     }
     invariant(Buffer.byteLength(JSON.stringify(instructions)) <= 500_000, 413, "CONTEXT_TOO_LARGE", "Las instrucciones superan el presupuesto de contexto");
     const payload = { schemaVersion: 1 as const, projectId, agent: { name: root.name, version: root.version, definition }, packages: resolved, capabilities, instructions,
-      permissions: [...new Set(resolved.flatMap(item => normalizeManifest(item.manifest).spec.permissions))] as Permission[] };
+      permissions: [...new Set(resolved.flatMap(item => normalizeManifest(item.manifest).spec.permissions))] };
     return { ...payload, digest: sha256(JSON.stringify(payload)) };
   }
 }

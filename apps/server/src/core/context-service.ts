@@ -224,9 +224,11 @@ export class ContextService {
     return { id, projectId: existing.project_id, content, kind, scope, metadata, updatedAt };
   }
 
-  pruneMemories(days: number): number {
-    const cutoff = new Date(Date.now() - Math.max(days, 1) * 86_400_000).toISOString();
+  /** Deletes memories not updated in `days` days (0 = all of them). `dryRun` only counts. */
+  pruneMemories(days: number, dryRun = false): number {
+    const cutoff = new Date(Date.now() - Math.max(days, 0) * 86_400_000).toISOString();
     const ids = this.db.connection.prepare("SELECT id FROM memories WHERE updated_at < ?").all(cutoff) as Array<{ id: string }>;
+    if (dryRun) return ids.length;
     this.db.connection.exec("BEGIN IMMEDIATE");
     try {
       for (const item of ids) this.db.connection.prepare("DELETE FROM memories_fts WHERE id = ?").run(item.id);
@@ -251,8 +253,8 @@ export class ContextService {
     const blob = Buffer.alloc(embedding.length * 4);
     embedding.forEach((value,index) => blob.writeFloatLE(value / norm,index * 4));
     this.db.connection.prepare(`INSERT INTO knowledge_vectors
-      (document_id, model, dimensions, embedding_json, embedding_blob, updated_at) VALUES (?, ?, ?, '[]', ?, ?)
-      ON CONFLICT(document_id, model) DO UPDATE SET dimensions = excluded.dimensions, embedding_json = '[]',
+      (document_id, model, dimensions, embedding_blob, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(document_id, model) DO UPDATE SET dimensions = excluded.dimensions,
       embedding_blob = excluded.embedding_blob, updated_at = excluded.updated_at`)
       .run(documentId, model, embedding.length, blob, new Date().toISOString());
   }
@@ -263,12 +265,9 @@ export class ContextService {
     const filter = packageNames?.length ? `AND k.package_name IN (${packageNames.map(() => "?").join(",")})` : "";
     const parameters = [model, embedding.length, ...(packageNames ?? [])];
     const maxCandidates = Math.min(2000, Math.floor(2_000_000 / embedding.length));
-    const rows = this.db.connection.prepare(`SELECT v.document_id AS id, v.embedding_blob AS vector, v.embedding_json AS legacy FROM knowledge_vectors v JOIN knowledge_documents k ON k.id = v.document_id WHERE v.model = ? AND v.dimensions = ? ${filter} LIMIT ?`).all(...parameters, maxCandidates + 1) as Array<{ id: string; vector: Buffer | null; legacy: string }>;
+    const rows = this.db.connection.prepare(`SELECT v.document_id AS id, v.embedding_blob AS vector FROM knowledge_vectors v JOIN knowledge_documents k ON k.id = v.document_id WHERE v.model = ? AND v.dimensions = ? ${filter} LIMIT ?`).all(...parameters, maxCandidates + 1) as Array<{ id: string; vector: Buffer }>;
     invariant(rows.length <= maxCandidates, 413, "VECTOR_CANDIDATE_LIMIT", "Reduce los paquetes consultados o utiliza un índice vectorial especializado");
-    return rows.map(row => {
-      if (!row.vector) { this.saveVector(row.id,model,JSON.parse(row.legacy)); row.vector = (this.db.connection.prepare("SELECT embedding_blob AS vector FROM knowledge_vectors WHERE document_id = ? AND model = ?").get(row.id,model) as { vector: Buffer }).vector; }
-      return { id: row.id, vector: row.vector };
-    });
+    return rows.map(row => ({ id: row.id, vector: row.vector }));
   }
   private vectorResults(ranks: Array<{ id: string; score: number }>): unknown[] {
     const get = this.db.connection.prepare(`SELECT id, package_name AS packageName, package_version AS packageVersion, title, content, tags_json AS tagsJson FROM knowledge_documents WHERE id = ?`);

@@ -7,27 +7,50 @@ import { actionLabel } from "./dashboard.js";
 
 const groups = { auth: "Sesiones", user: "Usuarios", "api-key": "API keys", package: "Paquetes", publisher: "Publicadores", knowledge: "Conocimiento", memory: "Memoria", project: "Proyectos", organization: "Organizaciones", run: "Ejecuciones", backup: "Backups", retention: "Retención" };
 
-function pruneDialog() {
+const retention = {
+  audit: { field: "auditDays", result: "audit", title: "Depurar auditoría", noun: "eventos de auditoría", days: 90, help: "Elimina los eventos registrados hace más de los días indicados. Usa 0 para vaciar la auditoría completa." },
+  memories: { field: "memoryDays", result: "memories", title: "Depurar memorias antiguas", noun: "memorias", days: 365, help: "Elimina, en todos los proyectos, las memorias que no se actualizan hace más de los días indicados. Usa 0 para eliminarlas todas." },
+};
+
+/** Retention for one target, with a live count of what will be deleted before confirming. */
+export function pruneDialog(target, onDone) {
+  const config = retention[target];
   const body = openDialog({
-    title: "Depurar datos antiguos",
-    description: "Elimina memorias y eventos de auditoría más antiguos que los días indicados.",
+    title: config.title,
+    description: config.help,
     size: "sm",
     body: html`<form class="stack" novalidate>
-      <div class="field-row">
-        <div class="field"><label for="pruneMemory">Memorias (días)</label><input id="pruneMemory" type="number" min="1" max="36500" value="365" required></div>
-        <div class="field"><label for="pruneAudit">Auditoría (días)</label><input id="pruneAudit" type="number" min="1" max="36500" value="90" required></div>
-      </div>
-      <div class="callout tone-danger">${icon("alert")}<span>Los datos eliminados no se pueden recuperar. Exporta un backup antes.</span></div>
+      <div class="field"><label for="pruneDays">Más antiguos que (días)</label><input id="pruneDays" type="number" min="0" max="36500" step="1" value="${config.days}" required></div>
+      <p class="callout tone-info" id="prunePreview" aria-live="polite">${icon("info")}<span>Calculando…</span></p>
+      <div class="callout tone-danger">${icon("alert")}<span>Lo eliminado no se puede recuperar. Exporta un backup antes si lo necesitas.</span></div>
       <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn danger">Depurar ahora</button></div>
+      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn danger" disabled>Depurar</button></div>
     </form>`,
   });
-  const form = body.querySelector("form");
+  const form = body.querySelector("form"), submit = form.querySelector('button[type="submit"]'), preview = body.querySelector("#prunePreview span");
   form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
+  let count = 0, sequence = 0;
+  const refresh = debounce(async () => {
+    const days = Number(form.pruneDays.value), mine = ++sequence;
+    if (!form.pruneDays.checkValidity()) { preview.textContent = "Indica un número de días entre 0 y 36500."; submit.disabled = true; return; }
+    try {
+      const result = await post("/admin/prune", { [config.field]: days, dryRun: true });
+      if (mine !== sequence) return;
+      count = result[config.result];
+      preview.textContent = count ? `Se eliminarán ${count} ${config.noun}.` : `No hay ${config.noun} con esa antigüedad: no se eliminará nada.`;
+      submit.disabled = count === 0;
+      submit.textContent = count ? `Eliminar ${count} ${config.noun}` : "Depurar";
+    } catch (error) {
+      preview.textContent = error.message;
+    }
+  }, 250);
+  form.pruneDays.addEventListener("input", refresh);
+  refresh();
   bindForm(form, async () => {
-    const result = await post("/admin/prune", { memoryDays: Number(form.pruneMemory.value), auditDays: Number(form.pruneAudit.value) });
+    const result = await post("/admin/prune", { [config.field]: Number(form.pruneDays.value) });
     closeDialog();
-    toast(`Depuración completa: ${result.memories} memorias y ${result.audit} eventos eliminados`);
+    toast(`Depuración completa: ${result[config.result]} ${config.noun} eliminados`);
+    await onDone?.();
   });
 }
 
@@ -57,7 +80,7 @@ export default {
   subtitle: "Cada acción relevante del servidor queda registrada con su autor.",
   visible: () => can.admin(),
   async render(root, { actions, isCurrent }) {
-    mount(actions, html`<button class="btn" data-action="prune">${icon("trash")}Depurar</button><button class="btn primary" data-action="export">${icon("download")}Exportar backup</button>`);
+    mount(actions, html`<button class="btn" data-action="prune">${icon("trash")}Depurar auditoría</button><button class="btn primary" data-action="export">${icon("download")}Exportar backup</button>`);
     mount(root, html`
       <div class="toolbar">
         <div class="search-field">${icon("search")}<label class="sr-only" for="auditSearch">Filtrar eventos</label><input id="auditSearch" type="search" placeholder="Filtrar por autor, acción o recurso…"></div>
@@ -101,7 +124,7 @@ export default {
         if (event) openDialog({ title: actionLabel(event.action), description: formatDate(event.createdAt) + " · " + event.actor, size: "md", body: html`<dl class="definition-grid single"><div><dt>Recurso</dt><dd><code>${event.resource}</code></dd></div></dl><pre>${JSON.stringify(event.details, null, 2)}</pre>` });
       },
       export: exportBackup,
-      prune: pruneDialog,
+      prune: () => pruneDialog("audit", load),
       retry: load,
     };
     delegate(root, handlers);

@@ -55,6 +55,19 @@ modai package publish ./regression --registry https://modai.tu-dominio  # servid
 modai package keygen && modai package publish ./regression --key .modai/keys/modai-ed25519-private.pem --registry ~/modai-registry   # firmado
 ```
 
+En el panel, **Paquetes → Crear paquete** guía en pasos (tipo, identidad, archivos, dependencias, revisión con validación automática) y solo deja publicar en tus namespaces.
+
+### Skills empaquetadas (`.skill`)
+
+Un archivo `.skill` es un ZIP con `SKILL.md` (con `name` y `description` en el frontmatter) y sus referencias. MODAI lo convierte en un paquete v1 que contribuye esa skill (`@namespace/nombre-de-la-skill`):
+
+```sh
+modai package publish ./code-review.skill --namespace @skills            # versión del frontmatter o 1.0.0
+modai package publish ./code-review.skill --namespace @skills --skill-version 1.2.0
+```
+
+Sin `--namespace`, se usa el único namespace donde la credencial puede publicar. En el panel: **Paquetes → Crear paquete → Skill → Subir un archivo .skill** (archivo, namespace, vista previa con calidad, publicar). Una carpeta con `SKILL.md` también se publica con `modai skill publish ./mi-skill`, y `modai skill export @ns/skill` la descarga como `.skill`. API: `POST /api/v1/packages/import-skill`.
+
 Una versión publicada es inmutable: para cambiarla incrementa `metadata.version`. Mientras desarrollas puedes instalarla sin publicar con `modai add file:../regression`.
 
 ## 3. Instalar en un proyecto
@@ -123,5 +136,5 @@ modai adapter add cursor
 | `@architecture/decision-records` | Procedimiento con `references/` y plantilla de ADR |
 | `@testing/playwright` | Proveedor ejecutable de `browser.automation` |
 | `@testing/regression` | Requiere `browser.automation`; herramienta de línea base que escribe dentro del proyecto |
-| `@profiles/fullstack-quality` | Perfil que compone los anteriores y una skill 0.5 |
+| `@profiles/fullstack-quality` | Perfil que compone los anteriores y una skill |
 | `@adapters/cursor`, `@adapters/opencode` | Adaptadores como datos |

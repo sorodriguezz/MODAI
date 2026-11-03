@@ -39,26 +39,6 @@ test("limita el runtime a loopback y conserva todos los caracteres al fragmentar
   assert.throws(() => chunkText("abc", 10, 10));
 });
 
-test("migra vectores anteriores y conserva espacios de varios modelos", () => {
-  const root = mkdtempSync(join(tmpdir(), "modai-migration-")), path = join(root, "db.sqlite");
-  try {
-    let db = new Database(path);
-    const context = new ContextService(db);
-    const doc = context.addKnowledge({ title: "Guía", content: "Contenido" });
-    db.connection.exec("DROP TABLE knowledge_vectors; CREATE TABLE knowledge_vectors (document_id TEXT PRIMARY KEY, model TEXT NOT NULL, dimensions INTEGER NOT NULL, embedding_json TEXT NOT NULL, updated_at TEXT NOT NULL)");
-    db.connection.prepare("INSERT INTO knowledge_vectors VALUES (?, ?, 2, '[1,0]', '2026-01-01')").run(doc.id, "legacy");
-    db.close();
-    db = new Database(path);
-    try {
-      const migrated = new ContextService(db);
-      migrated.saveVector(String(doc.id), "new-model", [0, 1]);
-      assert.equal(migrated.vectorSearch([1, 0], "legacy").length, 1);
-      assert.equal(migrated.vectorSearch([0, 1], "new-model").length, 1);
-      assert.equal(migrated.vectorSearch([0, 1], "new-model", 10, ["@other/package"]).length, 0);
-    } finally { db.close(); }
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
-
 test("cliente calcula embeddings con runtime local y servidor solo almacena vectores", async () => {
   const root = mkdtempSync(join(tmpdir(), "modai-client-"));
   const app = await createApp({ databasePath: join(root, "db.sqlite"), artifactDirectory: join(root, "artifacts"), apiToken: "test-secret", logger: false });

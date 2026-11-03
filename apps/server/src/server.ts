@@ -23,6 +23,8 @@ const app = await createApp({
   trustProxy: parseTrustProxy(process.env.MODAI_TRUST_PROXY),
   signaturePolicy: signaturePolicySchema.parse(process.env.MODAI_SIGNATURE_POLICY ?? "optional"),
   maxArtifactStorageBytes: Number(process.env.MODAI_ARTIFACT_QUOTA_BYTES ?? 1024 * 1024 * 1024),
+  // Login and first-run attempts per minute and IP (default 10).
+  ...(Number(process.env.MODAI_LOGIN_RATE_LIMIT) > 0 ? { loginRateLimitMax: Number(process.env.MODAI_LOGIN_RATE_LIMIT) } : {}),
 });
 
 const close = async (signal: string): Promise<void> => {

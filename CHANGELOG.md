@@ -2,93 +2,23 @@
 
 ## Sin publicar (0.9.0)
 
-- **Comandos agrupados**: `modai --help` muestra secciones (Proyecto, Lo que instalan los paquetes, Contexto y memoria, Publicar paquetes, Servidor, Este equipo) y los comandos sueltos pasan a su grupo: `server connect/ping/whoami/logout`, `memory add/search/list/update/remove` (antes `remember`, `recall`, `memories`, `memory-update`, `forget`), `context search`, `package publish/deprecate/yank/unpublish`, `permissions grant/revoke/trust/signatures`, `capability list/tools/run/providers/use`, `agent runs` y `agent worker`, `client embed` y `project create`. Los nombres anteriores siguen funcionando, ocultos en la ayuda, y avisan del nuevo.
+- **Las API keys pertenecen a un usuario**: cada persona crea las suyas (**Mis API keys**, **Conectar un cliente**) sin pedírselas a un admin, y nunca superan sus permisos: el rol es el de la cuenta o uno menor, y los accesos son los mismos de la cuenta o una parte. Se evalúa en cada petición, así que quitar accesos o desactivar a la persona afecta de inmediato a sus keys. Las administraciones ven, ajustan y revocan las keys de quienes gestionan, y pueden crear una a nombre de alguien (`modai admin create-key --owner`). `modai server keys` y `modai server revoke-key` gestionan las tuyas desde la CLI.
+- **Herramientas integradas para agentes**: `modai_search_knowledge`, `modai_recall` y `modai_remember` pertenecen a MODAI (`@modai/contracts/agent-tools`); `modai_remember` exige `memory.write: true`. `contributes.agents[].capabilities` nombra esas herramientas o servidores de `contributes.mcpServers`. `AgentBundle.capabilities` pasó a `builtin | mcp` y `resolveAgentCapabilities` (Core) lo calcula igual al componer y al verificar. Los servidores MCP de un agente usan `--allow-mcp`/`--allow-env` y pueden referenciar `${packageDir}` si el store coincide con `modai.lock`. `modai agent activate --allow` acepta los 9 permisos v1.
+- **API**: `GET /api/v1/capabilities` devuelve `{ builtin, contracts }`; `ApiClient.capabilities()` devuelve ese objeto.
+- **Permisos jerárquicos**: organización → proyecto → namespace → paquete. Nuevo rol **administración de organización** (`org-admin`) que gestiona usuarios, API keys, proyectos y namespaces solo de sus organizaciones; no ve auditoría, backups ni publicadores. Los permisos que reparte se validan en orden (proyectos y namespaces deben pertenecer a las organizaciones asignadas).
+- **Organizaciones y namespaces con CRUD** (`/api/v1/organizations`, `/api/v1/namespaces`) y vista **Organizaciones** en el panel. Los namespaces pueden ser *internos* o *restringidos*; los paquetes de uno restringido solo los ve quien lo tiene asignado.
+- **Panel según permisos**: el servidor informa `permissions` en `/auth/status` y `/session`, y el panel muestra solo los menús y acciones que corresponden. Usuarios y API keys se asignan eligiendo por nombre: organizaciones, luego sus proyectos, luego sus namespaces. Los proyectos se editan (nombre y organización) y se filtran por organización.
+- **Asistentes paso a paso** en el panel: usuarios y API keys (cuenta → rol → organizaciones → proyectos → namespaces → revisión), crear paquetes (tipo → identidad → archivos → dependencias → revisión con validación automática) y templates. La barra de pasos permite volver o saltar validando los intermedios.
+- **Conectar un cliente rediseñado**: pregunta el objetivo (editor, publicar, worker, explorar), crea la API key con el rol y alcance justos, muestra comandos comentados y la configuración MCP de Claude Code, Cursor o VS Code, y verifica en vivo que el cliente se conectó. Sin permiso para crear keys, genera el mensaje para pedirla.
+- **Importar `.skill`**: `modai package publish archivo.skill --namespace @x`, **Paquetes → Crear paquete → Skill → Subir un archivo .skill** en el panel o `POST /api/v1/packages/import-skill`; el ZIP se convierte en un paquete v1 que contribuye la skill.
+- **Templates de proyecto** (`modai template publish/list/use/download`, sección **Templates** del panel, `/api/v1/templates`): proyectos completos versionados, con marcadores `{{projectName}}` y `--var`, descarga en ZIP y retiro de versiones. Excluyen `node_modules`, `.git`, `dist` y `.env`. Entran en los backups. Guía en `docs/guides/TEMPLATES.md`.
+- **Deprecar y retirar** paquetes también lo puede hacer la administración de la organización dueña del namespace (panel y CLI); eliminar sigue siendo de la administración global.
+- **Editor de templates en el panel**: crear un template desde cero (con un esqueleto inicial) o editar los archivos de la versión anterior para publicar la siguiente, además de subir `.zip` o carpeta.
+- **Todo desde la CLI**: `modai skill publish/list/export` (también desde una carpeta con `SKILL.md`), `modai knowledge list/show/search/add/update/remove`, `modai memory --project` (sin `modai.yaml`) con `import`/`export`, `modai template info/yank/restore` y en `modai admin`: `users`, `create-user`, `update-user`, `delete-user`, `keys`, `revoke-key`, `update-organization`, `delete-organization`, `update-namespace`, `delete-namespace` y `audit`.
+- **Subir `.skill` dentro de Crear paquete**: al elegir el tipo Skill se puede crear en el editor o subir el archivo.
+- `MODAI_LOGIN_RATE_LIMIT` ajusta los intentos de inicio de sesión por minuto e IP (por defecto 10).
+- **Agentes y Proyectos explicados** en el panel: qué es un agente y sus dos usos (editor o worker), y que un proyecto representa un sistema o repositorio.
+- **CLI**: `modai server whoami` muestra organizaciones, namespaces publicables y qué puede hacer la credencial; publicar comprueba el namespace antes de subir el paquete y explica qué falta. Nuevos `modai admin organizations`, `namespaces` y `create-namespace`; `--role org-admin` en `create-key`.
+- **Comandos agrupados**: `modai --help` muestra secciones (Proyecto, Lo que instalan los paquetes, Contexto y memoria, Publicar paquetes, Servidor, Este equipo) y los comandos sueltos pasan a su grupo: `server connect/ping/whoami/logout`, `memory add/search/list/update/remove`, `context search`, `package publish/deprecate/yank/unpublish`, `permissions grant/revoke/trust/signatures`, `capability list/tools/run/providers/use`, `agent runs` y `agent worker`, `client embed` y `project create`.
 - **Eliminar proyectos** desde el panel (confirmando con su identificador), con `modai project delete <id>` o `DELETE /api/v1/projects/:id`. Borra su memoria de proyecto y de sesión, sus ejecuciones y su registro de instalaciones, y lo quita de los accesos de usuarios y API keys; la memoria de organización se conserva. Solo un administrador o quien creó el proyecto, y no mientras un worker procesa una de sus tareas.
-
-## Sin publicar (0.8.0)
-
-**Incompatible:** el formato de proyecto 0.5 (`.modai/manifest.yaml`) ya no se opera. Conviértelo con `modai migrate`; `modai init --legacy` y `package scaffold --type` se retiraron.
-
-- **Agentes sobre proyectos v1**: `modai agent activate/run/submit`, `runs` y el gateway MCP funcionan con `modai.yaml` vinculado a un proyecto del servidor (`modai init --project`). La activación instala los paquetes del agente como dependencias con las versiones exactas que compuso el servidor. Un solo `modai-mcp` expone conocimiento, memoria, herramientas autorizadas y el agente activo.
-- **Archivos editados**: `modai update/sync/add --keep-mine` conserva tu archivo y deja la versión nueva al lado (`.modai-new`); la decisión queda en `modai.lock` y no vuelve a fallar. `--force` reemplaza.
-- **Harness + `agents-md`**: un paquete que instala `AGENTS.md` completo y el bloque del adaptador conviven sin conflictos al actualizar o retirar.
-- **Escribir un archivo ejecutable** de un paquete requiere conceder `process.execute` al instalar.
-- **`modai workspace`** (`ws`): `add`, `remove`, `update`, `sync` y `list` sobre todos los proyectos bajo una raíz, con plan previo, confirmación, bloqueo por proyecto, aislamiento de fallos y sin seguir enlaces simbólicos.
-- **`modai logout`** (`disconnect`): olvida el servidor y la API key guardados para cambiar de servidor; conserva la política de firmas y los publicadores de confianza, y avisa si quedan `MODAI_API_TOKEN`/`MODAI_SERVER` en el entorno.
-- **Panel sin descargas completas**: Resumen usa `GET /api/v1/packages/summary` y Agentes, Ejecuciones y Conectar piden solo los agentes al catálogo paginado.
-- **Backups**: `admin export/import` incluyen qué proyecto usa qué paquete; al restaurar, un informe más reciente del servidor de destino prevalece.
-- **`modai ping`**: disponibilidad, latencia, versión y validez de la credencial del servidor y de los registries del proyecto; sale con código 1 si algo falla.
-- **Salidas legibles**: tablas y secciones por defecto en todos los comandos; `--json` global para scripts.
-- **Una sola versión de producto**: `npm run version:set -- X.Y.Z` actualiza CLI, Core, contratos, SDK, servidor, panel y `package-lock.json`; `/health` informa la versión real.
-- **Uso por proyecto**: los proyectos vinculados informan qué tienen instalado (`PUT /api/v1/projects/:id/installations`; `MODAI_NO_USAGE_REPORT=1` lo desactiva) y el panel muestra qué proyectos usan cada paquete.
-- **Panel**: catálogo paginado en el servidor (`GET /api/v1/packages/catalog`), pestaña **Proyectos** en cada paquete y renombrar o eliminar carpetas completas en el editor. Tests de interfaz con Playwright (`npm run test:ui`).
-- La CLI se reorganizó por dominio (`cli/commands/*`); el instalador del formato 0.5 se eliminó.
-- CLI: `modai upgrade` (alias `self-update`) actualiza la CLI a la última versión de npm con el gestor con que se instaló; `--check` solo informa y `--tag next` usa prereleases. Aviso diario de versión nueva en terminales interactivas (`MODAI_NO_UPDATE_NOTIFIER=1` lo desactiva; nunca en CI).
-
-## 0.7.0
-
-- **Componentes de código** (`spec.contributes.components` y permiso `project.source`): paquetes con código propio (módulos de backend, componentes de UI, servicios) que se copian al proyecto de forma reversible; `modai remove` conserva los archivos editados. El índice del agente (`AGENTS.md`/`CLAUDE.md`) los enumera. Ejemplo: `@components/health-module`.
-- CLI: `modai list [tipo]` (alias `ls`) para lo instalado o, con `--available`/`--registry`, lo publicado, por contribución (`components`, `skills`, `tools`…), kind (`profiles`) o categoría (`harness`, `backend`…); `modai component create` empaqueta una carpeta de código existente y `modai component list`.
-- Panel web: **Crear paquete** y **Editar y publicar nueva versión** desde el navegador (plantillas de componente, harness, skill, conocimiento o vacío; archivos editables y subida de archivos o carpetas; validación de calidad antes de publicar), filtro por tipo y pestaña **Archivos** en el detalle de cada paquete.
-
-## 0.6.0
-
-Implementa [ADR-004](docs/architecture/ADR-004-package-platform.md): MODAI como plataforma de paquetes y capacidades extensibles.
-
-- **Especificación de paquetes v1** (`apiVersion: modai.dev/v1`): `kind` (Package, Profile, Adapter), `category` libre, `provides`/`requires`/`optional`/`conflicts` versionados, permisos ampliados, `contributes` (skills, rules, knowledge, tools, mcpServers, agents, files), `entrypoints`, `include` y `compatibility`. Los manifiestos 0.5 se normalizan al leerse.
-- **Nuevo `@modai/core`** independiente del servidor: resolvedor de dependencias y capacidades, registries (`LocalRegistry` de carpeta, `HttpRegistry`, dependencias `file:`), adaptadores declarativos, installer reversible con bloques y entradas JSON administrados, store verificable, Context Gateway BM25 con procedencia y memoria local por ámbito.
-- **Proyecto `modai.yaml` + `modai.lock`** con integridad SHA-256 por paquete, lock determinista y `modai sync --frozen`.
-- **Instalar no es autorizar**: `modai grant/revoke/permissions`; herramientas de paquetes ejecutadas sin shell, con validación de entrada, límites y entorno mínimo, ligadas a la integridad.
-- **Adaptadores** integrados como datos (`agent-skills`, `agents-md`, `claude-code`, `mcp`) y como paquetes (`@adapters/cursor`, `@adapters/opencode`).
-- **Gateway MCP v1**: conocimiento por fragmentos, memoria, capacidades, skills como recursos y herramientas/servidores MCP autorizados.
-- CLI: `init` sin servidor, `add` múltiple y `file:`, `capabilities`, `providers`, `provider`, `tools`, `context`, `adapter`, `registry add/list/remove/packages`, `publish --registry`, `package scaffold --kind/--category/--with-tool`, `migrate`. `init --legacy` conserva el formato 0.5.
-- Servidor: usa el resolvedor y validador del Core, acepta manifiestos v1, `/api/v1/capabilities` expone contratos y filtra por `?capability=`, `/api/v1/packages?name=`; composición de agentes basada en contribuciones, no en tipos.
-- Panel web con inicio de sesión por usuario y contraseña, primer administrador protegido por el secreto de arranque, gestión de usuarios y rediseño de la interfaz.
-- Paquetes de referencia: `@patterns/frontend-architecture`, `@architecture/decision-records`, `@testing/playwright`, `@testing/regression`, `@profiles/fullstack-quality`.
-- Despliegue en Raspberry Pi (`compose.raspberry.yaml`, `npm run docker:pi`, `deploy/backup.sh`), Fly.io (`deploy/fly/fly.toml`, `npm run deploy:fly`) y Railway (`deploy/railway/`); imagen multi-arquitectura en GHCR mediante GitHub Actions. El servidor acepta `PORT` y `MODAI_TRUST_PROXY`; el contenedor ajusta la propiedad de volúmenes y baja privilegios al usuario `node`.
-- Pruebas de aceptación: un paquete externo de regresión se crea, publica, instala, conecta por MCP y ejecuta sin modificar el Core.
-- Cambios incompatibles: `modai registry --query` pasa a `modai registry packages --query`; `modai init` crea proyectos v1; `POST /api/v1/resolve` puede responder `409 CAPABILITY_UNSATISFIED`.
-
-## 0.5.0
-
-- Nombre público del CLI en npm: `@sorodriguez/modai`; comandos `modai` y `modai-mcp`.
-
-- Web independiente en `apps/admin`, con vistas por sección y assets servidos desde el backend.
-- Un único paquete npm del CLI con SDK y contratos incorporados; workspaces internos privados.
-- Flujo del panel para seleccionar proyecto, crear credencial individual y entregar comandos CLI/MCP.
-- Conexión con entrada oculta o stdin, `whoami`, URL pública anunciada y overlay de dominio/HTTPS.
-- Estado local bajo `apps/server/var`, creado al iniciar; eliminadas las carpetas vacías de la raíz.
-
-- Node 26.13.0 unificado en servidor, CLI, MCP, SDK, contratos, workers y Docker.
-
-- Monorepo con servidor, panel y librerías internas separados del cliente distribuible.
-- Agentes versionados, activación por adaptadores, herramientas y descubrimiento MCP stdio.
-- Ejecución con Ollama local y workers opcionales con leases, cancelación y versiones fijadas.
-- Permisos de proyecto, organización y namespace por API key; eliminación del acceso anónimo.
-- Instalación con permisos explícitos, protección frente a symlinks y verificación de firmas en el cliente.
-- Cuotas, límites de frecuencia, cabeceras de seguridad y búsqueda vectorial acotada fuera del event loop.
-- Panel con agentes, proyectos, ejecuciones y modo oscuro seleccionable.
-- Backups con proyectos, organizaciones y ejecuciones; guía de migración.
-
-## 0.4.0
-
-- Repositorio organizado: deploy/, scripts/, tests/, docs/architecture/, docs/guides/, src/client/ y var/ para datos de desarrollo.
-- README renovado con propósito del producto, arranque Docker, acceso, catálogo, uso en proyectos y operación.
-- .gitignore ampliado para credenciales, SQLite, datos, modelos, backups, cachés y archivos del sistema.
-- Diagnóstico local de hardware y runtime, selección conservadora de modelos y benchmark de latencia.
-- Setup y descargas explícitas de modelos en el cliente; indexación paginada y búsqueda semántica mediante CLI y MCP.
-- Vectores separados por modelo/digest con migración que conserva los índices previos y validación del contenido al indexar.
-- Los nombres del proyecto Compose y de los volúmenes persistentes se conservan.
-
-## 0.3.0
-
-- Panel responsive renovado: catálogo con filtros, detalle de paquetes, comandos de instalación, editor de conocimiento manual, memoria por proyecto, accesos y actividad.
-- El servidor deja de solicitar inferencia y embeddings a Ollama. Los modelos se ejecutan en el cliente.
-- Vectores opcionales recibidos del cliente; búsqueda FTS5 disponible sin modelos.
-- Adaptador Ollama 1.1.0 con ejecución explícita en el cliente y endpoint localhost. Perfil backend-architect 1.1.0.
-- Aplicación, CLI y MCP actualizados a 0.3.0.
-- Docker usa Node 26.13.0 en compilación y producción. Versiones para desarrollo en .node-version y .nvmrc.
-- Dependencias directas de producción y desarrollo actualizadas a sus versiones estables más recientes; lockfile renovado.
-- Build y pruebas de integración se ejecutan como parte de la construcción Docker.
-
-Compatibilidad: se eliminan /api/v1/inference/* y /api/v1/knowledge/vectors/reindex. /api/v1/knowledge/vector-search ahora recibe { model, embedding, limit } en lugar de texto. Los datos y versiones ya publicados se conservan.
+- **Depuración de auditoría y memorias por separado**, con conteo previo y recarga de la tabla; admite 0 días. `modai admin prune --audit-days N` no toca las memorias y acepta `--dry-run`.

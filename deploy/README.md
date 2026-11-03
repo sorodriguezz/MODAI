@@ -42,6 +42,6 @@ Docker usa las exclusiones de `Dockerfile.dockerignore` junto al Dockerfile. La 
 
 La guía de arranque, autenticación, catálogo y operación está en el [README principal](../README.md). Para Raspberry Pi, Fly.io y Railway consulta la [guía de despliegue](../docs/guides/DEPLOY.md).
 
-El contenedor arranca como `root` solo para dar al usuario `node` la propiedad de los volúmenes y luego baja privilegios (`apps/server/src/entrypoint.ts`). Desde 0.5 el servidor exige credenciales. El perfil `examples` construye una imagen cliente independiente; usa `run --build --rm seed-examples`. Consulta [migración](../docs/guides/MIGRATION-0.5.md) y [agentes/workers](../docs/guides/AGENTS-AND-CAPABILITIES.md).
+El contenedor arranca como `root` solo para dar al usuario `node` la propiedad de los volúmenes y luego baja privilegios (`apps/server/src/entrypoint.ts`). El servidor exige credenciales. El perfil `examples` construye una imagen cliente independiente; usa `run --build --rm seed-examples`. Consulta [agentes/workers](../docs/guides/AGENTS-AND-CAPABILITIES.md).
 
 La [guía del servidor central](../docs/guides/CENTRAL-SERVER.md) describe cómo conectar usuarios de otros equipos. `npm run docker:public` aplica el overlay público; requiere configurar `MODAI_PUBLIC_HOST`, DNS y puertos 80/443. `MODAI_PUBLIC_URL` anuncia la URL en el panel, sin cambiar el enlace de red.

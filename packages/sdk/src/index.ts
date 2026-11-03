@@ -7,6 +7,26 @@ export interface KnowledgeDocument {
   packageName?: string;
 }
 
+export type Role = "reader" | "publisher" | "worker" | "org-admin" | "admin";
+
+/** What the identity behind a token may do, as computed by the server (0.9+). */
+export interface Permissions {
+  role: Role; global: boolean;
+  manage: { users: boolean; apiKeys: boolean; organizations: boolean; createOrganizations: boolean; namespaces: boolean; audit: boolean; publishers: boolean; backup: boolean; packages: boolean };
+  assignableRoles: Role[];
+  createProjects: boolean; writeMemory: boolean; submitRuns: boolean;
+  publish: { all: boolean; namespaces: string[] };
+  packages: { all: boolean; namespaces: string[] };
+  organizations: Array<{ id: string; name: string; manage: boolean }>;
+}
+
+export interface OrganizationRecord { id: string; name: string; description: string; projects: number; namespaces: number; members: number; canManage: boolean }
+export interface NamespaceRecord { name: string; organizationId?: string; organizationName?: string; description: string; visibility: "internal" | "restricted"; packages: number; canManage: boolean; canPublish: boolean }
+
+export interface ApiKeyRecord { id: string; label: string; role: Role; createdAt: string; lastUsedAt?: string; revokedAt?: string; ownerId?: string; ownerName?: string; inherit: boolean; projectIds: string[]; organizationIds: string[]; packageScopes: string[] }
+export interface UserRecord { id: string; username: string; displayName: string; role: Role; projectIds: string[]; organizationIds: string[]; packageScopes: string[]; createdAt: string; lastLoginAt?: string; disabledAt?: string }
+export interface TemplateRecord { name: string; version: string; description: string; tags: string[]; stack?: string; files: number; sizeBytes: number; publishedAt: string; publishedBy: string; status: "active" | "yanked"; versions?: number }
+
 export class ApiClient {
   private readonly baseUrl: string;
 
@@ -20,8 +40,17 @@ export class ApiClient {
     return this.request("/health");
   }
 
-  async session(): Promise<{ label: string; role: "reader" | "publisher" | "worker" | "admin"; projectIds: string[]; organizationIds: string[]; packageScopes: string[] }> {
+  async session(): Promise<{ label: string; role: Role; projectIds: string[]; organizationIds: string[]; packageScopes: string[]; permissions: Permissions }> {
     return this.request("/api/v1/session");
+  }
+
+  /** Fails early, with the namespaces the token can use, instead of a bare 403 after uploading the package. */
+  async assertCanPublish(packageName: string): Promise<void> {
+    const { label, role, permissions } = await this.session();
+    const namespace = packageName.split("/")[0];
+    if (permissions.publish.all || permissions.publish.namespaces.includes(namespace)) return;
+    const allowed = permissions.publish.namespaces.length ? `Puede publicar en: ${permissions.publish.namespaces.join(", ")}.` : "No puede publicar en ningún namespace.";
+    throw new Error(`PACKAGE_FORBIDDEN: La credencial «${label}» (rol ${role}) no puede publicar en ${namespace}. ${allowed} Pide acceso a la administración de la organización dueña del namespace.`);
   }
 
   async listPackages(query?: string, includeYanked = false): Promise<PackageRecord[]> {
@@ -34,6 +63,9 @@ export class ApiClient {
   }
 
   async publish(input: PublishPackageInput): Promise<PackageRecord> {
+    const manifest = input.manifest as { name?: string; metadata?: { name?: string } };
+    const name = manifest.metadata?.name ?? manifest.name;
+    if (name) await this.assertCanPublish(name);
     const response = await this.request<{ package: PackageRecord }>("/api/v1/packages", {
       method: "POST",
       body: JSON.stringify(input),
@@ -131,12 +163,17 @@ export class ApiClient {
     return this.request("/api/v1/admin/import", { method: "POST", body: JSON.stringify(snapshot) });
   }
 
-  async createApiKey(label: string, role: string, grants: { projectIds?: string[]; organizationIds?: string[]; packageScopes?: string[] } = {}): Promise<unknown> {
-    return this.request("/api/v1/admin/api-keys", { method: "POST", body: JSON.stringify({ label, role, ...grants }) });
+  /** A key for a user (`ownerId`), within that user's permissions; without explicit grants it inherits them. */
+  async createApiKey(label: string, role: string, grants: { projectIds?: string[]; organizationIds?: string[]; packageScopes?: string[] } = {}, options: { ownerId?: string | null; inherit?: boolean } = {}): Promise<ApiKeyRecord & { token: string }> {
+    return (await this.request<{ key: ApiKeyRecord & { token: string } }>("/api/v1/admin/api-keys", { method: "POST", body: JSON.stringify({ label, role, ...grants, ...options }) })).key;
   }
+  /** Keys of the user behind this credential. */
+  async myApiKeys(): Promise<ApiKeyRecord[]> { return (await this.request<{ keys: ApiKeyRecord[] }>("/api/v1/me/api-keys")).keys; }
+  async revokeMyApiKey(id: string): Promise<void> { await this.request(`/api/v1/me/api-keys/${encodeURIComponent(id)}`, { method: "DELETE" }); }
 
-  async prune(memoryDays: number, auditDays: number): Promise<unknown> {
-    return this.request("/api/v1/admin/prune", { method: "POST", body: JSON.stringify({ memoryDays, auditDays }) });
+  /** Only the targets given are pruned; `dryRun` counts without deleting. */
+  async prune(memoryDays?: number, auditDays?: number, dryRun = false): Promise<{ memories: number; audit: number; dryRun: boolean }> {
+    return this.request("/api/v1/admin/prune", { method: "POST", body: JSON.stringify({ memoryDays, auditDays, ...(dryRun ? { dryRun } : {}) }) });
   }
 
   /** Tells the server what this project has installed (shown in the panel as "who uses this package"). */
@@ -158,7 +195,7 @@ export class ApiClient {
   }
   async projects(): Promise<ProjectRecord[]> { return (await this.request<{ projects: ProjectRecord[] }>("/api/v1/projects")).projects; }
   async agents(): Promise<PackageRecord[]> { return (await this.request<{ agents: PackageRecord[] }>("/api/v1/agents")).agents; }
-  async capabilities(): Promise<unknown[]> { return (await this.request<{ capabilities: unknown[] }>("/api/v1/capabilities")).capabilities; }
+  async capabilities(capability?: string): Promise<{ builtin: unknown[]; contracts: unknown[] }> { return this.request<{ builtin: unknown[]; contracts: unknown[] }>(`/api/v1/capabilities${capability ? `?capability=${encodeURIComponent(capability)}` : ""}`); }
   async composeAgent(projectId: string, name: string, range = "*", overrides?: Record<string, string>): Promise<AgentBundle> {
     return (await this.request<{ bundle: AgentBundle }>("/api/v1/agents/compose", { method: "POST", body: JSON.stringify({ projectId, name, range, overrides }) })).bundle;
   }
@@ -183,8 +220,83 @@ export class ApiClient {
   async registerPublisher(publicKey: string, label: string, trusted: boolean): Promise<string> {
     return (await this.request<{ fingerprint: string }>("/api/v1/admin/publishers", { method: "POST", body: JSON.stringify({ publicKey, label, trusted }) })).fingerprint;
   }
-  async createOrganization(name: string): Promise<{ id: string; name: string }> {
-    return (await this.request<{ organization: { id: string; name: string } }>("/api/v1/admin/organizations", { method: "POST", body: JSON.stringify({ name }) })).organization;
+  async createOrganization(name: string, description?: string): Promise<{ id: string; name: string }> {
+    return (await this.request<{ organization: { id: string; name: string } }>("/api/v1/organizations", { method: "POST", body: JSON.stringify({ name, ...(description ? { description } : {}) }) })).organization;
+  }
+  async organizations(): Promise<OrganizationRecord[]> { return (await this.request<{ organizations: OrganizationRecord[] }>("/api/v1/organizations")).organizations; }
+  async namespaces(): Promise<NamespaceRecord[]> { return (await this.request<{ namespaces: NamespaceRecord[] }>("/api/v1/namespaces")).namespaces; }
+  async createNamespace(input: { name: string; organizationId?: string; description?: string; visibility?: "internal" | "restricted" }): Promise<NamespaceRecord> {
+    return (await this.request<{ namespace: NamespaceRecord }>("/api/v1/namespaces", { method: "POST", body: JSON.stringify(input) })).namespace;
+  }
+
+  async templates(query?: string): Promise<TemplateRecord[]> {
+    return (await this.request<{ templates: TemplateRecord[] }>(`/api/v1/templates${query ? `?q=${encodeURIComponent(query)}` : ""}`)).templates;
+  }
+  async templateFiles(name: string, version?: string): Promise<{ template: TemplateRecord; files: ArtifactFile[] }> {
+    return this.request(`/api/v1/template/files?name=${encodeURIComponent(name)}${version ? `&version=${encodeURIComponent(version)}` : ""}`);
+  }
+  async publishTemplate(input: { name: string; version: string; description: string; tags?: string[]; stack?: string; files?: ArtifactFile[]; archive?: string }): Promise<TemplateRecord> {
+    const namespace = input.name.split("/")[0]!;
+    const { permissions } = await this.session();
+    if (!permissions.publish.all && !permissions.publish.namespaces.includes(namespace)) throw new Error(`PACKAGE_FORBIDDEN: no puedes publicar en ${namespace}. ${permissions.publish.namespaces.length ? `Puedes publicar en: ${permissions.publish.namespaces.join(", ")}.` : ""}`);
+    return (await this.request<{ template: TemplateRecord }>("/api/v1/templates", { method: "POST", body: JSON.stringify(input) })).template;
+  }
+
+  async templateInfo(name: string, version?: string): Promise<{ template: TemplateRecord; versions: TemplateRecord[]; files: Array<{ path: string; size: number }>; canPublish: boolean }> {
+    return this.request(`/api/v1/template?name=${encodeURIComponent(name)}${version ? `&version=${encodeURIComponent(version)}` : ""}`);
+  }
+  async setTemplateStatus(name: string, version: string, status: "active" | "yanked"): Promise<TemplateRecord> {
+    return (await this.request<{ template: TemplateRecord }>("/api/v1/templates", { method: "PATCH", body: JSON.stringify({ name, version, status }) })).template;
+  }
+
+  // ------------------------------------------------------------- packages & skills
+  async getPackage(name: string, version?: string): Promise<PackageRecord> {
+    return (await this.request<{ package: PackageRecord }>(`/api/v1/package?name=${encodeURIComponent(name)}${version ? `&version=${encodeURIComponent(version)}` : ""}`)).package;
+  }
+  async catalog(options: { type?: string; q?: string; limit?: number; offset?: number } = {}): Promise<{ items: Array<PackageRecord & { versions: number }>; total: number }> {
+    const search = new URLSearchParams(Object.entries(options).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+    return this.request(`/api/v1/packages/catalog?${search}`);
+  }
+  async importSkill(input: { archive: string; namespace: string; version?: string; name?: string; dryRun?: boolean }): Promise<{ package?: PackageRecord; name?: string; files?: Array<{ path: string; size: number }>; quality?: QualityReport }> {
+    return this.request("/api/v1/packages/import-skill", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  // ----------------------------------------------------------- shared knowledge
+  async createKnowledge(input: { title: string; content: string; tags?: string[] }): Promise<KnowledgeDocument> {
+    return (await this.request<{ document: KnowledgeDocument }>("/api/v1/knowledge/documents", { method: "POST", body: JSON.stringify(input) })).document;
+  }
+  async updateKnowledge(id: string, input: { title?: string; content?: string; tags?: string[] }): Promise<KnowledgeDocument> {
+    return (await this.request<{ document: KnowledgeDocument }>(`/api/v1/knowledge/documents/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) })).document;
+  }
+  async deleteKnowledge(id: string): Promise<void> {
+    await this.request(`/api/v1/knowledge/documents/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  // ------------------------------------------------- users, keys and directory
+  async users(): Promise<UserRecord[]> { return (await this.request<{ users: UserRecord[] }>("/api/v1/admin/users")).users; }
+  async createUser(input: { username: string; password: string; role: Role; displayName?: string; projectIds?: string[]; organizationIds?: string[]; packageScopes?: string[] }): Promise<UserRecord> {
+    return (await this.request<{ user: UserRecord }>("/api/v1/admin/users", { method: "POST", body: JSON.stringify(input) })).user;
+  }
+  async updateUser(id: string, input: { displayName?: string; role?: Role; disabled?: boolean; password?: string; projectIds?: string[]; organizationIds?: string[]; packageScopes?: string[] }): Promise<UserRecord> {
+    return (await this.request<{ user: UserRecord }>(`/api/v1/admin/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) })).user;
+  }
+  async deleteUser(id: string): Promise<void> { await this.request(`/api/v1/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }); }
+  async apiKeys(ownerId?: string): Promise<ApiKeyRecord[]> {
+    return (await this.request<{ keys: ApiKeyRecord[] }>(`/api/v1/admin/api-keys${ownerId ? `?ownerId=${encodeURIComponent(ownerId)}` : ""}`)).keys;
+  }
+  async revokeApiKey(id: string): Promise<void> { await this.request(`/api/v1/admin/api-keys/${encodeURIComponent(id)}`, { method: "DELETE" }); }
+  async updateOrganization(id: string, input: { name?: string; description?: string }): Promise<OrganizationRecord> {
+    return (await this.request<{ organization: OrganizationRecord }>(`/api/v1/organizations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) })).organization;
+  }
+  async deleteOrganization(id: string, confirmation: string): Promise<void> {
+    await this.request(`/api/v1/organizations/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ confirmation }) });
+  }
+  async updateNamespace(name: string, input: { organizationId?: string | null; description?: string; visibility?: "internal" | "restricted" }): Promise<NamespaceRecord> {
+    return (await this.request<{ namespace: NamespaceRecord }>(`/api/v1/namespaces/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify(input) })).namespace;
+  }
+  async deleteNamespace(name: string): Promise<void> { await this.request(`/api/v1/namespaces/${encodeURIComponent(name)}`, { method: "DELETE" }); }
+  async audit(limit = 100): Promise<Array<{ id: string; actor: string; action: string; resource: string; details: unknown; createdAt: string }>> {
+    return (await this.request<{ events: never[] }>(`/api/v1/admin/audit?limit=${limit}`)).events;
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -195,7 +307,7 @@ export class ApiClient {
         signal: AbortSignal.timeout(30_000),
         ...init,
         headers: {
-          "content-type": "application/json",
+          ...(init.body !== undefined ? { "content-type": "application/json" } : {}),
           ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
           ...init.headers,
         },

@@ -6,7 +6,7 @@ import { after, test } from "node:test";
 import YAML from "yaml";
 import {
   LocalRegistry, authorize, createProjectFile, inspectWorkspace, loadContextIndex, loadPackageSource, loadV1Project, normalizeManifest,
-  resolve, runTool, saveGrants, saveProjectFile, searchKnowledge, syncWorkspace, validatePackage, type Candidate,
+  resolve, resolveAgentCapabilities, runTool, saveGrants, saveProjectFile, searchKnowledge, syncWorkspace, validatePackage, type Candidate,
 } from "@modai/core";
 import type { PackageManifestV1 } from "@modai/contracts/spec-v1";
 
@@ -22,7 +22,7 @@ function writePackage(directory: string, manifest: unknown, files: Record<string
 }
 const v1 = (name: string, version: string, spec: Record<string, unknown> = {}, kind = "Package") => ({ apiVersion: "modai.dev/v1", kind, metadata: { name, version, description: `${name} de prueba` }, spec });
 
-test("los paquetes de ejemplo (legacy y v1) se cargan, validan y normalizan sin conocer su categoría", () => {
+test("los paquetes de ejemplo se cargan, validan y normalizan sin conocer su categoría", () => {
   const base = join(process.cwd(), "examples", "packages");
   const names = readdirSync(base);
   assert.ok(names.length >= 21);
@@ -31,10 +31,34 @@ test("los paquetes de ejemplo (legacy y v1) se cargan, validan y normalizan sin 
     const manifest = validatePackage(input.manifest, input.files);
     assert.equal(manifest.apiVersion, "modai.dev/v1", name);
   }
-  const legacySkill = loadPackageSource(join(base, "skill-design-patterns"));
-  const normalized = normalizeManifest(legacySkill.manifest);
-  assert.equal(normalized.spec.contributes.skills[0].name, "design-patterns");
-  assert.equal(normalized.spec.contributes.files.length, 0, "los archivos de skill legacy se convierten en contribuciones de skill");
+  const skill = normalizeManifest(loadPackageSource(join(base, "skill-design-patterns")).manifest);
+  assert.equal(skill.spec.contributes.skills[0].name, "design-patterns");
+  assert.equal(skill.spec.contributes.files.length, 0, "una skill se publica como contribución, no como archivos sueltos");
+});
+
+test("un manifiesto sin apiVersion modai.dev/v1 se rechaza al normalizar, validar y cargar", () => {
+  const old = { name: "@sin/api", version: "1.0.0", description: "Manifiesto sin apiVersion" };
+  assert.throws(() => normalizeManifest(old), /apiVersion: modai\.dev\/v1/);
+  assert.throws(() => validatePackage(old as never, []), /apiVersion: modai\.dev\/v1/);
+  const directory = mkdtempSync(join(tmpdir(), "modai-no-api-version-"));
+  try {
+    writeFileSync(join(directory, "modai.package.yaml"), YAML.stringify(old));
+    assert.throws(() => loadPackageSource(directory), /debe declarar apiVersion: modai\.dev\/v1/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("las capacidades de un agente son herramientas integradas o servidores MCP de sus paquetes", () => {
+  const server = (name: string) => ({ name, description: "Servidor de prueba", command: "node", args: [], envKeys: [] });
+  const pkg = (name: string, mcpServers: unknown[] = []) => ({ name, manifest: { apiVersion: "modai.dev/v1", kind: "Package", metadata: { name, version: "1.0.0", description: "Paquete de prueba" }, spec: { permissions: ["mcp.connect"], contributes: { mcpServers } } } as never });
+  const policy = (capabilities: string[], write = false) => ({ capabilities, memory: { write } });
+  const resolved = resolveAgentCapabilities(policy(["modai_recall", "browser"]), [pkg("@a/one", [server("browser")])]);
+  assert.deepEqual(resolved.map(item => [item.kind, item.name]), [["builtin", "modai_recall"], ["mcp", "browser"]]);
+  assert.equal(resolved[1].kind === "mcp" && resolved[1].package, "@a/one");
+  assert.throws(() => resolveAgentCapabilities(policy(["modai_remember"]), []), /MEMORY_POLICY|política/);
+  assert.equal(resolveAgentCapabilities(policy(["modai_remember"], true), [])[0].name, "modai_remember");
+  assert.throws(() => resolveAgentCapabilities(policy(["nope"]), [pkg("@a/one")]), /no resuelta/);
+  assert.throws(() => resolveAgentCapabilities(policy([]), [pkg("@a/one", [server("browser")]), pkg("@a/two", [server("browser")])]), /duplicado/);
+  assert.throws(() => resolveAgentCapabilities(policy([]), [pkg("@a/one", [server("modai_recall")])]), /reservado/);
 });
 
 function source(packages: Array<ReturnType<typeof v1>>) {
@@ -200,7 +224,7 @@ test("el catálogo de referencia se publica e instala como perfil con adaptadore
     ".cursor/rules/patterns-frontend-architecture-component-boundaries.mdc", ".cursor/mcp.json", ".mcp.json", "CLAUDE.md"]) assert.ok(existsSync(join(project, path)), path);
   const lock = loadV1Project(project).lock;
   assert.equal(lock.capabilities["browser.automation"].provider, "@testing/playwright");
-  assert.equal(lock.packages["@skills/design-patterns"].kind, "Package", "los paquetes 0.5 conviven normalizados");
+  assert.equal(lock.packages["@skills/design-patterns"].kind, "Package", "los paquetes instalados se registran con su kind");
   assert.ok(report.missingOptional.some(item => item.capability === "ai.code-review"));
 
   const installed = inspectWorkspace(loadV1Project(project));

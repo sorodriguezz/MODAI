@@ -4,8 +4,10 @@ import { AppError, invariant } from "@modai/contracts/errors";
 import { sha256, tokensEqual } from "@modai/contracts/security";
 import type { ProjectRecord } from "@modai/contracts/types";
 
-export type Role = "reader" | "publisher" | "worker" | "admin";
-export interface Identity { id: string; label: string; role: Role; projectIds: string[]; organizationIds: string[]; packageScopes: string[]; kind?: "bootstrap" | "api-key" | "user" }
+export type Role = "reader" | "publisher" | "worker" | "org-admin" | "admin";
+export interface Identity { id: string; label: string; role: Role; projectIds: string[]; organizationIds: string[]; packageScopes: string[]; kind?: "bootstrap" | "api-key" | "user"; ownerId?: string; ownerName?: string }
+export interface KeyOptions { ownerId?: string | null; inherit?: boolean }
+export interface KeyRecord extends Grantee { id: string; label: string; createdAt: string; lastUsedAt?: string; revokedAt?: string; ownerId?: string; ownerName?: string; inherit: boolean }
 export interface KeyGrants { projectIds?: string[]; organizationIds?: string[]; packageScopes?: string[] }
 export interface UserRecord { id: string; username: string; displayName: string; role: Role; projectIds: string[]; organizationIds: string[]; packageScopes: string[]; createdAt: string; updatedAt: string; lastLoginAt?: string; disabledAt?: string }
 export interface UserInput extends KeyGrants { username: string; displayName?: string; password: string; role: Role }
@@ -13,7 +15,22 @@ export interface UserUpdate extends KeyGrants { displayName?: string; role?: Rol
 export interface SessionOptions { idleMs?: number; absoluteMs?: number }
 export interface CreatedSession { token: string; expiresAt: string; absoluteExpiresAt: string; maxAgeSeconds: number }
 
-const ROLES: Role[] = ["reader", "publisher", "worker", "admin"];
+export const ROLES: Role[] = ["reader", "publisher", "worker", "org-admin", "admin"];
+/** Roles an organization admin may hand out: never global admin. */
+const DELEGABLE_ROLES: Role[] = ["reader", "publisher", "worker", "org-admin"];
+export interface Grantee { role: Role; projectIds: string[]; organizationIds: string[]; packageScopes: string[] }
+export interface Permissions {
+  role: Role; global: boolean;
+  manage: { users: boolean; apiKeys: boolean; organizations: boolean; createOrganizations: boolean; namespaces: boolean; audit: boolean; publishers: boolean; backup: boolean; packages: boolean };
+  assignableRoles: Role[];
+  createProjects: boolean; writeMemory: boolean; submitRuns: boolean;
+  publish: { all: boolean; namespaces: string[] };
+  /** Namespaces whose packages it may deprecate or yank. */
+  packages: { all: boolean; namespaces: string[] };
+  organizations: Array<{ id: string; name: string; manage: boolean }>;
+}
+/** Namespace of a package name: "@team/pkg" → "@team". */
+export const namespaceOf = (packageName: string): string => packageName.split("/")[0];
 export const MIN_PASSWORD_LENGTH = 10;
 const MAX_PASSWORD_LENGTH = 256;
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,63}$/;
@@ -68,26 +85,230 @@ export class AuthService {
   authenticate(token?: string): Identity | undefined {
     if (!token) return undefined;
     if (this.bootstrapToken && tokensEqual(this.bootstrapToken, token)) return { id: "bootstrap", label: "bootstrap", role: "admin", projectIds: [], organizationIds: [], packageScopes: [], kind: "bootstrap" };
-    const row = this.db.connection.prepare(`SELECT id, label, role, project_ids_json, organization_ids_json, package_scopes_json FROM api_keys
-      WHERE token_hash = ? AND revoked_at IS NULL`).get(sha256(token)) as { id: string; label: string; role: Role; project_ids_json: string; organization_ids_json: string; package_scopes_json: string } | undefined;
+    const row = this.db.connection.prepare(`SELECT id, label, role, project_ids_json, organization_ids_json, package_scopes_json, owner_user_id, inherit_grants FROM api_keys
+      WHERE token_hash = ? AND revoked_at IS NULL`).get(sha256(token)) as { id: string; label: string; role: Role; project_ids_json: string; organization_ids_json: string; package_scopes_json: string; owner_user_id: string | null; inherit_grants: number } | undefined;
     if (!row) return undefined;
+    const grants = { projectIds: JSON.parse(row.project_ids_json), organizationIds: JSON.parse(row.organization_ids_json), packageScopes: JSON.parse(row.package_scopes_json) };
+    let identity: Identity = { id: row.id, label: row.label, role: row.role, ...grants, kind: "api-key" };
+    if (row.owner_user_id) {
+      const owner = this.db.connection.prepare("SELECT * FROM users WHERE id = ?").get(row.owner_user_id) as UserRow | undefined;
+      // A disabled or deleted owner disables its keys; a narrower owner narrows them (evaluated on every request).
+      if (!owner || owner.disabled_at) return undefined;
+      const bound = this.boundToOwner(this.userIdentity(toUser(owner)), row.role, grants, Boolean(row.inherit_grants));
+      if (!bound) return undefined;
+      identity = { ...bound, id: row.id, label: `${owner.username} · ${row.label}`, kind: "api-key", ownerId: owner.id, ownerName: owner.username };
+    }
     this.db.connection.prepare("UPDATE api_keys SET last_used_at = ? WHERE id = ?").run(new Date().toISOString(), row.id);
-    return { id: row.id, label: row.label, role: row.role, projectIds: JSON.parse(row.project_ids_json), organizationIds: JSON.parse(row.organization_ids_json), packageScopes: JSON.parse(row.package_scopes_json), kind: "api-key" };
+    return identity;
+  }
+
+  userIdentity(user: UserRecord): Identity {
+    return { id: user.id, label: user.username, role: user.role, projectIds: user.projectIds, organizationIds: user.organizationIds, packageScopes: user.packageScopes, kind: "user" };
+  }
+
+  /** A key may have the owner's role or a narrower one; "worker" fits any account that can publish. */
+  keyRoleAllowed(ownerRole: Role, keyRole: Role): boolean {
+    return this.satisfies(ownerRole, keyRole) || (keyRole === "worker" && this.satisfies(ownerRole, "publisher"));
+  }
+
+  /** Projects the owner can see, namespaces it can use and organizations it belongs to: the ceiling for its keys. */
+  private ownerCeiling(owner: Identity): { all: boolean; projects: Set<string>; organizations: Set<string>; scopes: Set<string>; anyScope: boolean } {
+    if (owner.role === "admin") return { all: true, projects: new Set(), organizations: new Set(), scopes: new Set(), anyScope: true };
+    const projects = new Set((this.db.connection.prepare("SELECT id, organization_id AS organizationId, created_by AS createdBy FROM projects").all() as Array<{ id: string; organizationId: string | null; createdBy: string }>).filter(row => this.seesProject(owner, row)).map(row => row.id));
+    const scopes = new Set([...owner.packageScopes, ...(owner.role === "org-admin" ? this.managedNamespaces(owner).namespaces : [])]);
+    return { all: false, projects, organizations: new Set(owner.organizationIds), scopes, anyScope: owner.packageScopes.includes("*") };
+  }
+
+  /** Effective identity of a key: its role (if the owner still allows it) and its grants intersected with the owner's. */
+  boundToOwner(owner: Identity, role: Role, grants: Required<KeyGrants>, inherit: boolean): Identity | undefined {
+    if (!this.keyRoleAllowed(owner.role, role)) return undefined;
+    if (inherit) return { ...owner, role, projectIds: owner.projectIds, organizationIds: owner.organizationIds, packageScopes: owner.packageScopes };
+    const ceiling = this.ownerCeiling(owner);
+    if (ceiling.all) return { ...owner, role, ...grants };
+    return {
+      ...owner, role,
+      projectIds: grants.projectIds.filter(id => ceiling.projects.has(id)),
+      organizationIds: grants.organizationIds.filter(id => ceiling.organizations.has(id)),
+      packageScopes: grants.packageScopes.filter(scope => ceiling.anyScope || (scope !== "*" && ceiling.scopes.has(scope))),
+    };
+  }
+
+  /** At creation, a key that would exceed its owner is refused with what is wrong (instead of silently trimmed). */
+  assertKeyWithinOwner(owner: UserRecord, role: Role, grants: KeyGrants, inherit: boolean): void {
+    invariant(ROLES.includes(role), 400, "INVALID_ROLE", "Rol inválido");
+    if (owner.disabledAt) throw new AppError(409, "OWNER_DISABLED", `${owner.username} está desactivado`);
+    if (!this.keyRoleAllowed(owner.role, role)) throw new AppError(403, "KEY_EXCEEDS_OWNER", `Una API key de ${owner.username} no puede tener el rol ${role}: su cuenta es ${owner.role}`);
+    if (inherit || owner.role === "admin") return;
+    const ceiling = this.ownerCeiling(this.userIdentity(owner));
+    const outside = [
+      ...(grants.organizationIds ?? []).filter(id => !ceiling.organizations.has(id)).map(id => `organización ${id}`),
+      ...(grants.projectIds ?? []).filter(id => !ceiling.projects.has(id)).map(id => `proyecto ${id}`),
+      ...(grants.packageScopes ?? []).filter(scope => !(ceiling.anyScope || (scope !== "*" && ceiling.scopes.has(scope)))).map(scope => `namespace ${scope}`),
+    ];
+    if (outside.length) throw new AppError(403, "KEY_EXCEEDS_OWNER", `La API key no puede tener más acceso que ${owner.username}: ${outside.join(", ")}`);
   }
 
   require(identity: Identity | undefined, minimum: Role): Identity {
     if (!identity) throw new AppError(401, "UNAUTHORIZED", "Token inválido o ausente");
-    if (identity.role !== "admin" && minimum !== "reader" && identity.role !== minimum) throw new AppError(403, "FORBIDDEN", `Se requiere rol ${minimum}`);
+    if (!this.satisfies(identity.role, minimum)) throw new AppError(403, "FORBIDDEN", `Se requiere rol ${minimum}`);
     return identity;
+  }
+
+  /** Global admin passes everything; an organization admin also publishes and writes inside its organizations. */
+  satisfies(role: Role, minimum: Role): boolean {
+    if (role === "admin" || minimum === "reader" || role === minimum) return true;
+    return role === "org-admin" && minimum === "publisher";
+  }
+
+  /** Organizations the actor administers: undefined means all of them (global admin). */
+  managedOrganizations(actor: Identity): string[] | undefined {
+    if (actor.role === "admin") return undefined;
+    return actor.role === "org-admin" ? actor.organizationIds : [];
+  }
+
+  administers(actor: Identity, organizationId: string | null | undefined): boolean {
+    const managed = this.managedOrganizations(actor);
+    return managed === undefined || (Boolean(organizationId) && managed.includes(organizationId!));
+  }
+
+  /** Users and API keys, organizations and namespaces: only global admins and organization admins. */
+  requireManager(identity: Identity | undefined): Identity {
+    const actor = this.require(identity, "reader");
+    if (actor.role !== "admin" && actor.role !== "org-admin") throw new AppError(403, "FORBIDDEN", "Se requiere administración global o de organización");
+    return actor;
+  }
+
+  /** A grantee is managed by an organization admin only when every organization it belongs to is one the admin manages. */
+  canManageGrantee(actor: Identity, target: Grantee): boolean {
+    const managed = this.managedOrganizations(actor);
+    if (managed === undefined) return true;
+    return target.role !== "admin" && target.organizationIds.length > 0 && target.organizationIds.every(id => managed.includes(id));
+  }
+
+  /**
+   * Hierarchy check for grants handed out by an organization admin: organizations it manages, projects inside those
+   * organizations and namespaces owned by them. Global admins keep the free form (unknown ids are allowed for compatibility).
+   */
+  assertGrants(actor: Identity, role: Role, grants: KeyGrants): void {
+    invariant(ROLES.includes(role), 400, "INVALID_ROLE", "Rol inválido");
+    const managed = this.managedOrganizations(actor);
+    if (managed === undefined) return;
+    if (!DELEGABLE_ROLES.includes(role)) throw new AppError(403, "ROLE_FORBIDDEN", "Solo la administración global puede asignar el rol de administración");
+    const organizations = grants.organizationIds ?? [];
+    invariant(organizations.length > 0, 400, "ORGANIZATION_REQUIRED", "Asigna al menos una organización");
+    const outside = organizations.filter(id => !managed.includes(id));
+    if (outside.length) throw new AppError(403, "ORGANIZATION_FORBIDDEN", `No administras estas organizaciones: ${outside.join(", ")}`);
+    for (const projectId of grants.projectIds ?? []) {
+      const project = this.db.connection.prepare("SELECT organization_id AS organizationId FROM projects WHERE id = ?").get(projectId) as { organizationId: string | null } | undefined;
+      if (!project) throw new AppError(400, "PROJECT_NOT_FOUND", `No existe el proyecto ${projectId}`);
+      if (!project.organizationId || !organizations.includes(project.organizationId)) throw new AppError(400, "PROJECT_OUTSIDE_ORGANIZATION", `El proyecto ${projectId} no pertenece a las organizaciones asignadas`);
+    }
+    for (const scope of grants.packageScopes ?? []) {
+      if (scope === "*") throw new AppError(403, "NAMESPACE_FORBIDDEN", "Solo la administración global puede dar acceso a todos los namespaces");
+      const namespace = this.db.connection.prepare("SELECT organization_id AS organizationId FROM namespaces WHERE name = ?").get(scope) as { organizationId: string | null } | undefined;
+      if (!namespace) throw new AppError(400, "NAMESPACE_NOT_FOUND", `No existe el namespace ${scope}`);
+      if (!namespace.organizationId || !organizations.includes(namespace.organizationId)) throw new AppError(400, "NAMESPACE_OUTSIDE_ORGANIZATION", `El namespace ${scope} no pertenece a las organizaciones asignadas`);
+    }
+  }
+
+  /**
+   * Package visibility. Namespaces are 'internal' (any authenticated identity reads them) or 'restricted'
+   * (only identities granted the namespace, or administering its organization). Evaluated once per request.
+   */
+  packageReader(identity: Identity | undefined): (packageName: string) => boolean {
+    const actor = this.require(identity, "reader");
+    if (actor.role === "admin" || actor.packageScopes.includes("*")) return () => true;
+    const restricted = new Map((this.db.connection.prepare("SELECT name, organization_id AS organizationId FROM namespaces WHERE visibility = 'restricted'").all() as Array<{ name: string; organizationId: string | null }>).map(row => [row.name, row.organizationId]));
+    return (packageName) => {
+      const scope = namespaceOf(packageName);
+      if (!restricted.has(scope)) return true;
+      return actor.packageScopes.includes(scope) || (actor.role === "org-admin" && this.administers(actor, restricted.get(scope)));
+    };
+  }
+
+  requireReadPackage(identity: Identity | undefined, packageName: string): void {
+    if (!this.packageReader(identity)(packageName)) throw new AppError(404, "PACKAGE_NOT_FOUND", `No existe ${packageName}`);
+  }
+
+  /** Namespaces the actor may publish to; `all` for global admins and the "*" grant. */
+  publishableNamespaces(actor: Identity): { all: boolean; namespaces: string[] } {
+    if (!this.satisfies(actor.role, "publisher")) return { all: false, namespaces: [] };
+    if (actor.role === "admin" || actor.packageScopes.includes("*")) return { all: true, namespaces: [] };
+    const owned = actor.role === "org-admin" && actor.organizationIds.length
+      ? (this.db.connection.prepare(`SELECT name FROM namespaces WHERE organization_id IN (${actor.organizationIds.map(() => "?").join(",")})`).all(...actor.organizationIds) as Array<{ name: string }>).map(row => row.name)
+      : [];
+    return { all: false, namespaces: [...new Set([...actor.packageScopes, ...owned])].sort() };
+  }
+
+  /** Namespaces whose packages the actor may deprecate or yank: all for global admins, those of its organizations for an org-admin. */
+  managedNamespaces(actor: Identity): { all: boolean; namespaces: string[] } {
+    if (actor.role === "admin") return { all: true, namespaces: [] };
+    if (actor.role !== "org-admin" || !actor.organizationIds.length) return { all: false, namespaces: [] };
+    return { all: false, namespaces: (this.db.connection.prepare(`SELECT name FROM namespaces WHERE organization_id IN (${actor.organizationIds.map(() => "?").join(",")}) ORDER BY name`).all(...actor.organizationIds) as Array<{ name: string }>).map(row => row.name) };
+  }
+
+  /** Deprecate and yank: global admins, or the admin of the organization that owns the package's namespace. */
+  requireManagePackage(identity: Identity | undefined, packageName: string): Identity {
+    const actor = this.requireManager(identity);
+    const managed = this.managedNamespaces(actor);
+    if (!managed.all && !managed.namespaces.includes(namespaceOf(packageName))) throw new AppError(403, "PACKAGE_FORBIDDEN", `No administras el namespace ${namespaceOf(packageName)}`);
+    return actor;
+  }
+
+  /** What the panel and the CLI may show for this identity. Mirrors every check above. */
+  permissions(identity: Identity | undefined): Permissions {
+    const actor = this.require(identity, "reader");
+    const global = actor.role === "admin", manager = global || actor.role === "org-admin";
+    const rows = (global
+      ? this.db.connection.prepare("SELECT id, name FROM organizations ORDER BY name").all()
+      : actor.organizationIds.length ? this.db.connection.prepare(`SELECT id, name FROM organizations WHERE id IN (${actor.organizationIds.map(() => "?").join(",")}) ORDER BY name`).all(...actor.organizationIds) : []) as Array<{ id: string; name: string }>;
+    return {
+      role: actor.role, global,
+      manage: { users: manager, apiKeys: manager, organizations: manager, createOrganizations: global, namespaces: manager, audit: global, publishers: global, backup: global, packages: global },
+      assignableRoles: global ? ROLES : manager ? DELEGABLE_ROLES : [],
+      createProjects: this.satisfies(actor.role, "publisher"),
+      writeMemory: ["publisher", "worker", "org-admin", "admin"].includes(actor.role),
+      submitRuns: this.satisfies(actor.role, "publisher"),
+      publish: this.publishableNamespaces(actor),
+      packages: this.managedNamespaces(actor),
+      organizations: rows.map(row => ({ ...row, manage: this.administers(actor, row.id) && manager })),
+    };
   }
 
   requireProject(identity: Identity | undefined, projectId: string, write = false): ProjectRecord {
     const actor = this.require(identity, "reader");
     invariant(typeof projectId === "string" && projectId.length > 0 && projectId.length <= 200, 400, "INVALID_PROJECT", "projectId es obligatorio");
-    if (write && !["publisher", "worker", "admin"].includes(actor.role)) throw new AppError(403, "FORBIDDEN", "La clave no permite escribir memoria o tareas");
+    if (write && !["publisher", "worker", "org-admin", "admin"].includes(actor.role)) throw new AppError(403, "FORBIDDEN", "La clave no permite escribir memoria o tareas");
     const row = this.db.connection.prepare("SELECT id, name, organization_id AS organizationId, created_by AS createdBy, created_at AS createdAt FROM projects WHERE id = ?").get(projectId) as (ProjectRecord & { createdBy: string }) | undefined;
-    if (!row || (actor.role !== "admin" && row.createdBy !== actor.id && !actor.projectIds.includes(projectId))) throw new AppError(403, "PROJECT_FORBIDDEN", "La clave no tiene acceso a este proyecto");
-    return row;
+    if (!row || !this.seesProject(actor, row)) throw new AppError(403, "PROJECT_FORBIDDEN", "La clave no tiene acceso a este proyecto");
+    const { createdBy, ...project } = row;
+    return project;
+  }
+
+  private seesProject(actor: Identity, row: { id: string; organizationId?: string | null; createdBy: string }): boolean {
+    return actor.role === "admin" || row.createdBy === actor.id || (Boolean(actor.ownerId) && row.createdBy === actor.ownerId) || actor.projectIds.includes(row.id) || (actor.role === "org-admin" && this.administers(actor, row.organizationId));
+  }
+
+  /** Rename a project or move it between organizations. Moving requires administering both organizations. */
+  updateProject(identity: Identity | undefined, id: string, input: { name?: string; organizationId?: string | null }): ProjectRecord {
+    const actor = this.require(identity, "publisher");
+    const current = this.requireProject(actor, id);
+    const createdBy = (this.db.connection.prepare("SELECT created_by AS createdBy FROM projects WHERE id = ?").get(id) as { createdBy: string }).createdBy;
+    const global = actor.role === "admin";
+    const managesCurrent = global || (actor.role === "org-admin" && this.administers(actor, current.organizationId));
+    if (!managesCurrent && createdBy !== actor.id && createdBy !== actor.ownerId) throw new AppError(403, "FORBIDDEN", "Solo la administración de la organización o quien creó el proyecto puede editarlo");
+    if (input.organizationId !== undefined && (input.organizationId ?? null) !== (current.organizationId ?? null)) {
+      if (!managesCurrent) throw new AppError(403, "ORGANIZATION_FORBIDDEN", "Solo la administración puede mover un proyecto de organización");
+      if (input.organizationId) {
+        this.requireOrganizationExists(input.organizationId);
+        if (!this.administers(actor, input.organizationId)) throw new AppError(403, "ORGANIZATION_FORBIDDEN", "No administras la organización de destino");
+      } else if (!global) throw new AppError(403, "ORGANIZATION_REQUIRED", "Solo la administración global puede dejar un proyecto sin organización");
+    }
+    const name = input.name?.trim() ?? current.name;
+    invariant(name.length > 0 && name.length <= 200, 400, "INVALID_INPUT", "El nombre es obligatorio");
+    const organizationId = input.organizationId === undefined ? current.organizationId ?? null : input.organizationId;
+    this.db.connection.prepare("UPDATE projects SET name = ?, organization_id = ? WHERE id = ?").run(name, organizationId, id);
+    return this.requireProject(actor, id);
   }
 
   requireOrganization(identity: Identity | undefined, organizationId?: string): void {
@@ -97,20 +318,28 @@ export class AuthService {
 
   requirePublish(identity: Identity | undefined, packageName: string): void {
     const actor = this.require(identity, "publisher");
-    const scope = packageName.split("/")[0];
-    if (actor.role !== "admin" && !actor.packageScopes.includes(scope) && !actor.packageScopes.includes("*")) throw new AppError(403, "PACKAGE_FORBIDDEN", "La clave no puede publicar en este namespace");
+    const allowed = this.publishableNamespaces(actor);
+    const scope = namespaceOf(packageName);
+    if (!allowed.all && !allowed.namespaces.includes(scope)) throw new AppError(403, "PACKAGE_FORBIDDEN", `La clave no puede publicar en el namespace ${scope}. Pide acceso a la administración de su organización.`);
+  }
+
+  /** Registers the namespace of a published package the first time it is used (no owner: global admins decide later). */
+  ensureNamespace(packageName: string, actor: Identity): void {
+    const now = new Date().toISOString();
+    this.db.connection.prepare("INSERT OR IGNORE INTO namespaces (name, created_by, created_at, updated_at) VALUES (?, ?, ?, ?)").run(namespaceOf(packageName), actor.id, now, now);
   }
 
   createProject(identity: Identity | undefined, input: { id?: string; name: string; organizationId?: string }): ProjectRecord {
     const actor = this.require(identity, "publisher");
-    if (input.organizationId) this.requireOrganization(actor, input.organizationId);
+    if (actor.role === "org-admin" && !input.organizationId) throw new AppError(400, "ORGANIZATION_REQUIRED", "Elige la organización del proyecto");
+    if (input.organizationId) { this.requireOrganizationExists(input.organizationId); this.requireOrganization(actor, input.organizationId); }
     const id = input.id ?? randomUUID();
     const existing = this.db.connection.prepare("SELECT id FROM projects WHERE id = ?").get(id);
     if (existing) return this.requireProject(actor, id);
     const count = this.db.connection.prepare("SELECT COUNT(*) AS n FROM projects WHERE created_by = ?").get(actor.id) as { n: number };
     invariant(actor.role === "admin" || count.n < 100, 429, "PROJECT_QUOTA", "Límite de proyectos por clave alcanzado");
     const createdAt = new Date().toISOString();
-    this.db.connection.prepare("INSERT INTO projects (id, name, organization_id, created_by, created_at) VALUES (?, ?, ?, ?, ?)").run(id, input.name, input.organizationId ?? null, actor.id, createdAt);
+    this.db.connection.prepare("INSERT INTO projects (id, name, organization_id, created_by, created_at) VALUES (?, ?, ?, ?, ?)").run(id, input.name, input.organizationId ?? null, actor.ownerId ?? actor.id, createdAt);
     return { id, name: input.name, organizationId: input.organizationId, createdAt };
   }
 
@@ -123,7 +352,8 @@ export class AuthService {
     const actor = this.require(identity, "reader");
     const project = this.requireProject(actor, id);
     const createdBy = (this.db.connection.prepare("SELECT created_by AS createdBy FROM projects WHERE id = ?").get(id) as { createdBy: string }).createdBy;
-    if (actor.role !== "admin" && (actor.role === "reader" || createdBy !== actor.id)) throw new AppError(403, "FORBIDDEN", "Solo un administrador o quien creó el proyecto puede eliminarlo");
+    const managesIt = actor.role === "org-admin" && this.administers(actor, project.organizationId);
+    if (actor.role !== "admin" && !managesIt && (actor.role === "reader" || (createdBy !== actor.id && createdBy !== actor.ownerId))) throw new AppError(403, "FORBIDDEN", "Solo la administración o quien creó el proyecto puede eliminarlo");
     const busy = this.db.connection.prepare("SELECT COUNT(*) AS n FROM runs WHERE project_id = ? AND status = 'running' AND lease_expires_at > ?").get(id, new Date().toISOString()) as { n: number };
     if (busy.n > 0) throw new AppError(409, "PROJECT_BUSY", `Hay ${busy.n} ejecución(es) en curso en este proyecto; cancélalas o espera a que terminen`);
     return this.db.connection.transaction(() => {
@@ -143,33 +373,61 @@ export class AuthService {
 
   listProjects(identity: Identity | undefined): ProjectRecord[] {
     const actor = this.require(identity, "reader");
-    return (this.db.connection.prepare("SELECT id, name, organization_id AS organizationId, created_by AS createdBy, created_at AS createdAt FROM projects ORDER BY name").all() as Array<ProjectRecord & { createdBy: string }>).filter(row => actor.role === "admin" || row.createdBy === actor.id || actor.projectIds.includes(row.id))
-      .map(({ createdBy, ...project }) => ({ ...project, canDelete: actor.role === "admin" || (actor.role !== "reader" && createdBy === actor.id) }));
+    return (this.db.connection.prepare(`SELECT p.id, p.name, p.organization_id AS organizationId, o.name AS organizationName, p.created_by AS createdBy, p.created_at AS createdAt
+      FROM projects p LEFT JOIN organizations o ON o.id = p.organization_id ORDER BY p.name`).all() as Array<ProjectRecord & { createdBy: string; organizationName: string | null }>)
+      .filter(row => this.seesProject(actor, row))
+      .map(({ createdBy, organizationName, ...project }) => {
+        const manages = actor.role === "admin" || (actor.role === "org-admin" && this.administers(actor, project.organizationId));
+        return { ...project, ...(organizationName ? { organizationName } : {}), canDelete: manages || (actor.role !== "reader" && (createdBy === actor.id || createdBy === actor.ownerId)), canEdit: manages || (actor.role !== "reader" && (createdBy === actor.id || createdBy === actor.ownerId)) };
+      });
   }
 
-  createOrganization(name: string): { id: string; name: string } {
-    const id = randomUUID();
-    this.db.connection.prepare("INSERT INTO organizations VALUES (?, ?, ?)").run(id, name, new Date().toISOString());
-    return { id, name };
+  requireOrganizationExists(id: string): void {
+    if (!this.db.connection.prepare("SELECT 1 FROM organizations WHERE id = ?").get(id)) throw new AppError(404, "ORGANIZATION_NOT_FOUND", `No existe la organización ${id}`);
   }
 
-  createKey(label: string, role: Role, grants: KeyGrants = {}) {
-    invariant(["reader", "publisher", "worker", "admin"].includes(role), 400, "INVALID_ROLE", "Rol inválido");
+  createKey(label: string, role: Role, grants: KeyGrants = {}, options: KeyOptions = {}) {
+    invariant(ROLES.includes(role), 400, "INVALID_ROLE", "Rol inválido");
     const id = randomUUID(), token = `modai_${randomBytes(24).toString("base64url")}`, createdAt = new Date().toISOString();
-    this.db.connection.prepare(`INSERT INTO api_keys (id, label, token_hash, role, created_at, project_ids_json, organization_ids_json, package_scopes_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, label.trim() || "unnamed", sha256(token), role, createdAt, JSON.stringify(grants.projectIds ?? []), JSON.stringify(grants.organizationIds ?? []), JSON.stringify(grants.packageScopes ?? []));
-    return { id, label, role, token, createdAt, ...grants };
+    this.db.connection.prepare(`INSERT INTO api_keys (id, label, token_hash, role, created_at, project_ids_json, organization_ids_json, package_scopes_json, owner_user_id, inherit_grants) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, label.trim() || "unnamed", sha256(token), role, createdAt, JSON.stringify(grants.projectIds ?? []), JSON.stringify(grants.organizationIds ?? []), JSON.stringify(grants.packageScopes ?? []), options.ownerId ?? null, options.inherit ? 1 : 0);
+    return { ...this.getKey(id), token };
   }
 
-  updateKeyGrants(id: string, grants: KeyGrants): void {
-    const changed = this.db.connection.prepare("UPDATE api_keys SET project_ids_json = ?, organization_ids_json = ?, package_scopes_json = ? WHERE id = ? AND revoked_at IS NULL").run(JSON.stringify(grants.projectIds ?? []), JSON.stringify(grants.organizationIds ?? []), JSON.stringify(grants.packageScopes ?? []), id);
+  updateKeyGrants(id: string, grants: KeyGrants, options: KeyOptions = {}): void {
+    const current = this.getKey(id);
+    const changed = this.db.connection.prepare("UPDATE api_keys SET project_ids_json = ?, organization_ids_json = ?, package_scopes_json = ?, owner_user_id = ?, inherit_grants = ? WHERE id = ? AND revoked_at IS NULL")
+      .run(JSON.stringify(grants.projectIds ?? []), JSON.stringify(grants.organizationIds ?? []), JSON.stringify(grants.packageScopes ?? []), options.ownerId === undefined ? current.ownerId ?? null : options.ownerId, (options.inherit ?? current.inherit) ? 1 : 0, id);
     invariant(changed.changes, 404, "API_KEY_NOT_FOUND", "Clave no encontrada");
   }
 
-  listKeys(): unknown[] {
-    return (this.db.connection.prepare(`SELECT id, label, role, created_at AS createdAt, last_used_at AS lastUsedAt, revoked_at AS revokedAt,
-      project_ids_json AS projects, organization_ids_json AS organizations, package_scopes_json AS scopes FROM api_keys ORDER BY created_at DESC`).all() as Array<Record<string, unknown>>)
-      .map(({ projects, organizations, scopes, ...row }) => ({ ...row, projectIds: JSON.parse(projects as string), organizationIds: JSON.parse(organizations as string), packageScopes: JSON.parse(scopes as string) }));
+  private static readonly KEY_COLUMNS = `k.id, k.label, k.role, k.created_at AS createdAt, k.last_used_at AS lastUsedAt, k.revoked_at AS revokedAt,
+    k.project_ids_json AS projects, k.organization_ids_json AS organizations, k.package_scopes_json AS scopes,
+    k.owner_user_id AS ownerId, u.username AS ownerName, k.inherit_grants AS inherit`;
+  private static toKey({ projects, organizations, scopes, ownerId, ownerName, lastUsedAt, revokedAt, inherit, ...row }: Record<string, unknown>): KeyRecord {
+    return { ...(row as { id: string; label: string; role: Role; createdAt: string }), ...(lastUsedAt ? { lastUsedAt: lastUsedAt as string } : {}), ...(revokedAt ? { revokedAt: revokedAt as string } : {}),
+      ...(ownerId ? { ownerId: ownerId as string, ownerName: (ownerName as string | null) ?? "(eliminado)" } : {}), inherit: Boolean(inherit),
+      projectIds: JSON.parse(projects as string), organizationIds: JSON.parse(organizations as string), packageScopes: JSON.parse(scopes as string) };
+  }
+
+  getKey(id: string): KeyRecord {
+    const row = this.db.connection.prepare(`SELECT ${AuthService.KEY_COLUMNS} FROM api_keys k LEFT JOIN users u ON u.id = k.owner_user_id WHERE k.id = ?`).get(id) as Record<string, unknown> | undefined;
+    if (!row) throw new AppError(404, "API_KEY_NOT_FOUND", "Clave no encontrada");
+    return AuthService.toKey(row);
+  }
+
+  listKeys(ownerId?: string): KeyRecord[] {
+    return (this.db.connection.prepare(`SELECT ${AuthService.KEY_COLUMNS} FROM api_keys k LEFT JOIN users u ON u.id = k.owner_user_id ${ownerId ? "WHERE k.owner_user_id = ?" : ""} ORDER BY k.created_at DESC`).all(...(ownerId ? [ownerId] : [])) as Array<Record<string, unknown>>).map(AuthService.toKey);
+  }
+
+  /** Who may see and revoke a key: its owner, and whoever manages the owner (or, for keys without an owner, the key's grants). */
+  canManageKey(actor: Identity, key: KeyRecord): boolean {
+    const self = actor.kind === "user" ? actor.id : actor.ownerId;
+    if (key.ownerId && key.ownerId === self) return true;
+    if (actor.role !== "admin" && actor.role !== "org-admin") return false;
+    if (!key.ownerId) return this.canManageGrantee(actor, key);
+    const owner = this.db.connection.prepare("SELECT * FROM users WHERE id = ?").get(key.ownerId) as UserRow | undefined;
+    return owner ? this.canManageGrantee(actor, toUser(owner)) : actor.role === "admin";
   }
 
   revokeKey(id: string): void {
@@ -260,7 +518,11 @@ export class AuthService {
     const current = this.getUser(id);
     if (actor.kind === "user" && actor.id === id) throw new AppError(409, "SELF_DELETE", "No puedes eliminar tu propia cuenta");
     if (current.role === "admin" && !current.disabledAt && this.activeAdminCount() <= 1) throw new AppError(409, "LAST_ADMIN", "Debe quedar al menos un administrador activo");
-    this.db.connection.prepare("DELETE FROM users WHERE id = ?").run(id);
+    this.db.connection.transaction(() => {
+      // Keys are revoked, not deleted: their audit trail keeps pointing at something.
+      this.db.connection.prepare("UPDATE api_keys SET revoked_at = ? WHERE owner_user_id = ? AND revoked_at IS NULL").run(new Date().toISOString(), id);
+      this.db.connection.prepare("DELETE FROM users WHERE id = ?").run(id);
+    })();
     return current;
   }
 

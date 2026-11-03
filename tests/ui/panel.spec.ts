@@ -33,14 +33,21 @@ test("crea un componente en el editor: archivos, carpetas, validación y publica
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "Crear paquete" })).toBeVisible();
 
-  // Invalid names are rejected by the browser's validation (patterns must compile with the v flag).
+  // Step by step: type → identity → files → dependencies → review.
+  const next = () => dialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(dialog.getByRole("button", { name: /Tipo/ })).toHaveAttribute("aria-current", "step");
+  await next();
+
+  // Invalid names are rejected by the browser's validation (patterns must compile with the v flag) and block the step.
   await dialog.getByLabel("Nombre", { exact: true }).fill("Sin Scope");
-  await dialog.getByRole("button", { name: "Publicar" }).click();
+  await next();
   await expect(dialog.locator(".form-error")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Identidad/ })).toHaveAttribute("aria-current", "step");
 
   await dialog.getByLabel("Nombre", { exact: true }).fill("@ui/users-module");
   await dialog.getByLabel("Descripción").fill("Módulo de usuarios para NestJS con controlador, servicio y DTOs.");
   await dialog.getByLabel("Nombre del componente").fill("users");
+  await next();
   await expect(dialog.locator("#fileList")).toContainText("README.md");
 
   // A nested file, then rename and delete whole folders.
@@ -63,7 +70,14 @@ test("crea un componente en el editor: archivos, carpetas, validación y publica
   await dialog.getByRole("button", { name: "Eliminar carpeta" }).click();
   await expect(dialog.locator(".folder-row", { hasText: "component/tmp/" })).toHaveCount(0);
 
-  await dialog.getByRole("button", { name: "Validar" }).click();
+  await next();
+  await dialog.getByRole("button", { name: "Añadir dependencia" }).click();
+  await dialog.locator("[data-dep-name]").fill("@ui/users-module");
+  await next();
+  await expect(dialog.locator(".form-error")).toContainText("sí mismo");
+  await dialog.getByRole("button", { name: /Quitar/ }).click();
+  await next();
+  // Arriving at the review validates automatically.
   await expect(dialog.locator("#validation")).toContainText("Calidad estructural");
   await dialog.getByRole("button", { name: "Publicar" }).click();
 
@@ -82,7 +96,11 @@ test("publica una nueva versión desde el detalle conservando manifiesto y archi
   await dialog.getByRole("button", { name: "Editar y publicar nueva versión" }).click();
   await expect(dialog.getByLabel("Versión")).toHaveValue("0.1.1");
   await expect(dialog.getByLabel("Nombre", { exact: true })).toHaveAttribute("readonly", "");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
   await expect(dialog.locator("#fileList")).toContainText("hash.ts");
+  // The stepper jumps straight to the review once the previous steps are valid.
+  await dialog.getByRole("button", { name: /Revisión/ }).click();
+  await expect(dialog.locator("#validation")).toContainText("Calidad estructural");
   await dialog.getByRole("button", { name: "Publicar" }).click();
   await expect(dialog.getByText("Versión 0.1.1", { exact: false }).first()).toBeVisible();
   await dialog.getByRole("tab", { name: /Versiones/ }).click();
@@ -130,8 +148,8 @@ test("el catálogo pagina en el servidor y filtra por tipo y texto", async ({ pa
 
 test("Resumen, Agentes, Ejecuciones y Conectar no descargan el catálogo completo", async ({ page, request }) => {
   const published = await request.post("/api/v1/packages", { headers: auth, data: {
-    manifest: { schemaVersion: 1, name: "@ui/reviewer", version: "1.0.0", type: "agent", description: "Agente de revisión usado por las pruebas del panel",
-      agent: { instructions: "Revisa el código con evidencia.", skills: [], capabilities: [], memory: { read: ["project"], write: false } } },
+    manifest: { apiVersion: "modai.dev/v1", kind: "Package", metadata: { name: "@ui/reviewer", version: "1.0.0", description: "Agente de revisión usado por las pruebas del panel" },
+      spec: { category: "agent", contributes: { agents: [{ name: "reviewer", instructions: "Revisa el código con evidencia.", skills: [], capabilities: [], memory: { read: ["project"], write: false } }] } } },
     files: [],
   } });
   expect(published.status(), await published.text()).toBe(201);

@@ -4,7 +4,7 @@ import { post } from "../lib/api.js";
 import { openDialog, closeDialog, bindForm, toast, skeletonCards, emptyState, errorState, codeBlock, debounce, setBusy, toastError } from "../lib/ui.js";
 import { store, can, describeManifest } from "../state.js";
 
-/** One entry per agent: legacy packages of type agent and v1 packages contributing spec.contributes.agents. */
+/** One entry per agent contributed by a package (spec.contributes.agents). */
 function collectAgents(packages) {
   const agents = [];
   for (const item of packages) {
@@ -16,8 +16,8 @@ function collectAgents(packages) {
 
 function agentCard({ item, info, agent, key }) {
   return html`<button type="button" class="card" data-action="open" data-key="${key}">
-    <span class="card-top"><span class="card-icon accent">${icon("bot")}</span><span class="card-badges"><span class="badge">${info.format === "v1" ? "v1" : "agent"}</span></span></span>
-    <span class="card-title">${info.format === "v1" && agent.name !== item.name ? agent.name : item.name}</span>
+    <span class="card-top"><span class="card-icon accent">${icon("bot")}</span><span class="card-badges"><span class="badge">agent</span></span></span>
+    <span class="card-title">${agent.name && agent.name !== item.name ? agent.name : item.name}</span>
     <span class="card-text">${item.description}</span>
     <span class="card-meta"><span>${item.name}@${item.version}</span><span>${(agent.capabilities || []).length} capacidades</span><span>${(agent.skills || []).length} skills</span></span>
   </button>`;
@@ -93,10 +93,21 @@ export default {
   label: "Agentes",
   icon: "bot",
   title: "Agentes",
-  subtitle: "Combinan instrucciones, skills, herramientas y una política de memoria.",
+  subtitle: "Perfiles listos para usar: instrucciones, skills, herramientas y memoria empaquetados juntos.",
   async render(root, { navigate, isCurrent }) {
     mount(root, html`
-      <div class="callout tone-info">${icon("info")}<span>Activa un agente en tu proyecto con la CLI o envía una tarea a un worker autorizado desde aquí.</span></div>
+      <details class="panel explainer">
+        <summary>${icon("info")}<b>¿Qué es un agente y para qué sirve?</b></summary>
+        <div class="panel-body stack">
+          <p>Un agente es un paquete que junta todo lo que un asistente de IA necesita para un rol concreto (por ejemplo «revisor de backend NestJS»): sus <b>instrucciones</b>, las <b>skills</b> y <b>herramientas</b> que puede usar y cómo maneja la <b>memoria</b> del proyecto. Se publica y versiona como cualquier paquete.</p>
+          <p>Se usa de dos formas:</p>
+          <ol>
+            <li><b>En tu editor</b> (lo más común): <code>modai agent activate @equipo/agente</code> instala esas piezas en el proyecto y tu asistente (Claude Code, Cursor, etc.) trabaja con ellas mediante MCP.</li>
+            <li><b>En segundo plano</b>: «Enviar tarea» deja un encargo en la cola de un proyecto; un <i>worker</i> (<code>modai agent worker</code>, con un modelo local) lo toma, lo ejecuta con ese agente y deja el resultado en <a href="#/runs">Ejecuciones</a>. Solo sirve si tienes un worker corriendo.</li>
+          </ol>
+          <p class="muted">Si no publicaste paquetes con agentes, esta sección queda vacía: no es obligatoria.</p>
+        </div>
+      </details>
       <div class="toolbar"><div class="search-field">${icon("search")}<label class="sr-only" for="agentSearch">Buscar agentes</label><input id="agentSearch" type="search" placeholder="Buscar agentes…"></div></div>
       <div id="agentResults">${skeletonCards(3)}</div>`);
     let agents = [], projects = [];

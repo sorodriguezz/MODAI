@@ -2,18 +2,18 @@
 
 ## Estado
 
-Aceptado e implementado en 0.6.0. Reemplaza el modelo de tipos cerrados de ADR-001 y convierte a ADR-003 (agentes compuestos por el servidor) en un modo opcional.
+Aceptado. Sustituye el modelo de tipos cerrados de ADR-001 y convierte a ADR-003 (agentes compuestos por el servidor) en un modo opcional.
 
 ## Contexto
 
-Hasta 0.5 MODAI funcionaba, pero cada capacidad nueva exigía tocar el Core:
+Una plataforma de paquetes no puede exigir cambios en el Core por cada capacidad nueva. Por eso:
 
-- `type` era un enum cerrado de 11 valores; la calidad, el scaffold y la composición de agentes hacían `switch` por tipo. Un paquete de *testing*, *frontend* o *IoT* no tenía lugar sin modificar código.
-- Los destinos de instalación estaban codificados para agentes concretos (`.opencode/agents/`, `AGENTS.md`, `CLAUDE.md`). Soportar otro agente obligaba a cambiar el Core.
-- No existían contratos de capacidades: un paquete solo podía depender de otro paquete por nombre, nunca de "algo que automatice un navegador".
-- El resolvedor vivía únicamente en el servidor: sin la instancia central (la Raspberry) no se podía instalar nada.
-- El lock guardaba el `artifactId` del servidor, no un hash de contenido: no era reproducible entre registries.
-- Un paquete no podía traer su propia herramienta ejecutable; dependía de un archivo de bindings del operador.
+- La categoría de un paquete es informativa: la calidad, el empaquetado y la composición de agentes no hacen `switch` por tipo, así que un paquete de *testing*, *frontend* o *IoT* encaja sin modificar código.
+- Los destinos de instalación no están codificados para agentes concretos: soportar otro agente es publicar un adaptador.
+- Los paquetes dependen de contratos de capacidades ("algo que automatice un navegador"), no solo de otros paquetes por nombre.
+- El resolvedor vive en el Core, no en el servidor: sin la instancia central también se puede instalar.
+- El lock guarda un hash de contenido, no un identificador del servidor: es reproducible entre registries.
+- Un paquete puede traer su propia herramienta ejecutable, sujeta a permisos concedidos por el equipo.
 
 ## Decisión
 
@@ -35,12 +35,12 @@ Las decisiones concretas:
 
 1. **Especificación de paquetes v1** (`apiVersion: modai.dev/v1`, [especificación](../spec/PACKAGE-SPEC-v1.md)). `category` es informativa; el comportamiento depende de `contributes` (skills, rules, knowledge, tools, mcpServers, agents, files) y de los contratos de capacidades.
 2. **Contratos de capacidades.** `@testing/regression` requiere `browser.automation@^1`; `@testing/playwright` la proporciona. Mañana otro paquete puede proporcionarla sin cambiar ni el Core ni `@testing/regression`. Las herramientas declaran `implements` para que el agente las descubra por contrato.
-3. **Registries intercambiables.** `LocalRegistry` (carpeta), `HttpRegistry` (servidor MODAI, compatible con 0.5) y dependencias `file:`. Un paquete se sirve completo desde el primer registry que lo conoce (sin mezclar versiones: evita *dependency confusion*). La Raspberry pasa a ser un registry privado opcional, no un requisito.
+3. **Registries intercambiables.** `LocalRegistry` (carpeta), `HttpRegistry` (servidor MODAI) y dependencias `file:`. Un paquete se sirve completo desde el primer registry que lo conoce (sin mezclar versiones: evita *dependency confusion*). La Raspberry pasa a ser un registry privado opcional, no un requisito.
 4. **`modai.yaml` + `modai.lock`** en la raíz del proyecto. El lock es determinista (sin marcas de tiempo) y guarda `integrity` (`sha256` del manifiesto publicado y de cada archivo), fuente, firmante, capacidades resueltas y cada archivo/bloque/entrada JSON administrado con su hash.
 5. **Adaptadores declarativos.** `agent-skills`, `agents-md`, `claude-code` y `mcp` vienen integrados como datos; `@adapters/cursor` y `@adapters/opencode` son paquetes de ejemplo. Un adaptador solo describe destinos con plantillas (`{skill}`, `{package}`, `{rule}`): nunca ejecuta código.
 6. **Gateway MCP único** (`modai-mcp`). Expone conocimiento por fragmentos, memoria, skills como recursos y las herramientas autorizadas de los paquetes. Es la frontera donde se aplican los permisos.
 7. **Instalar no es autorizar.** Las herramientas y servidores MCP de un paquete se habilitan solo con `modai permissions grant`, por equipo, ligado a la `integrity` exacta. Si el contenido cambia, la autorización caduca. Las autorizaciones nunca viajan con el repositorio.
-8. **Compatibilidad.** Los manifiestos `schemaVersion: 1` se normalizan a v1 al leerse (las skills legacy se convierten en contribuciones de skill). Los proyectos 0.5 siguen funcionando y se convierten con `modai migrate`. La composición de agentes por el servidor (ADR-003) continúa disponible para proyectos `--legacy`.
+8. **Agentes como contribuciones.** Los agentes son contribuciones (`contributes.agents`) cuyas `capabilities` nombran herramientas integradas de MODAI (`modai_search_knowledge`, `modai_recall`, `modai_remember`) o servidores MCP de `contributes.mcpServers`; la composición de agentes por el servidor (ADR-003) opera sobre proyectos `modai.yaml`.
 
 ## Reglas que no se rompen
 
@@ -62,15 +62,3 @@ Está automatizado en [`tests/acceptance.test.ts`](../../tests/acceptance.test.t
 
 - Frontend, ciberseguridad, regresión, bases de datos, DevOps o IoT se incorporan como paquetes y contratos, no como cambios del Core.
 - El servidor central conserva catálogo, memoria compartida, panel, agentes y workers, y usa el mismo resolvedor y validador del Core.
-- Coste aceptado: dos formatos de proyecto convivieron durante la transición. Desde 0.8.0 solo se opera `modai.yaml`; `modai migrate` convierte los proyectos 0.5 y los agentes del servidor se instalan como dependencias v1.
-
-## Plan de migración
-
-| Fase | Estado |
-|---|---|
-| 01 Especificación v1 de paquetes, proyecto y lock | Hecho (`packages/contracts/src/spec-v1.ts`, `docs/spec/PACKAGE-SPEC-v1.md`) |
-| 02 Core separado del servidor | Hecho (`packages/core`; el servidor lo consume) |
-| 03 Adaptadores independientes (Agent Skills, AGENTS.md, Claude Code, MCP; Cursor y OpenCode como paquetes) | Hecho |
-| 04 Conocimiento y memoria como capacidades (búsqueda local con procedencia, memoria por ámbito) | Hecho; búsqueda híbrida con embeddings locales en el Core: pendiente |
-| 05 Paquetes de referencia (arquitectura, frontend, regresión ejecutable) | Hecho (`examples/packages`) |
-| 06 Agentes v1 compuestos localmente (sin servidor) a partir de `contributes.agents` | Pendiente |

@@ -30,7 +30,7 @@ function editor(documentRecord, onSaved) {
 }
 
 function viewer(documentRecord, onChange) {
-  const editable = !documentRecord.packageVersion && can.publish();
+  const editable = !documentRecord.packageVersion && can.writeKnowledge();
   const body = openDialog({
     title: documentRecord.title,
     description: documentRecord.packageName ? "Del paquete " + documentRecord.packageName + (documentRecord.packageVersion ? "@" + documentRecord.packageVersion : "") : "Documento manual",
@@ -63,7 +63,7 @@ export default {
   title: "Conocimiento",
   subtitle: "Guías de tus paquetes y lo que tu equipo aprende, disponibles para cualquier agente.",
   async render(root, { actions, isCurrent }) {
-    if (can.publish()) mount(actions, html`<button class="btn primary" data-action="new">${icon("plus")}Nuevo documento</button>`);
+    if (can.writeKnowledge()) mount(actions, html`<button class="btn primary" data-action="new">${icon("plus")}Nuevo documento</button>`);
     mount(root, html`
       <div class="toolbar">
         <div class="search-field">${icon("search")}<label class="sr-only" for="docSearch">Buscar conocimiento</label><input id="docSearch" type="search" placeholder="Buscar en títulos, contenido y etiquetas…"></div>
@@ -89,7 +89,7 @@ export default {
               <td class="hide-sm">${d.packageName ? html`<span class="badge">${d.packageName}</span>` : html`<span class="badge tone-info">Manual</span>`}</td>
               <td>${timeTag(d.updatedAt || d.createdAt)}</td></tr>`)}</tbody></table></div>`
         : documents.length ? emptyState({ iconName: "search", title: "Sin coincidencias", text: "Prueba con otras palabras." })
-          : emptyState({ iconName: "book", title: "Aún no hay conocimiento", text: "Los paquetes con conocimiento lo añaden al publicarse. También puedes crear documentos manuales.", action: can.publish() ? html`<button class="btn primary" data-action="new">${icon("plus")}Nuevo documento</button>` : "" }));
+          : emptyState({ iconName: "book", title: "Aún no hay conocimiento", text: "Los paquetes con conocimiento lo añaden al publicarse. También puedes crear documentos manuales.", action: can.writeKnowledge() ? html`<button class="btn primary" data-action="new">${icon("plus")}Nuevo documento</button>` : "" }));
     };
     const load = async (force) => {
       try {

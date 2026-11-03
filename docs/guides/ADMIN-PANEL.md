@@ -47,7 +47,10 @@ Los usuarios usan los **mismos roles y permisos que las API keys**; todas las co
 | `reader` · Lectura | Consultar catálogo, conocimiento, agentes y la memoria y ejecuciones de sus proyectos. |
 | `publisher` · Publicación | Lo anterior y además publicar paquetes en sus namespaces, crear y editar conocimiento, crear proyectos, guardar memoria y enviar o cancelar tareas. |
 | `worker` · Worker | Pensado para workers: reclamar y completar ejecuciones y escribir memoria en sus proyectos. |
-| `admin` · Administración | Todo: usuarios, API keys, publicadores, auditoría, backups y retención. Accede a todos los proyectos. |
+| `org-admin` · Administración de organización | Gestiona usuarios, API keys, proyectos y namespaces **solo de sus organizaciones**, y publica en los namespaces que les pertenecen. No ve auditoría, backups ni publicadores, y no puede crear organizaciones ni dar el rol `admin`. |
+| `admin` · Administración global | Todo: organizaciones, usuarios, API keys, publicadores, auditoría, backups y retención. Accede a todos los proyectos. |
+
+Los accesos siguen la jerarquía **organización → proyectos → namespaces**. Al crear o editar un usuario o una API key, el panel lo pide paso a paso (Cuenta, Rol, Organizaciones, Proyectos, Namespaces, Revisión) y solo ofrece los proyectos y namespaces de las organizaciones elegidas. Las organizaciones y namespaces se gestionan en **Administración → Organizaciones**: un namespace es *interno* (todos ven sus paquetes) o *restringido* (solo quien lo tenga asignado).
 
 Cada usuario tiene además:
 
@@ -62,12 +65,21 @@ Protecciones:
 - Siempre debe quedar **al menos un administrador activo**: no se puede eliminar, desactivar ni degradar al último.
 - Nadie puede eliminarse, desactivarse ni cambiar su propio rol.
 
-El panel oculta las secciones y acciones que tu rol no permite (por ejemplo, **Usuarios**, **Accesos** y **Auditoría** solo aparecen para `admin`), pero la autorización real siempre la decide el servidor.
+El panel oculta las secciones y acciones que tu rol no permite (por ejemplo, **Organizaciones**, **Usuarios** y **Accesos** aparecen para `admin` y `org-admin`, y **Auditoría** solo para `admin`). Lo calcula el servidor (`permissions` en `/api/v1/auth/status`), y la autorización real siempre la decide el servidor.
+
+**Auditoría → Depurar auditoría** muestra cuántos eventos se borrarán antes de confirmar (0 días vacía la auditoría). Las memorias antiguas se depuran por separado desde **Memorias → Depurar antiguas**.
 
 ## 4. API keys y su relación con los usuarios
 
-- Una cuenta del panel **no sirve** para la CLI ni para MCP. Para conectar un equipo, abre **Conectar un cliente**, elige el proyecto y pulsa **Crear API key para este proyecto**: el panel muestra el token una sola vez y los comandos (`modai server connect`, `modai init --project …`).
-- Las API keys se crean, ajustan y revocan en **Accesos**. Su rol no cambia; para otro rol, revoca y crea una nueva.
+Una API key es la forma en que **un usuario** conecta la CLI, su editor (MCP) o un worker. No es una identidad aparte:
+
+- **Toda API key pertenece a un usuario** y actúa en su nombre. Lo que crea (por ejemplo, proyectos) queda a nombre de esa persona.
+- **Nunca tiene más permisos que su dueño.** Su rol es el del usuario o uno menor (una cuenta que publica también puede tener keys de `worker`). Sus accesos son *los mismos que la cuenta* (siguen sus cambios) o *una parte* (organizaciones, proyectos y namespaces dentro de los del usuario).
+- **Se evalúa en cada petición:** si al usuario le quitan un proyecto, sus keys también lo pierden; si su rol baja por debajo del de una key, esa key deja de funcionar; si la cuenta se desactiva, todas sus keys se apagan, y si se elimina quedan revocadas.
+- **Cada persona crea las suyas** en **Mis API keys** (también desde el menú de su cuenta) o en **Conectar un cliente**, que pregunta qué quieres hacer (usar MODAI en el editor, publicar paquetes, ejecutar un worker o explorar), crea tu key con el rol y alcance justos, muestra los comandos y la configuración MCP de tu editor (Claude Code, Cursor, VS Code) y **verifica en vivo** que el equipo se conectó. Si tu rol no alcanza (por ejemplo, un worker con cuenta de lectura), genera el mensaje para pedir el cambio.
+- Las keys solo se crean desde el panel con tu sesión: una key no puede crear otras. Desde la CLI, `modai server keys` las lista y `modai server revoke-key <id>` revoca una (por ejemplo, la de un equipo perdido).
+- **Accesos** muestra a quien administra las keys de las personas que gestiona, con su dueño; permite revocarlas, ajustar sus accesos o crear una a nombre de alguien. Para un worker o CI, crea un usuario para ese fin (por ejemplo `ci-bot`) y genera su key. En **Usuarios**, el botón *API keys* de cada persona filtra las suyas.
+- Las keys creadas sin dueño (con `MODAI_API_TOKEN` y `modai admin create-key --service`, para automatizar antes de que existan usuarios) aparecen como *Sin dueño*; desde Accesos se les puede asignar uno.
 - Si en una petición hay cabecera `Authorization: Bearer`, el servidor la usa y **ignora la cookie**. Un Bearer inválido no recurre a la sesión.
 - `MODAI_API_TOKEN` sigue siendo una credencial `admin` completa para la API. Úsala solo para instalación, automatización y recuperación; no la compartas.
 

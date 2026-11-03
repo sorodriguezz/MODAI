@@ -79,7 +79,7 @@ modai server connect https://modai.tu-dominio.cl
 Antes de publicar en npm, distribuye el único archivo generado con `npm run pack:client`:
 
 ```sh
-npm install -g ./sorodriguez-modai-0.5.0.tgz
+npm install -g ./sorodriguez-modai-VERSION.tgz
 ```
 
 Desde la carpeta del proyecto:
@@ -91,7 +91,7 @@ modai status
 modai agent list
 ```
 
-Si el repositorio ya contiene `modai.yaml` y `modai.lock`, usa `modai sync` en lugar de inicializar de nuevo. Conserva ambos archivos en Git para que todos los equipos compartan proyecto y versiones. Si contiene el formato antiguo (`.modai/manifest.yaml`), conviértelo una vez con `modai migrate`. Antes de empezar, `modai server ping` confirma que el servidor responde y que tu API key es válida. Los permisos para escribir instrucciones o ejecutar herramientas se aprueban localmente en cada equipo. Si un paquete necesita modificar instrucciones, usa `modai sync --allow project.instructions` después de revisar ese permiso.
+Si el repositorio ya contiene `modai.yaml` y `modai.lock`, usa `modai sync` en lugar de inicializar de nuevo. Conserva ambos archivos en Git para que todos los equipos compartan proyecto y versiones. Antes de empezar, `modai server ping` confirma que el servidor responde y que tu API key es válida. Los permisos para escribir instrucciones o ejecutar herramientas se aprueban localmente en cada equipo. Si un paquete necesita modificar instrucciones, usa `modai sync --allow project.instructions` después de revisar ese permiso.
 
 Con el catálogo de ejemplos cargado, activa un agente reutilizable:
 

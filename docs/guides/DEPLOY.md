@@ -48,7 +48,7 @@ Con Node en la Pi, `npm run docker:pi` hace lo mismo.
 **Sin compilar en la Pi.** El workflow `.github/workflows/docker-image.yml` publica `ghcr.io/sorodriguezz/modai` para amd64 y arm64 al crear un tag `vX.Y.Z`, o al lanzarlo manualmente desde Actions. Después, en la Pi:
 
 ```sh
-echo 'MODAI_IMAGE=ghcr.io/sorodriguezz/modai:0.6.0' >> deploy/.env
+echo 'MODAI_IMAGE=ghcr.io/sorodriguezz/modai:<versión>' >> deploy/.env
 docker compose -f deploy/compose.yaml -f deploy/compose.raspberry.yaml pull server
 docker compose -f deploy/compose.yaml -f deploy/compose.raspberry.yaml up -d --no-build
 ```

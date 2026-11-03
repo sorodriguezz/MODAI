@@ -102,7 +102,6 @@ Añadir @equipo/harness en ~/code:
 PROJECT      RESULT       DETAIL
 api          pendiente    añadirá @equipo/harness
 billing      sin cambios  ya está instalado
-legacy-app   omitido      formato 0.5: conviértelo con modai migrate
 web          pendiente    añadirá @equipo/harness
 
 $ modai workspace add @equipo/harness --root ~/code --allow project.instructions
@@ -182,7 +181,7 @@ Los comandos del día a día del proyecto van sueltos; el resto está agrupado p
 
 | Grupo | Comandos |
 |---|---|
-| Proyecto | `init`, `add`, `remove`, `update [--keep-mine]`, `outdated`, `sync [--frozen]`, `status`, `list [tipo] [--available]` (`ls`), `override`, `migrate` |
+| Proyecto | `init`, `add`, `remove`, `update [--keep-mine]`, `outdated`, `sync [--frozen]`, `status`, `list [tipo] [--available]` (`ls`), `override` |
 | Muchos repositorios | `workspace list/add/remove/update/sync` (`ws`) |
 | Lo que instalan los paquetes | `component create/list`, `harness init/audit`, `adapter list/add/remove`, `capability list/tools/run/providers/use`, `permissions list/grant/revoke/trust/signatures` |
 | Contexto y memoria | `context search/show`, `memory add/search/list/update/remove` |
@@ -190,9 +189,7 @@ Los comandos del día a día del proyecto van sueltos; el resto está agrupado p
 | Servidor | `server connect/ping/whoami/logout`, `project list/create/delete`, `agent list/compose/activate/deactivate/run/submit/runs/worker`, `admin …` |
 | Este equipo | `client doctor/setup/benchmark/embed`, `upgrade [--check] [--tag next]` |
 
-`modai <comando> --help` muestra las opciones de cada uno. Los nombres anteriores a 0.9 (`modai connect`, `modai remember`, `modai publish`…) siguen funcionando y avisan de su nuevo nombre. Todas las salidas son tablas legibles; añade `--json` a cualquier comando para usarlo en scripts.
-
-Los proyectos del formato 0.5 (`.modai/manifest.yaml`) se convierten una vez con `modai migrate`.
+`modai <comando> --help` muestra las opciones de cada uno. Todas las salidas son tablas legibles; añade `--json` a cualquier comando para usarlo en scripts.
 
 ## Actualizar
 

@@ -1,12 +1,17 @@
-schemaVersion: 1
-name: "@knowledge/hexagonal"
-version: 1.0.0
-type: knowledge
-description: Guía práctica de arquitectura hexagonal para servicios.
-files:
-  - source: content/SKILL.md
-    target: .agents/skills/hexagonal/SKILL.md
-knowledge:
-  - source: content/SKILL.md
-    title: Arquitectura hexagonal práctica
-    tags: [arquitectura, hexagonal, puertos, adaptadores]
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@knowledge/hexagonal"
+  version: 1.0.0
+  description: Guía práctica de arquitectura hexagonal para servicios.
+spec:
+  category: knowledge
+  contributes:
+    skills:
+      - name: hexagonal
+        path: content
+        files: [SKILL.md]
+    knowledge:
+      - path: content/SKILL.md
+        title: Arquitectura hexagonal práctica
+        tags: [arquitectura, hexagonal, puertos, adaptadores]

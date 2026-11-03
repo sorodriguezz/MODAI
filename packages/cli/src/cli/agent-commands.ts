@@ -1,40 +1,33 @@
-import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { Command } from "commander";
 import { ApiClient } from "@modai/sdk";
-import type { Activation, Permission, RunnerBinding, SignaturePolicy } from "@modai/contracts/types";
-import { permissionSchema, signaturePolicySchema } from "@modai/contracts/schemas";
+import type { Activation, SignaturePolicy } from "@modai/contracts/types";
+import { permissionV1Schema, type PermissionV1 } from "@modai/contracts/spec-v1";
+import { signaturePolicySchema } from "@modai/contracts/schemas";
 import { activateAgent, deactivateAgent, loadActivation, verifyBundle } from "../agent/activation.js";
 import { executeAgent, type RuntimeOptions } from "../agent/runtime.js";
 import { workOnce } from "../agent/worker.js";
 import { installationPolicy } from "../agent/trust.js";
 import { serverClient, serverProject } from "../agent/project.js";
-import { loadClientConfig, readYaml } from "./config.js";
+import { loadClientConfig } from "./config.js";
 import { effectiveConnection } from "./connection.js";
 import type { Print } from "./output.js";
 
 export const commaList = (value: string, previous: string[] = []) => [...previous, ...value.split(",").map(item => item.trim()).filter(Boolean)];
 function packageSpec(spec: string) { const i = spec.lastIndexOf("@"); return i > spec.indexOf("/") ? { name: spec.slice(0, i), range: spec.slice(i + 1) } : { name: spec, range: "*" }; }
-interface Options { model?: string; url?: string; maxSteps?: string; bindings?: string; allowTool?: string[]; allowMcp?: string[]; allowEnv?: string[] }
+interface Options { model?: string; url?: string; maxSteps?: string; allowMcp?: string[]; allowEnv?: string[] }
 
 export function runtimeOptions(options: Options, activation?: Activation): RuntimeOptions {
-  let bindings: Record<string, RunnerBinding> = {};
-  if (options.bindings) {
-    bindings = readYaml<Record<string, RunnerBinding>>(resolve(options.bindings));
-    for (const [name, binding] of Object.entries(bindings)) {
-      if (!/^[a-z][a-z0-9_-]{0,63}$/.test(name) || !binding || typeof binding.command !== "string" || !Array.isArray(binding.args) || !binding.args.every(arg => typeof arg === "string") || (binding.envKeys && (!Array.isArray(binding.envKeys) || !binding.envKeys.every(key => typeof key === "string")))) throw new Error("Archivo de bindings inválido");
-    }
-  }
   const maxSteps = options.maxSteps === undefined ? undefined : Number(options.maxSteps);
   if (maxSteps !== undefined && (!Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 32)) throw new Error("max-steps debe estar entre 1 y 32");
-  return { cwd: process.cwd(), model: options.model, url: options.url, maxSteps, bindings,
-    allowedTools: options.allowTool ?? activation?.allowedTools ?? [], allowedMcp: options.allowMcp ?? activation?.allowedMcp ?? [], allowedEnv: options.allowEnv ?? activation?.allowedEnv ?? [] };
+  return { cwd: process.cwd(), model: options.model, url: options.url, maxSteps,
+    allowedMcp: options.allowMcp ?? activation?.allowedMcp ?? [], allowedEnv: options.allowEnv ?? activation?.allowedEnv ?? [] };
 }
 
 function executionOptions(command: Command): Command {
   return command.option("--model <model>", "Modelo local de Ollama").option("--url <url>", "Ollama en loopback")
-    .option("--max-steps <number>", "Máximo de pasos, de 1 a 32").option("--bindings <file>", "Mapa YAML de ejecutores locales")
-    .option("--allow-tool <names>", "Herramientas locales autorizadas", commaList).option("--allow-mcp <names>", "Procesos MCP autorizados", commaList)
+    .option("--max-steps <number>", "Máximo de pasos, de 1 a 32")
+    .option("--allow-mcp <names>", "Procesos MCP autorizados", commaList)
     .option("--allow-env <names>", "Variables que pueden recibir esos procesos", commaList);
 }
 
@@ -52,13 +45,13 @@ export function registerAgentCommands(program: Command, print: Print) {
   agent.command("activate").argument("<package>").description("Instala el agente en el proyecto y deja sus instrucciones en .modai/agent.md")
     .option("--adapter <adapter>", "files, agents-md o claude-md", "files")
     .option("--allow <permissions>", "Permisos de instalación autorizados", commaList)
-    .option("--allow-tool <names>", "Herramientas locales autorizadas", commaList).option("--allow-mcp <names>", "Procesos MCP autorizados", commaList).option("--allow-env <names>", "Variables autorizadas", commaList)
+    .option("--allow-mcp <names>", "Procesos MCP autorizados", commaList).option("--allow-env <names>", "Variables autorizadas", commaList)
     .action(async (spec: string, options) => {
       if (!["files", "agents-md", "claude-md"].includes(options.adapter)) throw new Error("Adaptador inválido: usa files, agents-md o claude-md");
       const target = serverProject(), item = packageSpec(spec);
       const activation = await activateAgent(serverClient(target), target.root, target.server, item.name, item.range, {
-        adapter: options.adapter, grants: (options.allow ?? []).map((value: string) => permissionSchema.parse(value)) as Permission[],
-        allowedTools: options.allowTool, allowedMcp: options.allowMcp, allowedEnv: options.allowEnv,
+        adapter: options.adapter, grants: (options.allow ?? []).map((value: string) => permissionV1Schema.parse(value)) as PermissionV1[],
+        allowedMcp: options.allowMcp, allowedEnv: options.allowEnv,
       });
       print({ agent: `${activation.bundle.agent.name}@${activation.bundle.agent.version}`, adapter: activation.adapter, instructions: ".modai/agent.md",
         tools: activation.bundle.capabilities.map(capability => capability.name), next: "Tu cliente MCP verá el agente en el servidor modai del proyecto (modai-mcp), o ejecútalo con: modai agent run \"<tarea>\"" });

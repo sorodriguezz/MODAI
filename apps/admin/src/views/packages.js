@@ -19,7 +19,7 @@ const permissionLabels = {
   "env.read": "Leer variables de entorno",
 };
 
-const filters = { q: "", type: "", category: "", format: "", status: "latest" };
+const filters = { q: "", type: "", category: "", status: "latest" };
 
 /** "What is it?" filter: contributions and kinds, independent of the free-form category. */
 const TYPES = {
@@ -86,7 +86,7 @@ function overviewPanel(item, info) {
     ${codeBlock("installCommand", installCommand(item, info), "Copiar")}
     ${info.contributes.components.length ? html`<p class="hint">Los componentes se copian al proyecto. Quien los instale puede modificarlos: <code>modai remove</code> conserva los archivos editados.</p>` : ""}
     <dl class="definition-grid">
-      <div><dt>Formato</dt><dd>${info.format === "v1" ? html`<code>${info.apiVersion}</code>` : "Manifiesto legado (schemaVersion 1)"}</dd></div>
+      <div><dt>Formato</dt><dd><code>${info.apiVersion}</code></dd></div>
       ${info.kind ? html`<div><dt>Tipo (kind)</dt><dd>${info.kind}</dd></div>` : ""}
       <div><dt>Categoría</dt><dd>${info.category}</dd></div>
       <div><dt>Publicado</dt><dd>${formatDate(item.publishedAt)}</dd></div>
@@ -95,10 +95,9 @@ function overviewPanel(item, info) {
       ${info.license ? html`<div><dt>Licencia</dt><dd>${info.license}</dd></div>` : ""}
       ${info.authors?.length ? html`<div><dt>Autoría</dt><dd>${info.authors.join(", ")}</dd></div>` : ""}
     </dl>
-    ${info.format === "v1" ? html`
-      <h4>Provee</h4>${capabilityList(info.provides, "No declara capacidades provistas.")}
-      <h4>Requiere</h4>${capabilityList(info.requires, "No requiere otras capacidades.")}
-      ${info.optional.length ? html`<h4>Opcionales</h4>${capabilityList(info.optional, "")}` : ""}` : ""}
+    <h4>Provee</h4>${capabilityList(info.provides, "No declara capacidades provistas.")}
+    <h4>Requiere</h4>${capabilityList(info.requires, "No requiere otras capacidades.")}
+    ${info.optional.length ? html`<h4>Opcionales</h4>${capabilityList(info.optional, "")}` : ""}
     <h4>Permisos solicitados</h4>
     ${info.permissions.length ? html`<ul class="chip-list">${info.permissions.map((permission) => html`<li class="chip warn" title="${permission}">${icon("shield", 14)}${permissionLabels[permission] || permission}</li>`)}</ul>` : html`<p class="muted small">No solicita permisos especiales.</p>`}
     <h4>Contribuciones</h4>${contributionsSummary(info)}
@@ -107,18 +106,19 @@ function overviewPanel(item, info) {
 }
 
 function versionsPanel(versions) {
+  const manage = can.managePackages(versions[0]?.name);
   return html`<div class="table-wrap"><table class="table">
-    <thead><tr><th scope="col">Versión</th><th scope="col">Estado</th><th scope="col" class="hide-sm">Publicada</th>${can.admin() ? html`<th scope="col"><span class="sr-only">Acciones</span></th>` : ""}</tr></thead>
+    <thead><tr><th scope="col">Versión</th><th scope="col">Estado</th><th scope="col" class="hide-sm">Publicada</th>${manage ? html`<th scope="col"><span class="sr-only">Acciones</span></th>` : ""}</tr></thead>
     <tbody>${versions.map((item) => html`<tr>
       <td><b>${item.version}</b>${item.deprecatedMessage ? html`<div class="muted small">${item.deprecatedMessage}</div>` : ""}</td>
       <td>${statusBadge(item.status)}</td>
       <td class="hide-sm">${timeTag(item.publishedAt)}</td>
-      ${can.admin() ? html`<td class="actions">
+      ${manage ? html`<td class="actions">
         ${item.status === "active" ? html`<button class="btn small ghost" data-action="deprecate" data-version="${item.version}">Deprecar</button>` : ""}
-        ${item.status !== "yanked" ? html`<button class="btn small ghost danger-text" data-action="yank" data-version="${item.version}">Retirar</button>` : html`<button class="btn small ghost danger-text" data-action="hardDelete" data-version="${item.version}">${icon("trash", 16)}Eliminar</button>`}
+        ${item.status !== "yanked" ? html`<button class="btn small ghost danger-text" data-action="yank" data-version="${item.version}">Retirar</button>` : can.deletePackages() ? html`<button class="btn small ghost danger-text" data-action="hardDelete" data-version="${item.version}">${icon("trash", 16)}Eliminar</button>` : ""}
       </td>` : ""}
     </tr>`)}</tbody></table></div>
-    ${can.admin() ? html`<p class="hint">Deprecar avisa a quien instale la versión. Retirar (yank) impide nuevas resoluciones. Solo una versión retirada puede eliminarse definitivamente.</p>` : ""}`;
+    ${manage ? html`<p class="hint">Deprecar avisa a quien instale la versión. Retirar (yank) impide nuevas resoluciones. Solo una versión retirada puede eliminarse definitivamente.</p>` : ""}`;
 }
 
 function qualityPanel(item) {
@@ -258,15 +258,13 @@ export default {
         <div class="search-field">${icon("search")}<label class="sr-only" for="packageSearch">Buscar paquetes</label><input id="packageSearch" type="search" placeholder="Buscar por nombre, descripción o capacidad…" value="${filters.q}"></div>
         <label class="sr-only" for="packageType">Tipo</label><select id="packageType"><option value="">Todos los tipos</option>${Object.entries(TYPES).map(([id, type]) => html`<option value="${id}">${type.label}</option>`)}</select>
         <label class="sr-only" for="packageCategory">Categoría</label><select id="packageCategory"><option value="">Todas las categorías</option></select>
-        <label class="sr-only" for="packageFormat">Formato</label><select id="packageFormat"><option value="">Todos los formatos</option><option value="v1">modai.dev/v1</option><option value="legacy">Legado</option></select>
         <label class="sr-only" for="packageStatus">Estado</label><select id="packageStatus"><option value="latest">Última versión activa</option><option value="all">Todas las versiones</option><option value="deprecated">Deprecadas</option><option value="yanked">Retiradas</option></select>
       </div>
       <p class="results-meta" id="packageMeta" aria-live="polite"></p>
       <div id="packageResults">${skeletonCards()}</div>`);
     const $type = root.querySelector("#packageType");
     $type.value = filters.type;
-    const $q = root.querySelector("#packageSearch"), $category = root.querySelector("#packageCategory"), $format = root.querySelector("#packageFormat"), $status = root.querySelector("#packageStatus");
-    $format.value = filters.format;
+    const $q = root.querySelector("#packageSearch"), $category = root.querySelector("#packageCategory"), $status = root.querySelector("#packageStatus");
     $status.value = filters.status;
     let page = 1, request = 0, items = [], total = 0;
     // The server filters and paginates: the browser only receives the page it shows.
@@ -274,11 +272,10 @@ export default {
       filters.q = $q.value.trim();
       filters.category = $category.value;
       filters.type = $type.value;
-      filters.format = $format.value;
       filters.status = $status.value;
       const token = ++request;
       const query = new URLSearchParams({ status: filters.status, limit: String(PAGE_SIZE), offset: String((page - 1) * PAGE_SIZE) });
-      for (const key of ["q", "type", "category", "format"]) if (filters[key]) query.set(key, filters[key]);
+      for (const key of ["q", "type", "category"]) if (filters[key]) query.set(key, filters[key]);
       let result;
       try {
         result = await get("/packages/catalog?" + query);
@@ -293,7 +290,7 @@ export default {
       const selected = $category.value;
       mount($category, html`<option value="">Todas las categorías</option>${result.categories.map((category) => html`<option value="${category}">${category}</option>`)}`);
       $category.value = result.categories.includes(selected) ? selected : "";
-      const filtered = Boolean(filters.q || filters.type || filters.category || filters.format || filters.status !== "latest");
+      const filtered = Boolean(filters.q || filters.type || filters.category || filters.status !== "latest");
       root.querySelector("#packageMeta").textContent = total + (total === 1 ? " paquete" : " paquetes") + (filters.status === "latest" ? " · última versión activa de cada uno" : "");
       mount(root.querySelector("#packageResults"), items.length
         ? html`<div class="card-grid">${items.map(card)}</div>${pager(page, pages)}`
@@ -303,7 +300,7 @@ export default {
     };
     const reload = () => { page = 1; return load(); };
     $q.addEventListener("input", debounce(reload, 250));
-    [$type, $category, $format, $status].forEach((select) => select.addEventListener("change", reload));
+    [$type, $category, $status].forEach((select) => select.addEventListener("change", reload));
     const published = async (record) => {
       store.invalidate("summary", "agents");
       await load();
@@ -319,7 +316,6 @@ export default {
         $q.value = "";
         $type.value = "";
         $category.value = "";
-        $format.value = "";
         $status.value = "latest";
         reload();
       },

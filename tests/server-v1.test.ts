@@ -49,46 +49,6 @@ test("el servidor central actúa como registry v1: valida contratos, resuelve ca
   assert.ok(existsSync(join(project, ".agents/skills/regression-testing/SKILL.md")));
 });
 
-test("modai migrate convierte un proyecto 0.5 sin reescribir archivos idénticos ni perder la memoria remota", async () => {
-  const { migrateV1 } = await import("../packages/cli/src/v1/commands.js");
-  const { ApiClient } = await import("@modai/sdk");
-  const { readFileSync, writeFileSync } = await import("node:fs");
-  const YAML = (await import("yaml")).default;
-  const server = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
-  process.env.MODAI_API_TOKEN = "v1-secret";
-  const api = new ApiClient(server, "v1-secret");
-  await api.createProject({ id: "legacy-project", name: "legacy" });
-  const project = join(root, "legacy");
-  mkdirSync(project);
-  const manifest = { schemaVersion: 1 as const, projectId: "legacy-project", server, packages: { "@skills/design-patterns": "^1.0.0" }, overrides: {} };
-  // What a 0.5 client left on disk: the package files at their targets plus manifest.yaml and lock.yaml.
-  const record = (await api.listPackages("@skills/design-patterns")).find(item => item.name === "@skills/design-patterns")!;
-  const artifact = await api.artifact(record.artifactId);
-  const legacyFiles = (record.manifest as { files: Array<{ source: string; target: string }> }).files;
-  const lockedFiles = [];
-  for (const rule of legacyFiles) {
-    const file = artifact.files.find(item => item.path === rule.source)!;
-    mkdirSync(dirname(join(project, rule.target)), { recursive: true });
-    writeFileSync(join(project, rule.target), Buffer.from(file.content, "base64"));
-    lockedFiles.push({ target: rule.target, sha256: file.sha256 });
-  }
-  const result = { lock: { schemaVersion: 1, generatedAt: new Date(0).toISOString(), packages: [{ name: record.name, version: record.version, artifactId: record.artifactId, files: lockedFiles }] } };
-  mkdirSync(join(project, ".modai"), { recursive: true });
-  writeFileSync(join(project, ".modai/manifest.yaml"), YAML.stringify(manifest));
-  writeFileSync(join(project, ".modai/lock.yaml"), YAML.stringify(result.lock));
-  const before = readFileSync(join(project, ".agents/skills/design-patterns/SKILL.md"), "utf8");
-  const output: unknown[] = [];
-  await migrateV1(project, {}, value => output.push(value));
-  try {
-    const migrated = loadV1Project(project);
-    assert.equal(migrated.file.context.projectId, "legacy-project");
-    assert.equal(migrated.file.context.memory, "remote");
-    assert.equal(migrated.lock.packages["@skills/design-patterns"].version, "1.0.0");
-    assert.equal(readFileSync(join(project, ".agents/skills/design-patterns/SKILL.md"), "utf8"), before);
-    assert.ok(existsSync(join(project, ".modai/legacy-0.5/manifest.yaml")));
-  } finally { delete process.env.MODAI_API_TOKEN; }
-});
-
 test("un proyecto vinculado informa lo que instala y el servidor lo muestra solo a quien tiene acceso", async () => {
   const { runSync } = await import("../packages/cli/src/v1/runtime.js");
   const { createProjectFile, saveProjectFile } = await import("@modai/core");
@@ -105,7 +65,6 @@ test("un proyecto vinculado informa lo que instala y el servidor lo muestra solo
   const usage = await app.inject({ method: "GET", url: "/api/v1/packages/usage?name=@skills/design-patterns", headers: { authorization: "Bearer v1-secret" } });
   const rows = usage.json().projects.map((item: { projectId: string; version: string; direct: boolean }) => [item.projectId, item.version, item.direct]);
   assert.deepEqual(rows.find((row: string[]) => row[0] === "usage-project"), ["usage-project", "1.0.0", true]);
-  assert.ok(rows.some((row: string[]) => row[0] === "legacy-project"), "un proyecto migrado también informa al sincronizar");
 
   const key = (await app.inject({ method: "POST", url: "/api/v1/admin/api-keys", headers: { authorization: "Bearer v1-secret" }, payload: { label: "outsider", role: "reader" } })).json().key.token;
   const hidden = await app.inject({ method: "GET", url: "/api/v1/packages/usage?name=@skills/design-patterns", headers: { authorization: `Bearer ${key}` } });

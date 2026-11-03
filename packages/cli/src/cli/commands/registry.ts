@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import semver from "semver";
 import { ApiClient } from "@modai/sdk";
 import { isV1Project, loadPackageSource, loadV1Project, validatePackage } from "@modai/core";
+import { resolveNamespace, skillSourceToPackage } from "./library.js";
+import type { PublishPackageInput } from "@modai/contracts/types";
 import { publishV1 } from "../../v1/commands.js";
 import { listV1 } from "../../v1/list.js";
 import { registryFromArgument, registrySource, requireV1Project, runSync, summarize } from "../../v1/runtime.js";
@@ -46,12 +48,21 @@ export function registerRegistryCommands(program: Command, print: Print): void {
 
   const pkg = group(program, "package", "Crear, validar, publicar y retirar paquetes");
   pkg.command("publish")
-    .description("Publica un paquete inmutable en un registry (servidor MODAI o carpeta local)")
-    .argument("[directory]", "Carpeta del paquete", ".")
+    .description("Publica un paquete inmutable en un registry (servidor MODAI o carpeta local). Acepta una carpeta o un archivo .skill")
+    .argument("[directory]", "Carpeta del paquete o archivo .skill", ".")
     .option("--key <private-key>", "Firma el paquete con una clave privada Ed25519")
     .option("--registry <name|url|path>", "Registry destino; por defecto el servidor conectado")
-    .action(async (directory: string, options: { key?: string; registry?: string }) => {
-      let input = loadPackageSource(resolve(directory));
+    .option("--namespace <@scope>", "Para .skill: namespace del paquete (por defecto, el único donde puedes publicar)")
+    .option("--skill-version <semver>", "Para .skill: versión (por defecto la del frontmatter o 1.0.0)")
+    .action(async (directory: string, options: { key?: string; registry?: string; namespace?: string; skillVersion?: string }) => {
+      let input: PublishPackageInput;
+      if (directory.toLowerCase().endsWith(".skill") && statSync(resolve(directory)).isFile()) {
+        if (!options.namespace && options.registry) throw new Error("Indica --namespace para publicar un .skill");
+        const namespace = await resolveNamespace(serverApi(), options.namespace);
+        const { skill, ...converted } = skillSourceToPackage(directory, { namespace, version: options.skillVersion });
+        input = converted;
+        print(`Skill «${skill.name}» convertida a ${namespace}/${skill.name} (${input.files.length} archivos).`);
+      } else input = loadPackageSource(resolve(directory));
       validatePackage(input.manifest, input.files);
       if (options.key) input = signPackage(input, readFileSync(resolve(options.key), "utf8"));
       if (options.registry) return publishV1(resolve(directory), registryFromArgument(options.registry, isV1Project(process.cwd()) ? loadV1Project() : undefined), input, print);

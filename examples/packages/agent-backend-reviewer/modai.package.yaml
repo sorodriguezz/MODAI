@@ -1,20 +1,24 @@
-schemaVersion: 1
-name: '@agents/backend-reviewer'
-version: 1.0.0
-type: agent
-description: Revisor backend componible con patrones de diseño y contexto persistente por proyecto.
-dependencies:
-  '@skills/design-patterns': '^1.0.0'
-  '@tools/context': '^1.0.0'
-agent:
-  instructions: |
-    Revisa el diseño backend dentro del alcance de la tarea. Consulta las decisiones pertinentes del proyecto y las skills disponibles.
-    Describe problemas verificables, su impacto y una corrección proporcionada. Explica las limitaciones cuando no tengas acceso al código.
-    No inventes archivos ni resultados de pruebas. No ejecutes cambios destructivos ni guardes secretos en memoria.
-  skills: ['@skills/design-patterns']
-  capabilities: [modai_search_knowledge, modai_recall]
-  memory:
-    read: [project]
-    write: false
-  runtime:
-    provider: ollama
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@agents/backend-reviewer"
+  version: 1.0.0
+  description: Revisor backend componible con patrones de diseño y contexto persistente por proyecto.
+spec:
+  category: agent
+  dependencies:
+    "@skills/design-patterns": ^1.0.0
+  contributes:
+    agents:
+      - name: backend-reviewer
+        instructions: |
+          Revisa el diseño backend dentro del alcance de la tarea. Consulta las decisiones pertinentes del proyecto y las skills disponibles.
+          Describe problemas verificables, su impacto y una corrección proporcionada. Explica las limitaciones cuando no tengas acceso al código.
+          No inventes archivos ni resultados de pruebas. No ejecutes cambios destructivos ni guardes secretos en memoria.
+        skills: ["@skills/design-patterns"]
+        capabilities: [modai_search_knowledge, modai_recall]
+        memory:
+          read: [project]
+          write: false
+        runtime:
+          provider: ollama

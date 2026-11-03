@@ -4,14 +4,11 @@ import { join } from "node:path";
 import semver from "semver";
 import { Database } from "./database.js";
 import { AppError, invariant } from "@modai/contracts/errors";
-import { assertSafeRelativePath, requiredTargetPermission, sha256 } from "@modai/contracts/security";
-import { publicKeyFingerprint, signaturePayload, verifyEd25519 } from "@modai/contracts/security";
+import { publicKeyFingerprint, sha256, signaturePayload, verifyEd25519 } from "@modai/contracts/security";
 import { parseInput, publishSchema } from "@modai/contracts/schemas";
 import { analyzePackageQuality } from "@modai/contracts/package-quality";
 import { manifestIdentity, normalizeManifest, resolve as resolveGraph, validatePackage, type Candidate } from "@modai/core";
 import {
-  PACKAGE_TYPES,
-  isV1Manifest,
   type ArtifactFile,
   type PackageManifest,
   type PackageRecord,
@@ -22,7 +19,6 @@ import {
 } from "@modai/contracts/types";
 
 const PACKAGE_NAME = /^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/;
-const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
 interface PackageRow {
   name: string;
@@ -104,8 +100,8 @@ export class PackageService {
    * One page of the catalog for the panel: filtering happens here so the browser only receives
    * the page it shows. `type` filters by what a package contributes, independent of its category.
    */
-  catalog(options: { q?: string; type?: string; category?: string; format?: string; status?: string; limit?: number; offset?: number }): { items: Array<PackageRecord & { versions: number }>; total: number; categories: string[] } {
-    const all = this.list(undefined, undefined, true);
+  catalog(options: { q?: string; type?: string; category?: string; status?: string; limit?: number; offset?: number; visible?: (name: string) => boolean }): { items: Array<PackageRecord & { versions: number }>; total: number; categories: string[] } {
+    const all = this.list(undefined, undefined, true).filter(item => !options.visible || options.visible(item.name));
     const versions = new Map<string, number>();
     for (const item of all) versions.set(item.name, (versions.get(item.name) ?? 0) + 1);
     const status = options.status ?? "latest";
@@ -117,16 +113,15 @@ export class PackageService {
       list = [...latest.values()];
     } else list = status === "all" ? all : all.filter(item => item.status === status);
     const describe = (item: PackageRecord) => {
-      try { const manifest = normalizeManifest(item.manifest); return { manifest, format: isV1Manifest(item.manifest) ? "v1" : "legacy" }; } catch { return undefined; }
+      try { return { manifest: normalizeManifest(item.manifest) }; } catch { return undefined; }
     };
     const categories = [...new Set(list.map(item => describe(item)?.manifest.spec.category ?? item.type))].sort();
     const q = options.q?.trim().toLocaleLowerCase();
     const filtered = list.filter(item => {
       const info = describe(item);
-      if (!info) return !options.type && !options.category && !options.format && (!q || `${item.name} ${item.description}`.toLocaleLowerCase().includes(q));
+      if (!info) return !options.type && !options.category && (!q || `${item.name} ${item.description}`.toLocaleLowerCase().includes(q));
       const { spec, kind, metadata } = info.manifest;
       if (options.category && spec.category !== options.category) return false;
-      if (options.format && info.format !== options.format) return false;
       if (options.type && !CATALOG_TYPES[options.type]?.(info.manifest)) return false;
       if (!q) return true;
       return [item.name, item.description, spec.category, kind, ...spec.provides.map(capability => capability.capability), ...(metadata.keywords ?? [])].join(" ").toLocaleLowerCase().includes(q);
@@ -136,10 +131,11 @@ export class PackageService {
   }
 
   /** Counters and latest publications for the dashboard, without sending the catalog to the browser. */
-  summary(): { packages: number; versions: number; agents: number; recent: Array<{ name: string; version: string; category: string; publishedAt: string }> } {
-    const counts = this.db.connection.prepare("SELECT COUNT(*) AS versions, COUNT(DISTINCT CASE WHEN status = 'active' THEN name END) AS packages FROM packages").get() as { versions: number; packages: number };
-    const recent = this.db.connection.prepare("SELECT name, version, type, published_at AS publishedAt FROM packages WHERE status <> 'yanked' ORDER BY published_at DESC LIMIT 6").all() as Array<{ name: string; version: string; type: string; publishedAt: string }>;
-    return { ...counts, agents: this.catalog({ type: "agents", limit: 1 }).total, recent: recent.map(({ type, ...item }) => ({ ...item, category: type })) };
+  summary(visible: (name: string) => boolean = () => true): { packages: number; versions: number; agents: number; recent: Array<{ name: string; version: string; category: string; publishedAt: string }> } {
+    const rows = (this.db.connection.prepare("SELECT name, version, type, status, published_at AS publishedAt FROM packages ORDER BY published_at DESC").all() as Array<{ name: string; version: string; type: string; status: string; publishedAt: string }>).filter(row => visible(row.name));
+    const counts = { versions: rows.length, packages: new Set(rows.filter(row => row.status === "active").map(row => row.name)).size };
+    const recent = rows.filter(row => row.status !== "yanked").slice(0, 6);
+    return { ...counts, agents: this.catalog({ type: "agents", limit: 1, visible }).total, recent: recent.map(({ type, status, ...item }) => ({ ...item, category: type })) };
   }
 
   get(name: string, version?: string): PackageRecord {
@@ -160,9 +156,7 @@ export class PackageService {
 
   publish(input: PublishPackageInput): PackageRecord {
     parseInput(publishSchema, input);
-    // Legacy manifests keep their historical checks; v1 manifests use the shared Core validator.
-    if (isV1Manifest(input.manifest)) validatePackage(input.manifest, input.files);
-    else this.validateManifest(input.manifest as PackageManifest, input.files);
+    validatePackage(input.manifest, input.files);
     const normalized = normalizeManifest(input.manifest);
     const identity = manifestIdentity(input.manifest);
     invariant(this.signaturePolicy === "optional" || Boolean(input.signature), 400, "SIGNATURE_REQUIRED", "El servidor exige paquetes firmados");
@@ -270,6 +264,11 @@ export class PackageService {
     return resolution.packages.map(node => this.decorate(node.ref));
   }
 
+  /** Package that owns an artifact, so artifact downloads follow the package's visibility. */
+  artifactOwner(id: string): string | undefined {
+    return (this.db.connection.prepare("SELECT name FROM packages WHERE artifact_id = ? LIMIT 1").get(id) as { name: string } | undefined)?.name;
+  }
+
   getArtifact(id: string): { files: ArtifactFile[]; sha256: string } {
     const metadata = this.db.connection
       .prepare("SELECT sha256 FROM artifacts WHERE id = ?")
@@ -323,52 +322,6 @@ export class PackageService {
     const result = this.db.connection.prepare("UPDATE publishers SET trusted = ?, label = COALESCE(?, label) WHERE fingerprint = ?")
       .run(trusted ? 1 : 0, label ?? null, fingerprint);
     if (!result.changes) throw new AppError(404, "PUBLISHER_NOT_FOUND", `Publicador no encontrado: ${fingerprint}`);
-  }
-
-  private validateManifest(manifest: PackageManifest, files: ArtifactFile[]): void {
-    invariant(!isV1Manifest(manifest), 400, "INVALID_MANIFEST", "Manifiesto v1 en validación legacy");
-    invariant(manifest?.schemaVersion === 1, 400, "INVALID_MANIFEST", "schemaVersion debe ser 1");
-    invariant(PACKAGE_NAME.test(manifest.name), 400, "INVALID_PACKAGE_NAME", "El nombre debe usar el formato @scope/nombre");
-    invariant(Boolean(semver.valid(manifest.version)), 400, "INVALID_VERSION", "version debe ser SemVer");
-    invariant(PACKAGE_TYPES.includes(manifest.type), 400, "INVALID_PACKAGE_TYPE", `type debe ser: ${PACKAGE_TYPES.join(", ")}`);
-    invariant(typeof manifest.description === "string" && manifest.description.trim().length > 0, 400, "INVALID_MANIFEST", "description es obligatorio");
-    invariant(Array.isArray(files), 400, "INVALID_ARTIFACT", "files debe ser una lista");
-
-    let totalSize = 0;
-    const paths = new Set<string>();
-    for (const file of files) {
-      assertSafeRelativePath(file.path, "files.path");
-      invariant(!paths.has(file.path), 400, "DUPLICATE_FILE", `Archivo duplicado: ${file.path}`);
-      paths.add(file.path);
-      const decoded = Buffer.from(file.content, "base64");
-      totalSize += decoded.byteLength;
-      invariant(sha256(decoded) === file.sha256, 400, "HASH_MISMATCH", `Hash incorrecto para ${file.path}`);
-    }
-    invariant(totalSize <= MAX_ARTIFACT_BYTES, 413, "ARTIFACT_TOO_LARGE", "El artefacto supera 25 MiB");
-
-    for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
-      invariant(PACKAGE_NAME.test(name) && Boolean(semver.validRange(range)), 400, "INVALID_DEPENDENCY", `Dependencia inválida: ${name}@${range}`);
-    }
-    for (const rule of manifest.files ?? []) {
-      assertSafeRelativePath(rule.source, "files.source");
-      const permission = requiredTargetPermission(rule.target);
-      invariant(!permission || manifest.permissions?.includes(permission), 400, "PERMISSION_UNDECLARED", `El destino ${rule.target} requiere declarar ${permission}`);
-      invariant(!rule.executable || manifest.permissions?.includes("process.execute"), 400, "PERMISSION_UNDECLARED", "Los ejecutables requieren process.execute");
-      invariant(paths.has(rule.source), 400, "MISSING_SOURCE", `No existe el archivo fuente ${rule.source}`);
-    }
-    const names = new Set<string>();
-    for (const capability of manifest.capabilities ?? []) {
-      invariant(!names.has(capability.name), 400, "DUPLICATE_CAPABILITY", "Capacidad duplicada"); names.add(capability.name);
-      const permission = capability.kind === "mcp" ? "mcp.connect" : capability.binding.startsWith("local:") ? "process.execute" : undefined;
-      invariant(!permission || manifest.permissions?.includes(permission), 400, "PERMISSION_UNDECLARED", `La capacidad requiere ${permission}`);
-    }
-    invariant(manifest.type !== "agent" || Boolean(manifest.agent), 400, "AGENT_REQUIRED", "Un paquete agent necesita su definición");
-    invariant(!manifest.agent || manifest.type === "agent", 400, "INVALID_AGENT", "agent solo se admite en paquetes agent");
-    for (const skill of manifest.agent?.skills ?? []) invariant(Boolean(manifest.dependencies?.[skill]), 400, "AGENT_DEPENDENCY", `La skill ${skill} debe declararse como dependencia`);
-    for (const rule of manifest.knowledge ?? []) {
-      assertSafeRelativePath(rule.source, "knowledge.source");
-      invariant(paths.has(rule.source), 400, "MISSING_SOURCE", `No existe el conocimiento ${rule.source}`);
-    }
   }
 }
 

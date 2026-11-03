@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { AppError } from "@modai/contracts/errors";
 import { AuditService } from "../core/audit-service.js";
-import { MIN_PASSWORD_LENGTH, type AuthService, type Identity, type Role, type UserRecord, type UserUpdate } from "../core/auth-service.js";
+import { MIN_PASSWORD_LENGTH, ROLES, type AuthService, type Identity, type Role, type UserRecord, type UserUpdate } from "../core/auth-service.js";
 
 /**
  * Browser sessions for the admin panel. API keys (Bearer) keep working unchanged for CLI, MCP and workers;
@@ -103,7 +103,7 @@ const grantProperties = {
   organizationIds: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 200 } },
   packageScopes: { type: "array", maxItems: 100, items: { type: "string", pattern: "^(\\*|@[a-z0-9][a-z0-9._-]*)$" } },
 };
-const roleProperty = { type: "string", enum: ["reader", "publisher", "worker", "admin"] };
+const roleProperty = { type: "string", enum: ROLES };
 const passwordProperty = { type: "string", minLength: 1, maxLength: 1024 };
 
 export function registerAuthRoutes(app: FastifyInstance, options: AuthRouteOptions): void {
@@ -112,7 +112,13 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRouteOptio
   const identityOf = (request: FastifyRequest) => (request as SessionRequest).modaiIdentity;
   const failDelay = () => delay((options.loginDelayMs ?? 400) + (options.loginDelayMs === 0 ? 0 : randomInt(0, 200)));
   const sessionMeta = (request: FastifyRequest) => ({ userAgent: request.headers["user-agent"], ip: request.ip });
-  const requireAdmin = (request: FastifyRequest) => auth.require(identityOf(request), "admin");
+  const requireManager = (request: FastifyRequest) => auth.requireManager(identityOf(request));
+  /** Users outside the actor's organizations answer 404, as if they did not exist. */
+  const managedUser = (actor: Identity, id: string): UserRecord => {
+    const user = auth.getUser(id);
+    if (!auth.canManageGrantee(actor, user)) throw new AppError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+    return user;
+  };
 
   app.get("/api/v1/auth/status", async (request) => {
     const identity = identityOf(request);
@@ -121,6 +127,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRouteOptio
       authenticated: Boolean(identity),
       identity: identity ? publicIdentity(identity) : null,
       user: identity?.kind === "user" ? auth.getUser(identity.id) : null,
+      permissions: identity ? auth.permissions(identity) : null,
       minPasswordLength: MIN_PASSWORD_LENGTH,
     };
   });
@@ -175,7 +182,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRouteOptio
 
   app.get("/api/v1/auth/me", async (request) => {
     const identity = auth.require(identityOf(request), "reader");
-    return { identity: publicIdentity(identity), user: identity.kind === "user" ? auth.getUser(identity.id) : null };
+    return { identity: publicIdentity(identity), user: identity.kind === "user" ? auth.getUser(identity.id) : null, permissions: auth.permissions(identity) };
   });
 
   app.post<{ Body: { currentPassword: string; newPassword: string } }>("/api/v1/auth/password", {
@@ -190,14 +197,15 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRouteOptio
   });
 
   app.get("/api/v1/admin/users", async (request) => {
-    requireAdmin(request);
-    return { users: auth.listUsers() };
+    const actor = requireManager(request);
+    return { users: auth.listUsers().filter(user => auth.canManageGrantee(actor, user)) };
   });
 
   app.post<{ Body: { username: string; displayName?: string; password: string; role: Role; projectIds?: string[]; organizationIds?: string[]; packageScopes?: string[] } }>("/api/v1/admin/users", {
     schema: { body: { type: "object", required: ["username", "password", "role"], additionalProperties: false, properties: { username: { type: "string", maxLength: 200 }, displayName: { type: "string", maxLength: 200 }, password: passwordProperty, role: roleProperty, ...grantProperties } } },
   }, async (request, reply) => {
-    requireAdmin(request);
+    const actor = requireManager(request);
+    auth.assertGrants(actor, request.body.role, request.body);
     const user = await auth.createUser(request.body);
     audit.record(identityOf(request)!.label, "user.create", `user:${user.username}`, { role: user.role });
     return reply.code(201).send({ user });
@@ -206,15 +214,21 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRouteOptio
   app.patch<{ Params: { id: string }; Body: UserUpdate }>("/api/v1/admin/users/:id", {
     schema: { body: { type: "object", additionalProperties: false, properties: { displayName: { type: "string", minLength: 1, maxLength: 200 }, role: roleProperty, disabled: { type: "boolean" }, password: passwordProperty, ...grantProperties } } },
   }, async (request) => {
-    const actor = requireAdmin(request);
-    const user: UserRecord = await auth.updateUser(actor, request.params.id, request.body ?? {});
+    const actor = requireManager(request);
+    const current = managedUser(actor, request.params.id);
+    const body = request.body ?? {};
+    if (body.role !== undefined || body.projectIds !== undefined || body.organizationIds !== undefined || body.packageScopes !== undefined) {
+      auth.assertGrants(actor, body.role ?? current.role, { projectIds: body.projectIds ?? current.projectIds, organizationIds: body.organizationIds ?? current.organizationIds, packageScopes: body.packageScopes ?? current.packageScopes });
+    }
+    const user: UserRecord = await auth.updateUser(actor, request.params.id, body);
     const { password, ...changes } = request.body ?? {};
     audit.record(actor.label, "user.update", `user:${user.username}`, { ...changes, ...(password !== undefined ? { passwordReset: true } : {}) });
     return { user };
   });
 
   app.delete<{ Params: { id: string } }>("/api/v1/admin/users/:id", async (request, reply) => {
-    const actor = requireAdmin(request);
+    const actor = requireManager(request);
+    managedUser(actor, request.params.id);
     const user = auth.deleteUser(actor, request.params.id);
     audit.record(actor.label, "user.delete", `user:${user.username}`);
     return reply.code(204).send();

@@ -2,20 +2,23 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { createHash } from "node:crypto";
-import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { AuditService } from "../core/audit-service.js";
-import { AuthService, type Identity, type Role } from "../core/auth-service.js";
+import { AuthService, namespaceOf, type Identity, type KeyGrants, type Role, type UserRecord } from "../core/auth-service.js";
+import { DirectoryService } from "../core/directory-service.js";
+import { TemplateService } from "../core/template-service.js";
 import { BackupService } from "../core/backup-service.js";
 import { ContextService } from "../core/context-service.js";
 import { Database } from "../core/database.js";
 import { AppError } from "@modai/contracts/errors";
+import { BUILTIN_TOOLS } from "@modai/contracts/agent-tools";
 import { MetricsService } from "../core/metrics-service.js";
 import { analyzePackageQuality } from "@modai/contracts/package-quality";
 import { UsageService } from "../core/usage-service.js";
 import { PackageService } from "../core/package-service.js";
 import type { MemoryInput, PublishPackageInput, ResolveRequest } from "@modai/contracts/types";
 import { AgentService } from "../core/agent-service.js";
-import { isAgentPackage, legacyCapabilities, manifestIdentity, normalizeManifest } from "@modai/core";
+import { isAgentPackage, manifestIdentity, normalizeManifest, skillArchiveToPackage } from "@modai/core";
 import { RunService } from "../core/run-service.js";
 import { parseInput, publishSchema, projectSchema, keySchema, memorySchema, memoryQuerySchema, composeSchema, runSchema, resolveSchema } from "@modai/contracts/schemas";
 import type { SignaturePolicy } from "@modai/contracts/types";
@@ -45,6 +48,15 @@ export interface AppOptions {
 
 type AuthenticatedRequest = FastifyRequest & { modaiIdentity?: Identity };
 
+/**
+ * Validates a publish body and returns it exactly as the client sent it. The parsed copy has defaults
+ * applied and keys reordered, which would break the signature and integrity computed over the original.
+ */
+function validatedPackage(body: unknown): PublishPackageInput {
+  parseInput(publishSchema, body);
+  return body as PublishPackageInput;
+}
+
 export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   let publicUrl: string | undefined;
   if (options.publicUrl) {
@@ -61,11 +73,13 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   const runs = new RunService(db, options.workerLeaseMs);
   const auth = new AuthService(db, options.apiToken, { idleMs: options.sessionIdleMs, absoluteMs: options.sessionMaxMs });
   const usage = new UsageService(db);
+  const directory = new DirectoryService(db, auth);
+  const templates = new TemplateService(db, options.artifactDirectory, options.maxArtifactStorageBytes);
   try { await seedInitialAdmin(auth, new AuditService(db), options.initialAdmin); } catch (error) { db.close(); throw error; }
   if (!auth.configured()) { db.close(); throw new AppError(500, "AUTH_NOT_CONFIGURED", "Configura MODAI_API_TOKEN, MODAI_ADMIN_USERNAME/MODAI_ADMIN_PASSWORD o una API key admin activa antes de arrancar"); }
   const audit = new AuditService(db);
   const metrics = new MetricsService();
-  const backup = new BackupService(db, packages, context);
+  const backup = new BackupService(db, packages, context, templates);
 
   await app.register(cors, { origin: false });
   await app.register(helmet, { contentSecurityPolicy: { directives: {
@@ -103,7 +117,7 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     });
   });
 
-  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.8.1", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
+  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.9.0", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
   app.get("/", async (_request, reply) => reply.redirect("/admin"));
   if (options.adminDirectory !== false) {
     try { registerAdminAssets(app, options.adminDirectory); }
@@ -115,26 +129,26 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   });
   app.get("/api/v1/session", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (request) => {
     const identity = requireRole(request, "reader");
-    return { label: identity.label, role: identity.role, projectIds: identity.projectIds, organizationIds: identity.organizationIds, packageScopes: identity.packageScopes };
+    return { label: identity.label, role: identity.role, projectIds: identity.projectIds, organizationIds: identity.organizationIds, packageScopes: identity.packageScopes, permissions: auth.permissions(identity) };
   });
   registerAuthRoutes(app, { auth, audit, publicUrl, loginRateLimitMax: options.loginRateLimitMax, loginDelayMs: options.loginDelayMs });
 
   app.get<{ Querystring: { q?: string; type?: string; includeYanked?: string; name?: string } }>("/api/v1/packages", async (request) => {
-    requireRole(request, "reader");
-    const list = packages.list(request.query.name ?? request.query.q, request.query.type, request.query.includeYanked === "true");
+    const visible = auth.packageReader(identityOf(request));
+    const list = packages.list(request.query.name ?? request.query.q, request.query.type, request.query.includeYanked === "true").filter(item => visible(item.name));
     return { packages: request.query.name ? list.filter(item => item.name === request.query.name) : list };
   });
-  app.get<{ Querystring: { q?: string; type?: string; category?: string; format?: string; status?: string; limit?: string; offset?: string } }>("/api/v1/packages/catalog", async (request) => {
-    requireRole(request, "reader");
+  app.get<{ Querystring: { q?: string; type?: string; category?: string; status?: string; limit?: string; offset?: string } }>("/api/v1/packages/catalog", async (request) => {
+    const visible = auth.packageReader(identityOf(request));
     const { limit, offset, ...filters } = request.query;
-    return packages.catalog({ ...filters, limit: limit ? Number(limit) : undefined, offset: offset ? Number(offset) : undefined });
+    return packages.catalog({ ...filters, limit: limit ? Number(limit) : undefined, offset: offset ? Number(offset) : undefined, visible });
   });
   app.get("/api/v1/packages/summary", async (request) => {
-    requireRole(request, "reader");
-    return packages.summary();
+    return packages.summary(auth.packageReader(identityOf(request)));
   });
   app.get<{ Querystring: { name: string } }>("/api/v1/packages/usage", async (request) => {
     const identity = requireRole(request, "reader");
+    auth.requireReadPackage(identity, String(request.query.name ?? ""));
     const visible = new Set(auth.listProjects(identity).map(project => project.id));
     return { projects: usage.usage(String(request.query.name ?? ""), projectId => visible.has(projectId)) };
   });
@@ -149,37 +163,68 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     return reply.code(204).send();
   });
   app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/package", async (request) => {
-    requireRole(request, "reader");
+    auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
     return { package: packages.get(request.query.name, request.query.version) };
   });
   app.post<{ Body: PublishPackageInput }>("/api/v1/packages/validate", async (request) => {
     requireRole(request, "reader");
-    const input = parseInput(publishSchema, request.body);
+    const input = validatedPackage(request.body);
     return { quality: analyzePackageQuality(input.manifest, input.files) };
   });
   app.post<{ Body: PublishPackageInput }>("/api/v1/packages", { bodyLimit: 36 * 1024 * 1024 }, async (request, reply) => {
-    const input = parseInput(publishSchema, request.body);
-    auth.requirePublish(identityOf(request), manifestIdentity(input.manifest).name);
+    const input = validatedPackage(request.body);
+    const name = manifestIdentity(input.manifest).name;
+    auth.requirePublish(identityOf(request), name);
     const published = packages.publish(input);
+    auth.ensureNamespace(name, identityOf(request)!);
     record(request, "package.publish", `${published.name}@${published.version}`, { signed: Boolean(request.body.signature), quality: published.quality?.score });
     return reply.code(201).send({ package: published });
   });
-  app.post<{ Body: ResolveRequest }>("/api/v1/resolve", async (request) => {
+  /** `.skill` files (a ZIP with SKILL.md) become a v1 package with that skill. `dryRun` returns the preview and quality. */
+  app.post<{ Body: { archive: string; namespace: string; version?: string; name?: string; dryRun?: boolean } }>("/api/v1/packages/import-skill", {
+    bodyLimit: 36 * 1024 * 1024,
+    schema: { body: { type: "object", required: ["archive", "namespace"], additionalProperties: false, properties: {
+      archive: { type: "string", minLength: 1, maxLength: 36 * 1024 * 1024 }, namespace: { type: "string", pattern: "^@[a-z0-9][a-z0-9._-]*$" },
+      version: { type: "string", maxLength: 100 }, name: { type: "string", maxLength: 64 }, dryRun: { type: "boolean" } } } },
+  }, async (request, reply) => {
     requireRole(request, "reader");
-    return { packages: await packages.resolve(parseInput(resolveSchema, request.body)) };
+    let converted;
+    try { converted = skillArchiveToPackage(Buffer.from(request.body.archive, "base64"), request.body); }
+    catch (error) { throw new AppError(400, "INVALID_SKILL", (error as Error).message); }
+    const { skill, ...input } = converted;
+    const name = manifestIdentity(input.manifest).name;
+    if (request.body.dryRun) {
+      return { skill, name, manifest: input.manifest, files: input.files.map(file => ({ path: file.path, size: Buffer.from(file.content, "base64").length })), quality: analyzePackageQuality(input.manifest, input.files) };
+    }
+    auth.requirePublish(identityOf(request), name);
+    const published = packages.publish(validatedPackage(input));
+    auth.ensureNamespace(name, identityOf(request)!);
+    record(request, "package.publish", `${published.name}@${published.version}`, { source: "skill", quality: published.quality?.score });
+    return reply.code(201).send({ package: published });
+  });
+  app.post<{ Body: ResolveRequest }>("/api/v1/resolve", async (request) => {
+    const visible = auth.packageReader(identityOf(request));
+    const input = parseInput(resolveSchema, request.body);
+    for (const root of input.packages) if (!visible(root.name)) throw new AppError(404, "PACKAGE_NOT_FOUND", `No existe ${root.name}`);
+    const resolved = await packages.resolve(input);
+    const hidden = resolved.find(item => !visible(item.name));
+    if (hidden) throw new AppError(403, "PACKAGE_FORBIDDEN", `Una dependencia está en un namespace restringido sin acceso: ${namespaceOf(hidden.name)}`);
+    return { packages: resolved };
   });
   app.get<{ Params: { id: string } }>("/api/v1/artifacts/:id", async (request) => {
-    requireRole(request, "reader");
+    const owner = packages.artifactOwner(request.params.id);
+    if (owner) auth.requireReadPackage(identityOf(request), owner);
+    else requireRole(request, "admin");
     return packages.getArtifact(request.params.id);
   });
   app.post<{ Body: { name: string; version: string; message: string } }>("/api/v1/admin/packages/deprecate", async (request) => {
-    requireRole(request, "admin");
+    auth.requireManagePackage(identityOf(request), String(request.body?.name ?? ""));
     const item = packages.deprecate(request.body.name, request.body.version, request.body.message);
     record(request, "package.deprecate", `${item.name}@${item.version}`, { message: request.body.message });
     return { package: item };
   });
   app.post<{ Body: { name: string; version: string; reason: string } }>("/api/v1/admin/packages/yank", async (request) => {
-    requireRole(request, "admin");
+    auth.requireManagePackage(identityOf(request), String(request.body?.name ?? ""));
     const item = packages.yank(request.body.name, request.body.version, request.body.reason);
     record(request, "package.yank", `${item.name}@${item.version}`, { reason: request.body.reason });
     return { package: item };
@@ -210,7 +255,8 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     requireRole(request, "reader");
     const limit = Math.min(Math.max(Number(request.query.limit) || 100, 1), 500);
     const offset = Math.max(Number(request.query.offset) || 0, 0);
-    const documents = context.listKnowledge(limit, offset);
+    const visible = auth.packageReader(identityOf(request));
+    const documents = (context.listKnowledge(limit, offset) as Array<{ packageName?: string | null }>).filter(doc => !doc.packageName || visible(doc.packageName));
     return { documents, nextOffset: documents.length === limit ? offset + limit : null };
   });
   app.post<{ Body: { title: string; content: string; tags?: string[]; packageName?: string } }>("/api/v1/knowledge/documents", async (request, reply) => {
@@ -232,8 +278,8 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     return reply.code(204).send();
   });
   app.post<{ Body: { query: string; limit?: number; packageNames?: string[] } }>("/api/v1/knowledge/search", async (request) => {
-    requireRole(request, "reader");
-    return { results: context.searchKnowledge(request.body) };
+    const visible = auth.packageReader(identityOf(request));
+    return { results: (context.searchKnowledge(request.body) as Array<{ packageName?: string | null }>).filter(doc => !doc.packageName || visible(doc.packageName)) };
   });
   const vectorSchema = { type: "array", minItems: 1, maxItems: 8192, items: { type: "number" } };
   app.put<{ Params: { id: string }; Body: { model: string; embedding: number[]; sourceHash?: string } }>("/api/v1/knowledge/documents/:id/vector", {
@@ -251,8 +297,8 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   app.post<{ Body: { embedding: number[]; model: string; limit?: number; packageNames?: string[] } }>("/api/v1/knowledge/vector-search", {
     schema: { body: { type: "object", required: ["model", "embedding"], properties: { model: { type: "string", minLength: 1, maxLength: 200 }, embedding: vectorSchema, limit: { type: "integer", minimum: 1, maximum: 50 }, packageNames: { type: "array", maxItems: 200, items: { type: "string" } } } } },
   }, async (request) => {
-    requireRole(request, "reader");
-    return { results: await context.vectorSearchAsync(request.body.embedding, request.body.model, request.body.limit, request.body.packageNames) };
+    const visible = auth.packageReader(identityOf(request));
+    return { results: (await context.vectorSearchAsync(request.body.embedding, request.body.model, request.body.limit, request.body.packageNames) as Array<{ packageName?: string | null }>).filter(doc => !doc.packageName || visible(doc.packageName)) };
   });
 
   app.post<{ Body: MemoryInput }>("/api/v1/memories", async (request, reply) => {
@@ -312,34 +358,125 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     record(request, "project.delete", request.params.id, { name: result.project.name, memories: result.memories, runs: result.runs });
     return { deleted: result.project, memories: result.memories, runs: result.runs };
   });
-  app.post<{ Body: { name: string } }>("/api/v1/admin/organizations", { schema: { body: { type: "object", required: ["name"], properties: { name: { type: "string", minLength: 1, maxLength: 200 } }, additionalProperties: false } } }, async (request, reply) => {
-    requireRole(request, "admin");
-    const organization = auth.createOrganization(request.body.name);
-    record(request, "organization.create", organization.id);
-    return reply.code(201).send({ organization });
+  app.patch<{ Params: { id: string }; Body: { name?: string; organizationId?: string | null } }>("/api/v1/projects/:id", {
+    schema: { body: { type: "object", additionalProperties: false, properties: { name: { type: "string", minLength: 1, maxLength: 200 }, organizationId: { type: ["string", "null"], minLength: 1, maxLength: 200 } } } },
+  }, async request => {
+    const project = auth.updateProject(identityOf(request), request.params.id, request.body ?? {});
+    record(request, "project.update", project.id, request.body);
+    return { project };
   });
-  app.get("/api/v1/agents", async request => { requireRole(request, "reader"); return { agents: packages.list().filter(item => isAgentPackage(item.manifest)) }; });
+
+  const organizationBody = { type: "object", additionalProperties: false, properties: { name: { type: "string", minLength: 1, maxLength: 200 }, description: { type: "string", maxLength: 1000 } } };
+  app.get("/api/v1/organizations", async request => ({ organizations: directory.listOrganizations(identityOf(request)) }));
+  const createOrganization = async (request: FastifyRequest<{ Body: { name: string; description?: string } }>, reply: FastifyReply) => {
+    const organization = directory.createOrganization(identityOf(request), request.body);
+    record(request, "organization.create", organization.id, { name: organization.name });
+    return reply.code(201).send({ organization });
+  };
+  app.post("/api/v1/organizations", { schema: { body: { ...organizationBody, required: ["name"] } } }, createOrganization);
+  app.patch<{ Params: { id: string }; Body: { name?: string; description?: string } }>("/api/v1/organizations/:id", { schema: { body: organizationBody } }, async request => {
+    const organization = directory.updateOrganization(identityOf(request), request.params.id, request.body ?? {});
+    record(request, "organization.update", organization.id, request.body);
+    return { organization };
+  });
+  app.delete<{ Params: { id: string }; Body: { confirmation: string } }>("/api/v1/organizations/:id", {
+    schema: { body: { type: "object", required: ["confirmation"], properties: { confirmation: { type: "string", maxLength: 200 } }, additionalProperties: false } },
+  }, async (request, reply) => {
+    const current = directory.getOrganization(identityOf(request), request.params.id);
+    if (request.body.confirmation !== current.name) throw new AppError(400, "CONFIRMATION_REQUIRED", "Para eliminar la organización, confirma escribiendo su nombre");
+    directory.deleteOrganization(identityOf(request), request.params.id);
+    record(request, "organization.delete", current.id, { name: current.name });
+    return reply.code(204).send();
+  });
+
+  const namespaceBody = { organizationId: { type: ["string", "null"], minLength: 1, maxLength: 200 }, description: { type: "string", maxLength: 1000 }, visibility: { type: "string", enum: ["internal", "restricted"] } };
+  app.get("/api/v1/namespaces", async request => ({ namespaces: directory.listNamespaces(identityOf(request)) }));
+  app.post<{ Body: { name: string; organizationId?: string; description?: string; visibility?: "internal" | "restricted" } }>("/api/v1/namespaces", {
+    schema: { body: { type: "object", required: ["name"], additionalProperties: false, properties: { name: { type: "string", minLength: 2, maxLength: 65 }, ...namespaceBody } } },
+  }, async (request, reply) => {
+    const namespace = directory.createNamespace(identityOf(request), { ...request.body, organizationId: request.body.organizationId ?? undefined });
+    record(request, "namespace.create", namespace.name, { organizationId: namespace.organizationId, visibility: namespace.visibility });
+    return reply.code(201).send({ namespace });
+  });
+  app.patch<{ Params: { name: string }; Body: { organizationId?: string | null; description?: string; visibility?: "internal" | "restricted" } }>("/api/v1/namespaces/:name", {
+    schema: { body: { type: "object", additionalProperties: false, properties: namespaceBody } },
+  }, async request => {
+    const namespace = directory.updateNamespace(identityOf(request), request.params.name, request.body ?? {});
+    record(request, "namespace.update", namespace.name, request.body);
+    return { namespace };
+  });
+  app.delete<{ Params: { name: string } }>("/api/v1/namespaces/:name", async (request, reply) => {
+    const namespace = directory.deleteNamespace(identityOf(request), request.params.name);
+    record(request, "namespace.delete", namespace.name);
+    return reply.code(204).send();
+  });
+
+  // ------------------------------------------------------------ templates
+  app.get<{ Querystring: { q?: string } }>("/api/v1/templates", async request => ({ templates: templates.list(auth.packageReader(identityOf(request)), request.query.q) }));
+  app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/template", async request => {
+    auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
+    const { template, files } = templates.files(request.query.name, request.query.version);
+    const publish = auth.publishableNamespaces(identityOf(request)!);
+    return { template, versions: templates.versions(request.query.name), files: files.map(file => ({ path: file.path, size: Buffer.from(file.content, "base64").length })), canPublish: publish.all || publish.namespaces.includes(namespaceOf(template.name)) };
+  });
+  app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/template/files", async request => {
+    auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
+    return templates.files(request.query.name, request.query.version);
+  });
+  app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/template/download", async (request, reply) => {
+    auth.requireReadPackage(identityOf(request), String(request.query.name ?? ""));
+    const { template, zip } = templates.zip(request.query.name, request.query.version);
+    record(request, "template.download", `${template.name}@${template.version}`);
+    return reply.type("application/zip").header("content-disposition", `attachment; filename="${template.name.split("/")[1]}-${template.version}.zip"`).send(zip);
+  });
+  app.post<{ Body: { name: string; version: string; description: string; tags?: string[]; stack?: string; archive?: string; files?: Array<{ path: string; content: string; sha256: string }> } }>("/api/v1/templates", {
+    bodyLimit: 36 * 1024 * 1024,
+    schema: { body: { type: "object", required: ["name", "version", "description"], additionalProperties: false, properties: {
+      name: { type: "string", maxLength: 214 }, version: { type: "string", maxLength: 100 }, description: { type: "string", maxLength: 2000 },
+      tags: { type: "array", maxItems: 20, items: { type: "string", maxLength: 40 } }, stack: { type: "string", maxLength: 200 },
+      archive: { type: "string", maxLength: 36 * 1024 * 1024 },
+      files: { type: "array", maxItems: 5000, items: { type: "object", required: ["path", "content", "sha256"], additionalProperties: false, properties: { path: { type: "string", maxLength: 1024 }, content: { type: "string" }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" } } } } } } },
+  }, async (request, reply) => {
+    auth.requirePublish(identityOf(request), request.body.name);
+    if (!request.body.archive && !request.body.files?.length) throw new AppError(400, "INVALID_TEMPLATE", "Envía un ZIP (archive) o la lista de archivos");
+    const template = templates.publish(request.body, identityOf(request)!.label);
+    auth.ensureNamespace(template.name, identityOf(request)!);
+    record(request, "template.publish", `${template.name}@${template.version}`, { files: template.files });
+    return reply.code(201).send({ template });
+  });
+  app.patch<{ Body: { name: string; version: string; status: "active" | "yanked" } }>("/api/v1/templates", {
+    schema: { body: { type: "object", required: ["name", "version", "status"], additionalProperties: false, properties: { name: { type: "string", maxLength: 214 }, version: { type: "string", maxLength: 100 }, status: { type: "string", enum: ["active", "yanked"] } } } },
+  }, async request => {
+    auth.requirePublish(identityOf(request), request.body.name);
+    const template = templates.setStatus(request.body.name, request.body.version, request.body.status);
+    record(request, request.body.status === "yanked" ? "template.yank" : "template.restore", `${template.name}@${template.version}`);
+    return { template };
+  });
+
+  app.get("/api/v1/agents", async request => { const visible = auth.packageReader(identityOf(request)); return { agents: packages.list().filter(item => visible(item.name) && isAgentPackage(item.manifest)) }; });
   app.get<{ Querystring: { capability?: string } }>("/api/v1/capabilities", async request => {
-    requireRole(request, "reader");
-    const latest = packages.list();
-    // Legacy runtime capabilities plus v1 capability contracts (provides/requires) and tools.
-    const capabilities = latest.flatMap(item => legacyCapabilities(item.manifest).map(capability => ({ packageName: item.name, version: item.version, capability })));
+    const visible = auth.packageReader(identityOf(request));
+    const latest = packages.list().filter(item => visible(item.name));
+    // Capability contracts (provides/requires) and tools per package, plus the tools MODAI itself offers to agents.
+    const builtin = Object.entries(BUILTIN_TOOLS).map(([name, tool]) => ({ name, description: tool.description, readOnly: tool.readOnly, inputSchema: tool.inputSchema }));
     const contracts = latest.flatMap(item => {
       try {
         const spec = normalizeManifest(item.manifest).spec;
         return [{ packageName: item.name, version: item.version, category: spec.category, provides: spec.provides, requires: spec.requires, optional: spec.optional, tools: spec.contributes.tools.map(tool => ({ name: tool.name, implements: tool.implements })) }];
       } catch { return []; }
     }).filter(item => !request.query.capability || item.provides.some(provided => provided.capability === request.query.capability));
-    return { capabilities, contracts };
+    return { builtin, contracts };
   });
   app.post("/api/v1/agents/compose", async request => {
     const input = parseInput(composeSchema, request.body);
     auth.requireProject(identityOf(request), input.projectId);
+    auth.requireReadPackage(identityOf(request), input.name);
     return { bundle: await agents.compose(input.projectId, input.name, input.range, input.overrides) };
   });
   app.post("/api/v1/runs", async (request, reply) => {
     const actor = requireRole(request, "publisher"), input = parseInput(runSchema, request.body);
     auth.requireProject(actor, input.projectId, true);
+    auth.requireReadPackage(actor, input.name);
     const bundle = await agents.compose(input.projectId, input.name, input.range, input.overrides);
     const run = runs.submit(bundle, input.task, actor.id, input.idempotencyKey);
     record(request, "run.submit", run.id, { projectId: run.projectId });
@@ -375,24 +512,78 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     record(request, "run.finish", run.id, { status: finished.status }); return { run: finished };
   });
 
-  app.get("/api/v1/admin/api-keys", async (request) => {
-    requireRole(request, "admin");
-    return { keys: auth.listKeys() };
+  // ------------------------------------------------------------ API keys
+  // Every key created from here on belongs to a user and stays within that user's permissions. Keys without an owner
+  // are service keys: they work as they are and can be assigned an owner.
+  const ownerOf = (actor: Identity): string | undefined => actor.kind === "user" ? actor.id : actor.ownerId;
+  const createOwnedKey = (actor: Identity, owner: UserRecord, input: { label: string; role: Role; inherit?: boolean } & KeyGrants) => {
+    const inherit = input.inherit ?? !(input.projectIds?.length || input.organizationIds?.length || input.packageScopes?.length);
+    auth.assertKeyWithinOwner(owner, input.role, input, inherit);
+    const key = auth.createKey(input.label, input.role, inherit ? {} : input, { ownerId: owner.id, inherit });
+    audit.record(actor.label, "api-key.create", key.id, { label: key.label, role: key.role, owner: owner.username, inherit });
+    return key;
+  };
+
+  app.get("/api/v1/me/api-keys", async request => {
+    const actor = requireRole(request, "reader"), owner = ownerOf(actor);
+    if (!owner) throw new AppError(400, "NO_OWNER", "Esta credencial no pertenece a un usuario");
+    return { keys: auth.listKeys(owner) };
   });
-  app.post<{ Body: { label: string; role: Role } }>("/api/v1/admin/api-keys", async (request, reply) => {
-    requireRole(request, "admin");
+  app.post("/api/v1/me/api-keys", async (request, reply) => {
+    const actor = requireRole(request, "reader");
+    // Keys are created from a person's session, so a leaked key cannot mint new ones.
+    if (actor.kind !== "user") throw new AppError(403, "SESSION_REQUIRED", "Crea API keys desde el panel con tu usuario");
+    const input = parseInput(keySchema.omit({ ownerId: true }), request.body);
+    return reply.code(201).send({ key: createOwnedKey(actor, auth.getUser(actor.id), input) });
+  });
+  app.delete<{ Params: { id: string } }>("/api/v1/me/api-keys/:id", async (request, reply) => {
+    const actor = requireRole(request, "reader"), key = auth.getKey(request.params.id);
+    if (!key.ownerId || key.ownerId !== ownerOf(actor)) throw new AppError(404, "API_KEY_NOT_FOUND", "Clave no encontrada");
+    auth.revokeKey(key.id);
+    record(request, "api-key.revoke", key.id, { owner: key.ownerName });
+    return reply.code(204).send();
+  });
+
+  app.get<{ Querystring: { ownerId?: string } }>("/api/v1/admin/api-keys", async (request) => {
+    const actor = auth.requireManager(identityOf(request));
+    return { keys: auth.listKeys(request.query.ownerId || undefined).filter(key => auth.canManageKey(actor, key)) };
+  });
+  app.post("/api/v1/admin/api-keys", async (request, reply) => {
+    const actor = auth.requireManager(identityOf(request));
     const input = parseInput(keySchema, request.body);
+    const ownerId = input.ownerId === undefined ? ownerOf(actor) : input.ownerId ?? undefined;
+    if (ownerId) {
+      const owner = auth.getUser(ownerId);
+      if (!auth.canManageGrantee(actor, owner) && owner.id !== ownerOf(actor)) throw new AppError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+      return reply.code(201).send({ key: createOwnedKey(actor, owner, input) });
+    }
+    // Ownerless (service) keys: only the installation token or a global admin, for automation before users exist.
+    if (actor.role !== "admin") throw new AppError(400, "OWNER_REQUIRED", "Elige el usuario dueño de la API key");
+    auth.assertGrants(actor, input.role, input);
     const key = auth.createKey(input.label, input.role, input);
     record(request, "api-key.create", key.id, { label: key.label, role: key.role });
     return reply.code(201).send({ key });
   });
   app.patch<{ Params: { id: string } }>("/api/v1/admin/api-keys/:id", async request => {
-    requireRole(request, "admin");
-    const grants = parseInput(keySchema.pick({ projectIds: true, organizationIds: true, packageScopes: true }), request.body);
-    auth.updateKeyGrants(request.params.id, grants); record(request, "api-key.grants", request.params.id, grants); return { ok: true };
+    const actor = auth.requireManager(identityOf(request));
+    const input = parseInput(keySchema.pick({ projectIds: true, organizationIds: true, packageScopes: true, ownerId: true, inherit: true }), request.body);
+    const current = auth.getKey(request.params.id);
+    if (!auth.canManageKey(actor, current)) throw new AppError(404, "API_KEY_NOT_FOUND", "Clave no encontrada");
+    const ownerId = input.ownerId === undefined ? current.ownerId : input.ownerId ?? undefined;
+    if (current.ownerId && !ownerId) throw new AppError(400, "OWNER_REQUIRED", "Una API key con dueño no puede quedar sin dueño");
+    const inherit = input.inherit ?? current.inherit;
+    if (ownerId) {
+      const owner = auth.getUser(ownerId);
+      if (!auth.canManageGrantee(actor, owner) && owner.id !== ownerOf(actor)) throw new AppError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+      auth.assertKeyWithinOwner(owner, current.role, input, inherit);
+    } else auth.assertGrants(actor, current.role, input);
+    auth.updateKeyGrants(request.params.id, inherit ? {} : input, { ownerId: ownerId ?? null, inherit });
+    record(request, "api-key.grants", request.params.id, { ...input, inherit });
+    return { key: auth.getKey(request.params.id) };
   });
   app.delete<{ Params: { id: string } }>("/api/v1/admin/api-keys/:id", async (request, reply) => {
-    requireRole(request, "admin");
+    const actor = auth.requireManager(identityOf(request));
+    if (!auth.canManageKey(actor, auth.getKey(request.params.id))) throw new AppError(404, "API_KEY_NOT_FOUND", "Clave no encontrada");
     auth.revokeKey(request.params.id);
     record(request, "api-key.revoke", request.params.id);
     return reply.code(204).send();
@@ -412,10 +603,19 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     record(request, "backup.import", "server", result);
     return result;
   });
-  app.post<{ Body: { memoryDays?: number; auditDays?: number } }>("/api/v1/admin/prune", async (request) => {
+  /**
+   * Retention. Each target is pruned only when its field is present; an empty body keeps the historic defaults
+   * (memories 365 days, audit 90 days). `dryRun` returns the counts without deleting.
+   */
+  app.post<{ Body: { memoryDays?: number; auditDays?: number; dryRun?: boolean } }>("/api/v1/admin/prune", {
+    schema: { body: { type: ["object", "null"], additionalProperties: false, properties: { memoryDays: { type: "integer", minimum: 0, maximum: 36500 }, auditDays: { type: "integer", minimum: 0, maximum: 36500 }, dryRun: { type: "boolean" } } } },
+  }, async (request) => {
     requireRole(request, "admin");
-    const result = { memories: context.pruneMemories(request.body.memoryDays ?? 365), audit: audit.prune(request.body.auditDays ?? 90) };
-    record(request, "retention.prune", "server", result);
+    const body = request.body ?? {};
+    const usesDefaults = body.memoryDays === undefined && body.auditDays === undefined;
+    const memoryDays = usesDefaults ? 365 : body.memoryDays, auditDays = usesDefaults ? 90 : body.auditDays, dryRun = body.dryRun === true;
+    const result = { memories: memoryDays === undefined ? 0 : context.pruneMemories(memoryDays, dryRun), audit: auditDays === undefined ? 0 : audit.prune(auditDays, dryRun), dryRun };
+    if (!dryRun) record(request, "retention.prune", "server", { ...result, memoryDays, auditDays });
     return result;
   });
   app.get("/metrics", async (request, reply) => {

@@ -16,12 +16,15 @@ import users from "./views/users.js";
 import access from "./views/access.js";
 import audit from "./views/audit.js";
 import connect from "./views/connect.js";
+import organizations from "./views/organizations.js";
+import templates from "./views/templates.js";
+import myKeys from "./views/my-keys.js";
 
-const views = [dashboard, packages, agents, knowledge, projects, memories, runs, connect, users, access, audit];
+const views = [dashboard, packages, templates, agents, knowledge, projects, memories, runs, connect, myKeys, organizations, users, access, audit];
 const sections = [
-  { id: "library", label: "Biblioteca", views: ["dashboard", "packages", "agents", "knowledge"] },
-  { id: "work", label: "Proyectos", views: ["projects", "memories", "runs", "connect"] },
-  { id: "admin", label: "Administración", views: ["users", "access", "audit"] },
+  { id: "library", label: "Biblioteca", views: ["dashboard", "packages", "templates", "agents", "knowledge"] },
+  { id: "work", label: "Proyectos", views: ["projects", "memories", "runs", "connect", "my-keys"] },
+  { id: "admin", label: "Administración", views: ["organizations", "users", "access", "audit"] },
 ];
 const byId = Object.fromEntries(views.map((view) => [view.id, view]));
 let current = null;
@@ -81,6 +84,7 @@ function showSetup() {
 async function enterApp(status) {
   state.identity = status.identity;
   state.user = status.user;
+  state.permissions = status.permissions;
   store.invalidate();
   renderUser();
   renderNav();
@@ -95,6 +99,7 @@ window.addEventListener("modai:unauthorized", () => {
   closeDialog();
   state.identity = null;
   state.user = null;
+  state.permissions = null;
   store.invalidate();
   showLogin("Tu sesión expiró o se cerró. Vuelve a iniciar sesión.");
 });
@@ -170,6 +175,7 @@ userMenu.addEventListener("click", async (event) => {
   setUserMenu(false);
   if (item.dataset.menu === "password") openChangePassword();
   if (item.dataset.menu === "connect") navigate("connect");
+  if (item.dataset.menu === "keys") navigate("my-keys");
   if (item.dataset.menu === "logout") logout();
 });
 
@@ -181,6 +187,7 @@ async function logout() {
   }
   state.identity = null;
   state.user = null;
+  state.permissions = null;
   store.invalidate();
   history.replaceState(null, "", "#/dashboard");
   showLogin("Cerraste sesión correctamente.");

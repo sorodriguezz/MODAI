@@ -283,6 +283,7 @@ select option { color: var(--text); background-color: var(--surface); }
 .tone-danger.badge { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
 .tone-info.badge { background: var(--info-soft); color: var(--info); border-color: transparent; }
 .badge.role-admin { background: var(--primary-soft); color: var(--primary-text); border-color: transparent; }
+.badge.role-org-admin { background: var(--warning-soft, var(--primary-soft)); color: var(--warning, var(--primary-text)); border-color: transparent; }
 .badge.role-publisher { background: var(--info-soft); color: var(--info); border-color: transparent; }
 .badge.role-worker { background: var(--warning-soft); color: var(--warning); border-color: transparent; }
 .count { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); font-size: 11.5px; font-weight: 650; text-align: center; }
@@ -650,3 +651,32 @@ button.card:hover { border-color: var(--border-strong); box-shadow: var(--shadow
 .folder-actions { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-left: auto; }
 .folder-actions input { width: min(260px, 100%); padding: 4px 8px; }
 .file-table .folder-row ~ tr .file-cell { padding-left: 28px; }
+
+/* Hierarchical grants: organization → projects → namespaces */
+.grant-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.grant-steps legend { display: inline-flex; align-items: center; gap: 8px; }
+.step-number.small { width: 22px; height: 22px; font-size: 12px; }
+.grant-group + .grant-group { margin-top: 10px; }
+.grant-group[hidden] { display: none; }
+.grant-group-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-3, var(--text-2)); text-transform: uppercase; letter-spacing: .04em; }
+.explainer > summary { display: flex; align-items: center; gap: 8px; padding: 12px 16px; cursor: pointer; list-style: none; }
+.explainer > summary::-webkit-details-marker { display: none; }
+.explainer[open] > summary { border-bottom: 1px solid var(--border); }
+.explainer ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+
+/* Wizard */
+.wizard-steps { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; counter-reset: none; }
+.wizard-steps li { flex: 1 1 0; min-width: 90px; }
+.wizard-steps button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-bottom: 3px solid var(--border); background: none; color: var(--text-2); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.wizard-steps li:not(.done):not(.current) button { opacity: .7; }
+.wizard-steps .wizard-number { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); font-size: 12px; font-weight: 700; }
+.wizard-steps .done button { border-bottom-color: var(--primary-soft); color: var(--text); }
+.wizard-steps .done .wizard-number { background: var(--primary-soft); color: var(--primary-text); border-color: transparent; }
+.wizard-steps .current button { border-bottom-color: var(--primary); color: var(--text); font-weight: 600; }
+.wizard-steps .current .wizard-number { background: var(--primary); color: var(--on-primary); border-color: transparent; }
+.wizard-steps button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.wizard section[data-step] { min-height: 180px; }
+.wizard section[hidden] { display: none; }
+.definition-grid.review dd { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .wizard-steps .wizard-title { display: none; } .wizard-steps li { min-width: 0; } }
+.file-summary { list-style: none; margin: 0; padding: 8px 12px; max-height: 200px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); display: grid; gap: 4px; font-size: 13px; }

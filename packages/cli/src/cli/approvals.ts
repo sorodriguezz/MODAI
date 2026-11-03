@@ -3,9 +3,9 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { sha256 } from "@modai/contracts/security";
-import type { Permission } from "@modai/contracts/types";
+import type { PermissionV1 } from "@modai/contracts/spec-v1";
 
-export interface LocalApproval { permissions: Permission[]; digest?: string; allowedTools?: string[]; allowedMcp?: string[]; allowedEnv?: string[] }
+export interface LocalApproval { permissions: PermissionV1[]; digest?: string; allowedMcp?: string[]; allowedEnv?: string[] }
 const approvalPath = () => join(process.env.MODAI_CONFIG_DIR ?? join(homedir(), ".modai"), "approvals.json");
 function key(root: string, projectId: string, server?: string) { return sha256(JSON.stringify([realpathSync(root),projectId,server?.replace(/\/+$/,"")])); }
 function read(): Record<string, LocalApproval> { return existsSync(approvalPath()) ? JSON.parse(readFileSync(approvalPath(),"utf8")) : {}; }

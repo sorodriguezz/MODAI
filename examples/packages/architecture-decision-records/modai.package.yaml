@@ -15,4 +15,4 @@ spec:
     knowledge: knowledge
     rules: rules
   compatibility:
-    modai: ">=0.6.0"
+    modai: ">=0.8.1"

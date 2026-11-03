@@ -1,15 +1,19 @@
-schemaVersion: 1
-name: "@profiles/backend-architect"
-version: 1.1.0
-type: profile
-description: Perfil demostrativo para arquitectura backend con NestJS.
-dependencies:
-  "@knowledge/hexagonal": "^1.0.0"
-  "@skills/nestjs": "^1.0.0"
-  "@methodologies/sdd": "^1.0.0"
-  "@harness/opencode": "^1.0.0"
-  "@memory/project": "^1.0.0"
-  "@adapters/ollama": "^1.1.0"
-files:
-  - source: content/PROFILE.md
-    target: .modai/profile.md
+apiVersion: modai.dev/v1
+kind: Profile
+metadata:
+  name: "@profiles/backend-architect"
+  version: 1.1.0
+  description: Perfil demostrativo para arquitectura backend con NestJS.
+spec:
+  category: profile
+  dependencies:
+    "@knowledge/hexagonal": ^1.0.0
+    "@skills/nestjs": ^1.0.0
+    "@methodologies/sdd": ^1.0.0
+    "@harness/opencode": ^1.0.0
+    "@memory/project": ^1.0.0
+    "@adapters/ollama": ^1.1.0
+  contributes:
+    files:
+      - source: content/PROFILE.md
+        target: .modai/profile.md

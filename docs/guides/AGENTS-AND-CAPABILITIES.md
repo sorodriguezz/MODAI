@@ -1,4 +1,4 @@
-# Agentes y capacidades en MODAI 0.5
+# Agentes y capacidades en MODAI
 
 MODAI mantiene un catálogo central de paquetes, resuelve composiciones inmutables y autoriza el acceso al contexto. El CLI y el puente MCP son clientes independientes. La API HTTP no ejecuta modelos ni comandos suministrados por paquetes.
 
@@ -14,7 +14,7 @@ npm run pack:client
 Se genera un único archivo en `dist/npm/`. Puedes distribuirlo e instalarlo sin clonar el repositorio en el equipo cliente:
 
 ```sh
-npm install -g ./sorodriguez-modai-0.5.0.tgz
+npm install -g ./sorodriguez-modai-VERSION.tgz
 modai --help
 modai-mcp --help
 ```
@@ -35,21 +35,21 @@ modai init --name mi-proyecto
 modai status
 ```
 
-El identificador lo registra el servidor. Un repositorio existente debe conservar `.modai/manifest.yaml` para que otros clientes usen la misma memoria. No vuelvas a generar su ID en cada equipo.
+El identificador lo registra el servidor. Un repositorio existente conserva `modai.yaml` (con `context.projectId`) para que otros clientes usen la misma memoria. No vuelvas a generar su ID en cada equipo.
 
-Una API key tiene rol y listas explícitas de proyectos, organizaciones y namespaces publicables. Crear una clave sin esas listas no concede acceso a la memoria de todos los proyectos.
+Cada API key pertenece a un usuario y nunca supera sus permisos: rol igual o menor y, si se acota, solo proyectos, organizaciones y namespaces de ese usuario. Cada persona crea las suyas en el panel (**Mis API keys**); una administración puede crearlas a nombre de quien gestiona:
 
 ```sh
-modai admin create-key --label lector --role reader --projects ID_PROYECTO
-modai admin create-key --label autor --role publisher --projects ID_PROYECTO --scopes @skills,@agents,@tools
-modai admin create-key --label ejecutor --role worker --projects ID_PROYECTO
+modai admin create-key --label lector --owner ana --role reader --projects ID_PROYECTO
+modai admin create-key --label autor --owner ana --role publisher --projects ID_PROYECTO --scopes @skills,@agents,@tools
+modai admin create-key --label ejecutor --owner ci-bot --role worker --projects ID_PROYECTO
 ```
 
-Un publisher puede crear sus propios proyectos; no puede acceder a los de otras claves sin una asignación. El rol worker permite consultar su contexto, escribir memoria y reclamar/finalizar tareas de sus proyectos, pero no publicar paquetes ni administrar el servidor. Las claves admin tienen acceso completo.
+Un publisher puede crear sus propios proyectos; no puede acceder a los de otras personas sin una asignación. El rol worker permite consultar su contexto, escribir memoria y reclamar/finalizar tareas de sus proyectos, pero no publicar paquetes ni administrar el servidor. Las claves admin tienen acceso completo.
 
 ## Publicar, componer y activar un agente
 
-Publica los ejemplos mediante `npm run seed:examples` con servidor y token configurados. Incluyen `@tools/context` y `@agents/backend-reviewer`. Los agentes trabajan sobre un proyecto vinculado al servidor (`modai init --project ID`), cuyo registry es ese servidor: la activación instala los paquetes del agente en `modai.yaml` y `modai.lock` con las versiones exactas que compuso el servidor.
+Publica los ejemplos mediante `npm run seed:examples` con servidor y token configurados. Incluyen `@agents/backend-reviewer`. Los agentes trabajan sobre un proyecto vinculado al servidor (`modai init --project ID`), cuyo registry es ese servidor: la activación instala los paquetes del agente en `modai.yaml` y `modai.lock` con las versiones exactas que compuso el servidor.
 
 ```sh
 modai agent list
@@ -77,57 +77,69 @@ Una reactivación permite seleccionar otra versión y actualiza los pins que adm
 
 ## Contrato del paquete
 
+Un agente es una contribución (`contributes.agents`) de un paquete v1:
+
 ```yaml
-schemaVersion: 1
-name: '@agents/backend-reviewer'
-version: 1.0.0
-type: agent
-description: Revisión backend con capacidades compartidas.
-dependencies:
-  '@skills/design-patterns': '^1.0.0'
-  '@tools/context': '^1.0.0'
-agent:
-  instructions: Revisa el alcance solicitado y sustenta los hallazgos con evidencia.
-  skills: ['@skills/design-patterns']
-  capabilities: [modai_search_knowledge, modai_recall]
-  memory:
-    read: [project]
-    write: false
-  runtime:
-    provider: ollama
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@agents/backend-reviewer"
+  version: 1.0.0
+  description: Revisión backend con patrones de diseño y contexto del proyecto.
+spec:
+  category: agent
+  dependencies:
+    "@skills/design-patterns": ^1.0.0
+  contributes:
+    agents:
+      - name: backend-reviewer
+        instructions: Revisa el alcance solicitado y sustenta los hallazgos con evidencia.
+        skills: ["@skills/design-patterns"]
+        capabilities: [modai_search_knowledge, modai_recall]
+        memory:
+          read: [project]
+          write: false
+        runtime:
+          provider: ollama
 ```
 
-Las skills deben ser dependencias reales de tipo `skill`. Las capacidades se seleccionan por nombre entre las declaradas por el agente y sus dependencias. Los nombres duplicados y las referencias ausentes son errores. Los perfiles siguen siendo agrupaciones de dependencias; no ejecutan agentes por sí solos.
+Las skills deben declararse como dependencias y resolver a un paquete que contribuya skills. `capabilities` es una lista de nombres de herramientas; cada nombre es una herramienta integrada de MODAI o un servidor MCP aportado por un paquete que el agente resuelve. Un nombre que no corresponde a ninguno es un error al publicar (cuando el paquete no tiene dependencias) o al componer. Los perfiles siguen siendo agrupaciones de dependencias; no ejecutan agentes por sí solos.
 
-### Herramientas y MCP
+### Herramientas integradas
 
-Un paquete puede declarar herramientas con `kind: tool`, `name`, `description`, `inputSchema` JSON Schema y `binding`. Los bindings incorporados son:
+MODAI trae las herramientas de conocimiento y memoria (definidas en `@modai/contracts/agent-tools`); ningún paquete tiene que aportarlas:
 
-| Binding | Comportamiento |
+| Herramienta | Comportamiento |
 |---|---|
-| `knowledge.search` | Busca entre los paquetes del bundle |
-| `memory.recall` | Recupera memoria según los ámbitos declarados por el agente |
-| `memory.remember` | Guarda memoria de proyecto; requiere `memory.write: true` y permiso de la API key |
-| `packages.list` | Describe los paquetes fijados del bundle |
-| `local:NOMBRE` | Delega en un ejecutor configurado y autorizado en el equipo cliente o worker |
+| `modai_search_knowledge` | Busca entre los paquetes fijados del bundle |
+| `modai_recall` | Recupera memoria según los ámbitos declarados por el agente |
+| `modai_remember` | Guarda memoria de proyecto; exige `memory.write: true` (si no, publicar o componer falla con `MEMORY_POLICY`) y permiso de la API key |
 
 Los esquemas validan los argumentos antes de invocar la herramienta. Publicar un paquete no inicia ningún proceso.
 
-Para una herramienta local, el paquete declara `permissions: [process.execute]`. El operador configura fuera del paquete un mapa YAML:
+### Servidores MCP
+
+Un servidor MCP se declara en `contributes.mcpServers` de cualquier paquete y requiere `permissions: [mcp.connect]`. El agente lo selecciona por su `name`:
 
 ```yaml
-formatter:
-  command: node
-  args: ['/ruta/controlada/formatter.mjs']
-  timeoutMs: 30000
-  envKeys: []
+spec:
+  permissions: [mcp.connect]
+  contributes:
+    mcpServers:
+      - name: docs
+        description: Consulta la documentación interna
+        command: node
+        args: ["${packageDir}/server.mjs"]
+        envKeys: []
 ```
 
-La entrada llega como JSON por stdin, sin interpolación en un shell. La salida está limitada a 1 MB y el tiempo a 120 segundos. Usa `--bindings archivo.yaml`, `--allow-tool NOMBRE` y `--allow process.execute` al activar. Las variables de entorno adicionales necesitan `--allow-env VARIABLE`.
+El bundle (`AgentBundle.capabilities`) resuelve cada nombre a `kind: "builtin"` o `kind: "mcp"` (este incluye el `package` que lo aporta). El servidor lo calcula al componer y el cliente lo recalcula al verificar el bundle con la misma función (`resolveAgentCapabilities`, en `@modai/core`); si no coinciden, el bundle se rechaza.
 
-Una capacidad `kind: mcp` declara `name`, `description`, `command`, `args` y `envKeys`, y requiere `permissions: [mcp.connect]`. Su activación exige `--allow mcp.connect --allow-mcp NOMBRE`. El puente arranca el proceso stdio autorizado, descubre sus herramientas y las publica con un prefijo estable para evitar colisiones. Reinicia el puente después de cambiar la activación.
+Su activación exige `--allow mcp.connect --allow-mcp NOMBRE`, y `--allow-env VARIABLE` para cada variable de `envKeys`. Estas aprobaciones se guardan en un archivo privado de este equipo. El puente (o `modai agent run`) arranca el proceso stdio autorizado, descubre sus herramientas y las publica con un prefijo estable para evitar colisiones. `${packageDir}` apunta al store del paquete y solo se resuelve si su contenido coincide con `modai.lock`; si no, ejecuta `modai sync`. Reinicia el puente después de cambiar la activación.
 
-Los procesos autorizados se ejecutan con los permisos del usuario o del worker. Estos límites no constituyen un sandbox del sistema operativo. Para ejecutar herramientas que necesiten aislamiento, aloja el worker y sus bindings en un entorno restringido controlado por el operador.
+Las herramientas ejecutables de un paquete (`contributes.tools`) no se seleccionan desde el agente: las expone el gateway `modai-mcp` cuando las autorizas con `modai permissions grant`.
+
+Los procesos autorizados se ejecutan con los permisos del usuario o del worker. Estos límites no constituyen un sandbox del sistema operativo. Para ejecutar herramientas que necesiten aislamiento, aloja el worker en un entorno restringido controlado por el operador.
 
 ## Usar el agente desde un entorno MCP
 
@@ -165,7 +177,7 @@ El worker exige publicadores localmente autorizados por defecto. Registra sus cl
 
 Cada tarea conserva el bundle y las versiones del momento de envío. El worker reclama una tarea con un lease de 60 segundos y lo renueva durante la ejecución. Un worker caído permite reclamar la tarea al vencer el lease, con un máximo de tres intentos. Un lease viejo no puede finalizar una tarea reclamada por otro worker. La cancelación invalida el lease y el worker aborta al detectarlo en su siguiente renovación.
 
-La cola ofrece ejecución al menos una vez: una caída después de un efecto externo y antes de guardar el resultado puede repetir ese efecto. Los bindings que escriban en sistemas externos deben admitir idempotencia. `--idempotency-key` evita duplicar el envío de una misma tarea, no vuelve idempotentes sus herramientas.
+La cola ofrece ejecución al menos una vez: una caída después de un efecto externo y antes de guardar el resultado puede repetir ese efecto. Los servidores MCP que escriban en sistemas externos deben admitir idempotencia. `--idempotency-key` evita duplicar el envío de una misma tarea, no vuelve idempotentes sus herramientas.
 
 ## Memoria compartida
 

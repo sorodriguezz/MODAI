@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { AppError } from "@modai/contracts/errors";
 import { sha256 } from "@modai/contracts/security";
-import type { AnyPackageManifest, ArtifactFile } from "@modai/contracts/types";
+import type { PackageManifest, ArtifactFile } from "@modai/contracts/types";
 import type { ManagedEntry } from "@modai/contracts/spec-v1";
 import type { DesiredBlock, DesiredJson, DesiredState } from "./adapters.js";
 import { removeProjectDirectory, removeProjectFile, safeProjectPath, writeProjectFile } from "./fs.js";
@@ -234,14 +234,14 @@ export const STORE_DIRECTORY = ".modai/store";
 export function storePath(name: string): string { return `${STORE_DIRECTORY}/${name}`; }
 export function storePackageDir(root: string, name: string): string { return join(dirname(safeProjectPath(root, `${storePath(name)}/package.json`)), "files"); }
 
-interface StoreRecord { name: string; version: string; integrity: string; manifest: AnyPackageManifest; files: Array<{ path: string; sha256: string }> }
+interface StoreRecord { name: string; version: string; integrity: string; manifest: PackageManifest; files: Array<{ path: string; sha256: string }> }
 
 export function readStoreRecord(root: string, name: string): StoreRecord | undefined {
   const text = readText(root, `${storePath(name)}/package.json`);
   return text ? JSON.parse(text) as StoreRecord : undefined;
 }
 
-export function writeStore(root: string, artifact: { name: string; version: string; integrity: string; manifest: AnyPackageManifest; files: ArtifactFile[] }): void {
+export function writeStore(root: string, artifact: { name: string; version: string; integrity: string; manifest: PackageManifest; files: ArtifactFile[] }): void {
   const existing = readStoreRecord(root, artifact.name);
   if (existing?.integrity === artifact.integrity && verifyStore(root, artifact.name, artifact.integrity)) return;
   removeProjectDirectory(root, storePath(artifact.name));

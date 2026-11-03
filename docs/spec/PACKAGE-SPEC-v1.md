@@ -27,7 +27,7 @@ spec:
     - capability: ai.code-review
   conflicts:                  # incompatibilidades explícitas
     - package: "@x/otro"
-    - capability: legacy.runner
+    - capability: otro.runner
   permissions: [process.execute, filesystem.read, filesystem.write]
   contributes: { ... }        # ver §3
   entrypoints:                # atajo de autoría; la CLI lo expande a contributes al publicar
@@ -36,7 +36,7 @@ spec:
     rules: ./rules            # cada .md es una regla
   include: [tools]            # archivos extra del artefacto (scripts de herramientas)
   compatibility:
-    modai: ">=0.6.0"          # versión del Core
+    modai: ">=0.8.1"          # versión del Core
     os: [linux, darwin, win32]
 ```
 
@@ -171,6 +171,10 @@ Determinista (sin marcas de tiempo, claves ordenadas). Por paquete: `version`, `
 | Conflicto | Archivo, bloque o entrada JSON editados a mano detienen la instalación (`MANAGED_CONFLICT`) salvo `--force`. |
 | Integridad | La misma versión con contenido distinto en el registry se rechaza (`LOCK_INTEGRITY_MISMATCH`); un store alterado deshabilita las herramientas del paquete. |
 
-## 9. Compatibilidad con 0.5
+## 9. Validación del manifiesto
 
-Los manifiestos `schemaVersion: 1` se aceptan y se normalizan: `type` → `category` (y `profile` → `kind: Profile`), `files` bajo `.agents/skills/<n>/` → `skills`, `knowledge.source` → `knowledge.path`, capacidades MCP → `mcpServers`, `agent` → `agents[0]`.
+Un manifiesto debe declarar `apiVersion: modai.dev/v1`; sin él se rechaza al cargar el paquete (`loadPackageSource`), al publicarlo y al leerlo de un registry (`INVALID_MANIFEST`).
+
+### Agentes
+
+`contributes.agents[].capabilities` lista nombres de herramientas. Cada nombre es una herramienta integrada de MODAI (`modai_search_knowledge`, `modai_recall`, `modai_remember`; esta última exige `memory.write: true`) o el `name` de un servidor de `contributes.mcpServers` de un paquete que el agente resuelve (el propio o una dependencia). Las herramientas de `contributes.tools` no se seleccionan desde el agente: las expone el gateway tras `modai permissions grant`.

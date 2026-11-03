@@ -2,7 +2,8 @@ import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join, posix, resolve } from "node:path";
 import YAML from "yaml";
 import { assertSafeRelativePath, sha256 } from "@modai/contracts/security";
-import { isV1Manifest, type ArtifactFile, type PublishPackageInput } from "@modai/contracts/types";
+import { API_VERSION } from "@modai/contracts/spec-v1";
+import type { ArtifactFile, PublishPackageInput } from "@modai/contracts/types";
 import { safeProjectPath } from "./fs.js";
 
 const MAX_PACKAGE_BYTES = 25 * 1024 * 1024;
@@ -55,30 +56,26 @@ function expandEntrypoints(root: string, manifest: RawV1): void {
   delete spec.entrypoints;
 }
 
-/** Reads a package directory (legacy or v1 manifest) and produces the immutable artifact to publish. */
+/** Reads a package directory (modai.package.yaml) and produces the immutable artifact to publish. */
 export function loadPackageSource(directory: string): PublishPackageInput {
   const root = resolve(directory);
   const manifestPath = safeProjectPath(root, "modai.package.yaml");
   if (!existsSync(manifestPath)) throw new Error(`Falta ${manifestPath}`);
   const manifest = YAML.parse(readFileSync(manifestPath, "utf8"));
   const sources = new Set<string>();
-  if (isV1Manifest(manifest)) {
-    expandEntrypoints(root, manifest as RawV1);
-    const spec = (manifest as RawV1).spec ?? {};
-    const contributes = (spec.contributes ?? {}) as Record<string, Array<Record<string, unknown>>>;
-    for (const skill of contributes.skills ?? []) {
-      const path = String(skill.path);
-      const files = skill.files as string[] | undefined;
-      for (const file of files ? files.map(item => posix.join(path, item)) : listFiles(root, path)) sources.add(file);
-    }
-    for (const component of contributes.components ?? []) for (const file of listFiles(root, String(component.path))) if (file !== "modai.package.yaml") sources.add(file);
-    for (const key of ["rules", "knowledge"]) for (const item of contributes[key] ?? []) sources.add(String(item.path));
-    for (const item of contributes.files ?? []) sources.add(String(item.source));
-    for (const path of spec.include ?? []) for (const file of listFiles(root, path)) sources.add(file);
-  } else {
-    for (const rule of manifest?.files ?? []) sources.add(rule.source);
-    for (const rule of manifest?.knowledge ?? []) sources.add(rule.source);
+  if (manifest?.apiVersion !== API_VERSION) throw new Error(`${manifestPath} debe declarar apiVersion: ${API_VERSION} (ver docs/spec/PACKAGE-SPEC-v1.md).`);
+  expandEntrypoints(root, manifest as RawV1);
+  const spec = (manifest as RawV1).spec ?? {};
+  const contributes = (spec.contributes ?? {}) as Record<string, Array<Record<string, unknown>>>;
+  for (const skill of contributes.skills ?? []) {
+    const path = String(skill.path);
+    const files = skill.files as string[] | undefined;
+    for (const file of files ? files.map(item => posix.join(path, item)) : listFiles(root, path)) sources.add(file);
   }
+  for (const component of contributes.components ?? []) for (const file of listFiles(root, String(component.path))) if (file !== "modai.package.yaml") sources.add(file);
+  for (const key of ["rules", "knowledge"]) for (const item of contributes[key] ?? []) sources.add(String(item.path));
+  for (const item of contributes.files ?? []) sources.add(String(item.source));
+  for (const path of spec.include ?? []) for (const file of listFiles(root, path)) sources.add(file);
   const files: ArtifactFile[] = [];
   let totalBytes = 0;
   for (const source of [...sources].sort()) {

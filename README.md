@@ -23,7 +23,7 @@ MODAI (ModularAI) es un **gestor de paquetes para capacidades de IA**. Instala e
 
 El Core conoce contratos, no frameworks. `@testing/regression` declara `requires: browser.automation@^1` y `@testing/playwright` la `provides`. Mañana otro paquete puede proporcionarla sin cambiar el Core ni el paquete de regresión.
 
-## Qué incluye (0.6)
+## Qué incluye
 
 | Componente | Qué hace | Dónde |
 |---|---|---|
@@ -31,7 +31,7 @@ El Core conoce contratos, no frameworks. `@testing/regression` declara `requires
 | **Core** | Especificación v1, resolvedor de dependencias y capacidades, registries, adaptadores, installer reversible, búsqueda de conocimiento, memoria, ejecución de herramientas | `packages/core` (incluido en la CLI y el servidor) |
 | **Servidor central** (opcional) | Registry privado, memoria compartida por equipo, API keys, auditoría, backups, agentes y workers. No ejecuta modelos | `apps/server` · Docker |
 | **Panel web** | Inicio de sesión con usuario y contraseña, paquetes y sus contratos, conocimiento, memorias, proyectos, agentes, ejecuciones, usuarios, accesos y auditoría | `apps/admin`, servido en `/admin` |
-| **Catálogo de ejemplo** | Frontend, arquitectura, Playwright, regresión, perfil fullstack, adaptadores Cursor/OpenCode, y paquetes 0.5 | `examples/packages` |
+| **Catálogo de ejemplo** | Frontend, arquitectura, Playwright, regresión, perfil fullstack, adaptadores Cursor/OpenCode, harnesses, skills, conocimiento y un agente de ejemplo | `examples/packages` |
 
 Principios garantizados por el código y los tests:
 
@@ -136,7 +136,7 @@ La primera construcción instala dependencias, compila y ejecuta los tests. Abre
 ### Verificar el paquete npm
 
 ```sh
-npm run test:client-package   # genera dist/npm/sorodriguez-modai-0.6.0.tgz, lo instala aislado y prueba CLI, MCP y worker
+npm run test:client-package   # genera dist/npm/sorodriguez-modai-<versión>.tgz, lo instala aislado y prueba CLI, MCP y worker
 ```
 
 ## Crear tus propios paquetes
@@ -155,7 +155,7 @@ modai package publish ./mi-paquete --registry ~/modai-registry     # o la URL de
 modai add file:../mi-paquete                               # instalar sin publicar, mientras desarrollas
 ```
 
-Un paquete declara sus capacidades (`provides`/`requires`), permisos y contribuciones (`skills`, `rules`, `knowledge`, `tools`, `mcpServers`) en `modai.package.yaml` (`apiVersion: modai.dev/v1`). Las versiones publicadas son inmutables. Referencias: [`@testing/regression`](examples/packages/testing-regression/modai.package.yaml), [`@testing/playwright`](examples/packages/testing-playwright/modai.package.yaml), [`@patterns/frontend-architecture`](examples/packages/patterns-frontend-architecture/modai.package.yaml) y [`@adapters/cursor`](examples/packages/adapter-cursor/modai.package.yaml). Los manifiestos 0.5 (`schemaVersion: 1`) siguen siendo válidos.
+Un paquete declara sus capacidades (`provides`/`requires`), permisos y contribuciones (`skills`, `rules`, `knowledge`, `tools`, `mcpServers`) en `modai.package.yaml` (`apiVersion: modai.dev/v1`). Las versiones publicadas son inmutables. Referencias: [`@testing/regression`](examples/packages/testing-regression/modai.package.yaml), [`@testing/playwright`](examples/packages/testing-playwright/modai.package.yaml), [`@patterns/frontend-architecture`](examples/packages/patterns-frontend-architecture/modai.package.yaml) y [`@adapters/cursor`](examples/packages/adapter-cursor/modai.package.yaml).
 
 Guía completa: [crear, publicar e instalar paquetes](docs/guides/AUTHORING-PACKAGES.md) · [especificación v1](docs/spec/PACKAGE-SPEC-v1.md).
 
@@ -172,7 +172,6 @@ Guía completa: [crear, publicar e instalar paquetes](docs/guides/AUTHORING-PACK
 | `modai adapter list` / `adapter add` / `adapter remove` | Conectar con otros agentes |
 | `modai registry list` / `add` / `remove` / `packages` | Registries del proyecto |
 | `modai package scaffold` / `validate` / `keygen`, `modai package publish` | Autoría y publicación (firma Ed25519 opcional) |
-| `modai migrate` | Convierte un proyecto 0.5 a `modai.yaml` |
 | `modai server connect` / `whoami` / `admin …` / `project …` | Servidor central |
 | `modai agent …` / `runs …` / `worker` | Agentes compuestos por el servidor (proyectos vinculados con `modai init --project`) |
 | `modai workspace add/remove/update/sync/list` | La misma operación en muchos repositorios bajo una raíz, con plan previo y confirmación |
@@ -201,7 +200,7 @@ MODAI/
 └── docs/
     ├── architecture/  # ADR-001…004 y organización del proyecto
     ├── spec/          # Especificación de paquetes v1
-    └── guides/        # Autoría, panel, servidor central, MCP, API, migración…
+    └── guides/        # Autoría, panel, servidor central, MCP, API…
 ```
 
 `dist/` y `node_modules/` son generados. En un proyecto que usa MODAI, versiona `modai.yaml` y `modai.lock`. `.modai/store/` y `.modai/context-index.json` son caché reconstruible, ya excluida por `.modai/.gitignore`.
@@ -252,7 +251,7 @@ Paso a paso, respaldos (`deploy/backup.sh`) e imagen multi-arquitectura en GHCR:
 
 - [Índice de documentación](docs/README.md) · [historial de cambios](CHANGELOG.md)
 - [ADR-004: plataforma de paquetes y capacidades](docs/architecture/ADR-004-package-platform.md) · [especificación v1](docs/spec/PACKAGE-SPEC-v1.md)
-- [Crear y publicar paquetes](docs/guides/AUTHORING-PACKAGES.md) · [migración a 0.6](docs/guides/MIGRATION-0.6.md)
+- [Crear y publicar paquetes](docs/guides/AUTHORING-PACKAGES.md)
 - [Despliegue: Raspberry Pi, Fly.io y Railway](docs/guides/DEPLOY.md) · [panel web y usuarios](docs/guides/ADMIN-PANEL.md) · [servidor central](docs/guides/CENTRAL-SERVER.md) · [MCP](docs/guides/MCP.md) · [API](docs/guides/API.md)
 - [Modelos y embeddings del cliente](docs/guides/CLIENT-MODELS.md) · [agentes y workers](docs/guides/AGENTS-AND-CAPABILITIES.md) · [harness engineering](docs/guides/HARNESS-ENGINEERING.md) · [publicar la CLI](docs/guides/PUBLISH-CLI.md)
 
@@ -261,4 +260,4 @@ Paso a paso, respaldos (`deploy/backup.sh`) e imagen multi-arquitectura en GHCR:
 - El Core funciona sin servidor. Los registries de carpeta y el servidor central son intercambiables.
 - El panel web usa cuentas de usuario con sesión. La CLI, MCP y los workers usan API keys con roles, proyectos y namespaces. Aún no hay OIDC ni replicación entre servidores.
 - La búsqueda de conocimiento local usa BM25. La búsqueda semántica con embeddings (`modai client embed`) opera con el servidor; los embeddings se calculan siempre en el cliente.
-- Los agentes compuestos por el servidor (`modai agent`) funcionan sobre proyectos `modai.yaml` vinculados a un proyecto del servidor (`modai init --project`). El formato de proyecto 0.5 ya no se admite: conviértelo con `modai migrate`.
+- Los agentes compuestos por el servidor (`modai agent`) funcionan sobre proyectos `modai.yaml` vinculados a un proyecto del servidor (`modai init --project`). Solo se admite el formato de paquete `apiVersion: modai.dev/v1`. Los agentes usan herramientas integradas (`modai_search_knowledge`, `modai_recall`, `modai_remember`) y servidores MCP de `contributes.mcpServers`.

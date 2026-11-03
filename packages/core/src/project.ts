@@ -13,7 +13,6 @@ export const LOCK_FILE = "modai.lock";
 export function configDirectory(): string { return process.env.MODAI_CONFIG_DIR ?? join(homedir(), ".modai"); }
 
 export function isV1Project(root: string): boolean { return existsSync(join(resolve(root), PROJECT_FILE)); }
-export function isLegacyProject(root: string): boolean { return !isV1Project(root) && existsSync(join(resolve(root), ".modai", "manifest.yaml")); }
 
 export function emptyLock(): LockFile { return { lockfileVersion: 1, packages: {}, capabilities: {}, managed: [] }; }
 

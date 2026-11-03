@@ -40,6 +40,7 @@ await build({
     ),
     "@modai/contracts/spec-v1": resolve(root, "../contracts/src/spec-v1.ts"),
     "@modai/contracts/base-schemas": resolve(root, "../contracts/src/base-schemas.ts"),
+    "@modai/contracts/agent-tools": resolve(root, "../contracts/src/agent-tools.ts"),
     "@modai/sdk": resolve(root, "../sdk/src/index.ts"),
     "@modai/core": resolve(root, "../core/src/index.ts"),
     ...Object.fromEntries(globSync("../core/src/*.ts", { cwd: root }).map((file) => ["@modai/core/" + file.split("/").pop().replace(/\.ts$/, ""), resolve(root, file)])),

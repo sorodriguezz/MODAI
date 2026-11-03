@@ -39,9 +39,9 @@ export default {
   subtitle: "Estado del servidor y de tu biblioteca de capacidades.",
   async render(root, { actions, navigate, isCurrent }) {
     const name = state.user?.displayName || state.user?.username || "";
-    mount(actions, html`${can.admin() ? html`<a class="btn" href="#/users">${icon("users")}Invitar usuario</a>` : ""}<a class="btn primary" href="#/connect">${icon("terminal")}Conectar un cliente</a>`);
+    mount(actions, html`${can.manageUsers() ? html`<a class="btn" href="#/users">${icon("users")}Invitar usuario</a>` : ""}<a class="btn primary" href="#/connect">${icon("terminal")}Conectar un cliente</a>`);
     mount(root, html`
-      <div class="welcome"><div><h2>Hola, ${name}</h2><p>Tu rol es <b>${roleLabels[state.identity.role]}</b>. ${can.admin() ? "Tienes acceso completo al servidor." : "Algunas acciones dependen de los permisos que te asigne la administración."}</p></div></div>
+      <div class="welcome"><div><h2>Hola, ${name}</h2><p>Tu rol es <b>${roleLabels[state.identity.role]}</b>. ${can.admin() ? "Tienes acceso completo al servidor." : can.manage() ? "Administras: " + can.managedOrganizations().map((o) => o.name).join(", ") + "." : "Algunas acciones dependen de los permisos que te asigne la administración."}</p></div></div>
       <div class="stat-grid" id="stats">${Array.from({ length: 5 }, () => html`<div class="stat-card"><span class="skeleton" style="width:36px;height:36px;border-radius:10px"></span><span class="skeleton" style="width:50%"></span><span class="skeleton" style="width:30%;height:26px"></span></div>`)}</div>
       <div class="grid-2">
         <div class="panel"><div class="panel-head"><h3>Publicados recientemente</h3><a class="link" href="#/packages">Ver catálogo</a></div><div id="recentPackages">${skeletonRows(4, 3)}</div></div>
@@ -67,13 +67,13 @@ export default {
       const identity = state.identity;
       mount(root.querySelector("#accessSummary"), html`<dl class="definition-grid single">
         <div><dt>Proyectos asignados</dt><dd>${identity.projectIds.length ? identity.projectIds.join(", ") : "Ninguno (más los que crees)"}</dd></div>
-        <div><dt>Organizaciones</dt><dd>${identity.organizationIds.length ? identity.organizationIds.join(", ") : "Ninguna"}</dd></div>
-        <div><dt>Namespaces publicables</dt><dd>${identity.packageScopes.length ? identity.packageScopes.join(", ") : "Ninguno"}</dd></div>
+        <div><dt>Organizaciones</dt><dd>${state.permissions?.organizations.length ? state.permissions.organizations.map((o) => o.name + (o.manage ? " (administras)" : "")).join(", ") : "Ninguna"}</dd></div>
+        <div><dt>Namespaces publicables</dt><dd>${state.permissions?.publish.namespaces.length ? state.permissions.publish.namespaces.join(", ") : "Ninguno"}</dd></div>
       </dl>`);
     }
 
     const [summaryResult, projectsResult, documentsResult, usersResult] = await Promise.allSettled([
-      store.summary(), store.projects(), store.documents(), can.admin() ? get("/admin/users") : Promise.resolve(null),
+      store.summary(), store.projects(), store.documents(), can.manageUsers() ? get("/admin/users") : Promise.resolve(null),
     ]);
     if (!isCurrent()) return;
     const summary = summaryResult.status === "fulfilled" ? summaryResult.value : null;

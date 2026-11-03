@@ -1,6 +1,6 @@
 # Publica la CLI (@sorodriguez/modai) en npm cuando cambia la versión de packages/cli/package.json en main.
 # Si esa versión ya existe en npm no hace nada. Las versiones estables se publican como `latest`;
-# las prerelease (0.7.0-beta.1) como `next`, para no desplazar a la estable.
+# las prerelease (1.2.3-beta.1) como `next`, para no desplazar a la estable.
 #
 # Autenticación (una de dos):
 #   - Trusted publishing (recomendado): en npmjs.com → paquete → Settings → Trusted publisher → GitHub Actions,

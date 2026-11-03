@@ -4,7 +4,7 @@ Núcleo de MODAI ([ADR-004](../../docs/architecture/ADR-004-package-platform.md)
 
 | Módulo | Responsabilidad |
 |---|---|
-| `normalize.ts`, `validate.ts`, `source.ts` | Especificación v1, compatibilidad 0.5, validación estructural y empaquetado |
+| `normalize.ts`, `validate.ts`, `source.ts` | Especificación v1, validación estructural y empaquetado |
 | `resolver.ts` | Dependencias (backtracking SemVer) y capacidades (`provides`/`requires`/`optional`/`conflicts`), compatibilidad |
 | `registry.ts` | `LocalRegistry` (carpeta), `HttpRegistry` (servidor MODAI), `CompositeRegistry` |
 | `adapters.ts`, `targets.ts` | Adaptadores declarativos (integrados como datos) y destinos seguros |

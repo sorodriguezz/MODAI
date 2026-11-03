@@ -1,13 +1,18 @@
-schemaVersion: 1
-name: "@methodologies/sdd"
-version: 1.0.1
-type: methodology
-description: Flujo ligero de desarrollo guiado por especificaciones.
-files:
-  - source: content/SKILL.md
-    target: .agents/skills/sdd/SKILL.md
-  - source: content/README.md
-    target: docs/specs/README.md
-
-permissions:
-  - project.files
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@methodologies/sdd"
+  version: 1.0.1
+  description: Flujo ligero de desarrollo guiado por especificaciones.
+spec:
+  category: methodology
+  permissions:
+    - project.files
+  contributes:
+    skills:
+      - name: sdd
+        path: content
+        files: [SKILL.md]
+    files:
+      - source: content/README.md
+        target: docs/specs/README.md

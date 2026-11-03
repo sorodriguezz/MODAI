@@ -97,11 +97,29 @@ export function registerServerCommands(program: Command, print: Print): void {
       print(notes.join("\n"));
     });
 
-  server.command("whoami").description("Muestra la identidad y los proyectos autorizados").action(async () => {
+  server.command("keys").description("Tus API keys (las del usuario dueño de esta credencial). Se crean en el panel: Mis API keys")
+    .action(async () => print((await new ApiClient(effectiveConnection().server, effectiveConnection().token).myApiKeys()).filter(key => !key.revokedAt)
+      .map(key => ({ id: key.id, label: key.label, role: key.role, access: key.inherit ? "como tu cuenta" : "acotado", lastUsed: key.lastUsedAt ?? "nunca" }))));
+  server.command("revoke-key").description("Revoca una de tus API keys (por ejemplo, la de un equipo perdido)").argument("<id>")
+    .action(async (id: string) => { await new ApiClient(effectiveConnection().server, effectiveConnection().token).revokeMyApiKey(id); print(`API key revocada: ${id}`); });
+
+  server.command("whoami").description("Muestra la identidad, su rol y lo que puede hacer en el servidor").action(async () => {
     const connection = effectiveConnection();
     const api = new ApiClient(connection.server, connection.token);
     const session = await api.session();
-    print({ server: connection.server, label: session.label, role: session.role, projects: (await api.projects()).map(project => ({ id: project.id, name: project.name })) });
+    const projects = (await api.projects()).map(project => ({ id: project.id, name: project.name }));
+    const permissions = session.permissions;
+    const yes = (value: boolean) => value ? "sí" : "no";
+    print({
+      server: connection.server, label: session.label, role: session.role,
+      organizations: permissions.organizations.map(org => org.manage ? `${org.name} (administra)` : org.name),
+      projects,
+      publish: permissions.publish.all ? "todos los namespaces" : permissions.publish.namespaces.length ? permissions.publish.namespaces : "ninguno",
+      can: {
+        createProjects: yes(permissions.createProjects), writeMemory: yes(permissions.writeMemory), submitRuns: yes(permissions.submitRuns),
+        manageUsersAndKeys: yes(permissions.manage.users), manageOrganizations: yes(permissions.manage.organizations), audit: yes(permissions.manage.audit),
+      },
+    });
   });
 
   server.command("ping")
@@ -181,14 +199,21 @@ export function registerServerCommands(program: Command, print: Print): void {
     print(`Backup exportado a ${resolve(file)}`);
   });
   admin.command("import").argument("<file>").action(async (file: string) => print(await serverApi().importBackup(JSON.parse(readFileSync(resolve(file), "utf8")))));
-  admin.command("create-key")
+  admin.command("create-key").description("Crea una API key a nombre de un usuario, dentro de sus permisos (sin --owner: para tu usuario)")
     .requiredOption("--label <label>")
-    .option("--role <role>", "reader, publisher, worker o admin", "reader")
-    .option("--projects <ids>", "Proyectos autorizados", commaList)
-    .option("--organizations <ids>", "Organizaciones autorizadas", commaList)
-    .option("--scopes <scopes>", "Namespaces publicables, por ejemplo @skills", commaList)
-    .action(async (options: { label: string; role: string; projects?: string[]; organizations?: string[]; scopes?: string[] }) => {
-      print(await serverApi().createApiKey(options.label, options.role, { projectIds: options.projects, organizationIds: options.organizations, packageScopes: options.scopes }));
+    .option("--owner <username|id>", "Usuario dueño de la key")
+    .option("--role <role>", "reader, publisher, worker, org-admin o admin (como máximo el del dueño)", "reader")
+    .option("--projects <ids>", "Acotar a estos proyectos", commaList)
+    .option("--organizations <ids>", "Acotar a estas organizaciones", commaList)
+    .option("--scopes <scopes>", "Acotar a estos namespaces, por ejemplo @skills", commaList)
+    .option("--service", "Key de servicio sin dueño (solo con el token de instalación o administración global)")
+    .action(async (options: { label: string; owner?: string; role: string; projects?: string[]; organizations?: string[]; scopes?: string[]; service?: boolean }) => {
+      const api = serverApi();
+      const wanted = options.owner;
+      const owner = wanted ? (await api.users()).find(user => user.id === wanted || user.username === wanted.toLowerCase()) : undefined;
+      if (options.owner && !owner) throw new Error(`No administras un usuario llamado ${options.owner}`);
+      const key = await api.createApiKey(options.label, options.role, { projectIds: options.projects, organizationIds: options.organizations, packageScopes: options.scopes }, options.service ? { ownerId: null } : owner ? { ownerId: owner.id } : {});
+      print({ id: key.id, label: key.label, role: key.role, owner: key.ownerName ?? "sin dueño", access: key.inherit ? "los mismos que su dueño" : "acotado", token: key.token });
     });
   admin.command("grant-key").argument("<id>")
     .option("--projects <ids>", "Proyectos", commaList).option("--organizations <ids>", "Organizaciones", commaList).option("--scopes <scopes>", "Namespaces", commaList)
@@ -196,11 +221,29 @@ export function registerServerCommands(program: Command, print: Print): void {
       await serverApi().updateKeyGrants(id, { projectIds: options.projects ?? [], organizationIds: options.organizations ?? [], packageScopes: options.scopes ?? [] });
       print("Accesos de la API key reemplazados.");
     });
-  admin.command("create-organization").argument("<name>").action(async (name: string) => print(await serverApi().createOrganization(name)));
+  admin.command("create-organization").argument("<name>").option("--description <text>", "Descripción")
+    .action(async (name: string, options: { description?: string }) => print(await serverApi().createOrganization(name, options.description)));
+  admin.command("organizations").description("Organizaciones visibles con sus proyectos, namespaces y miembros")
+    .action(async () => print((await serverApi().organizations()).map(org => ({ id: org.id, name: org.name, projects: org.projects, namespaces: org.namespaces, members: org.members, manage: org.canManage }))));
+  admin.command("namespaces").description("Namespaces de paquetes, su organización y visibilidad")
+    .action(async () => print((await serverApi().namespaces()).map(ns => ({ name: ns.name, organization: ns.organizationName ?? "—", visibility: ns.visibility, packages: ns.packages, publish: ns.canPublish }))));
+  admin.command("create-namespace").argument("<name>", "Por ejemplo @acme-pagos")
+    .option("--organization <id>", "Organización dueña")
+    .option("--restricted", "Solo quien tenga el namespace asignado ve sus paquetes")
+    .option("--description <text>", "Descripción")
+    .action(async (name: string, options: { organization?: string; restricted?: boolean; description?: string }) =>
+      print(await serverApi().createNamespace({ name, organizationId: options.organization, visibility: options.restricted ? "restricted" : "internal", description: options.description })));
   admin.command("trust-publisher").argument("<public-key>").option("--label <label>", "Nombre del publicador", "publisher")
     .action(async (path: string, options: { label: string }) => print(await serverApi().registerPublisher(readFileSync(resolve(path), "utf8"), options.label, true)));
-  admin.command("prune")
-    .option("--memory-days <days>", "Retención de memorias", "365")
-    .option("--audit-days <days>", "Retención de auditoría", "90")
-    .action(async (options: { memoryDays: string; auditDays: string }) => print(await serverApi().prune(Number(options.memoryDays), Number(options.auditDays))));
+  admin.command("prune").description("Borra memorias y/o eventos de auditoría antiguos (sin opciones: memorias de más de 365 días y auditoría de más de 90)")
+    .option("--memory-days <days>", "Borra memorias sin cambios hace más de N días (0 = todas)")
+    .option("--audit-days <days>", "Borra eventos de auditoría de hace más de N días (0 = todos)")
+    .option("--dry-run", "Solo cuenta lo que se borraría")
+    .action(async (options: { memoryDays?: string; auditDays?: string; dryRun?: boolean }) => {
+      const neither = options.memoryDays === undefined && options.auditDays === undefined;
+      const memoryDays = neither ? 365 : options.memoryDays === undefined ? undefined : Number(options.memoryDays);
+      const auditDays = neither ? 90 : options.auditDays === undefined ? undefined : Number(options.auditDays);
+      const result = await serverApi().prune(memoryDays, auditDays, options.dryRun);
+      print(`${result.dryRun ? "Se borrarían" : "Borrados"}: ${result.memories} memorias y ${result.audit} eventos de auditoría.`);
+    });
 }

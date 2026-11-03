@@ -10,15 +10,15 @@ El único workspace destinado a npm es `packages/cli` (`@sorodriguez/modai`). Su
 
 1. Si esa versión ya existe en npm, termina sin hacer nada.
 2. Comprueba que la versión coincide en todos los archivos que la repiten, instala, compila, ejecuta `npm test`, empaqueta y prueba el paquete instalado.
-3. Publica con provenance: una versión estable (`0.7.0`) como `latest`; una prerelease (`0.7.0-beta.1`) como `next`.
-4. Crea el tag `v0.7.0`. Un tag creado por el workflow no dispara otros workflows: si quieres también la imagen Docker de esa versión, ejecuta **Imagen Docker** a mano desde la pestaña Actions sobre el tag.
+3. Publica con provenance: una versión estable (`1.2.3`) como `latest`; una prerelease (`1.2.3-beta.1`) como `next`.
+4. Crea el tag `v1.2.3`. Un tag creado por el workflow no dispara otros workflows: si quieres también la imagen Docker de esa versión, ejecuta **Imagen Docker** a mano desde la pestaña Actions sobre el tag.
 
 Para lanzar una versión:
 
 ```sh
 npm run version:set -- 0.8.0      # una sola versión: CLI, Core, contratos, SDK, servidor, panel y package-lock.json
 # edita CHANGELOG.md
-git commit -am "release: CLI 0.7.0" && git push
+git commit -am "release: CLI 1.2.3" && git push
 ```
 
 Configura una sola vez la autenticación con npm (una de las dos):
@@ -37,12 +37,12 @@ npm ci
 npm run test:client-package
 ```
 
-Esto compila y genera `dist/npm/sorodriguez-modai-0.6.0.tgz`, lo instala en un directorio temporal ajeno al monorepo y comprueba CLI, dos clientes con credenciales distintas, memoria compartida autorizada, aislamiento, activación, MCP y worker. `npm test` ejecuta además la suite de integración del servidor.
+Esto compila y genera `dist/npm/sorodriguez-modai-<versión>.tgz`, lo instala en un directorio temporal ajeno al monorepo y comprueba CLI, dos clientes con credenciales distintas, memoria compartida autorizada, aislamiento, activación, MCP y worker. `npm test` ejecuta además la suite de integración del servidor.
 
 Revisa el contenido antes de publicar:
 
 ```sh
-npm publish ./dist/npm/sorodriguez-modai-0.6.0.tgz --access public --dry-run
+npm publish ./dist/npm/sorodriguez-modai-<versión>.tgz --access public --dry-run
 ```
 
 El nombre público es `@sorodriguez/modai`. Publica con una cuenta que tenga permisos sobre el scope `@sorodriguez`. El SDK, los contratos y el servidor conservan sus nombres internos y no se publican.
@@ -52,7 +52,7 @@ El nombre público es `@sorodriguez/modai`. Publica con una cuenta que tenga per
 ```sh
 npm login
 npm whoami
-npm publish ./dist/npm/sorodriguez-modai-0.6.0.tgz --access public
+npm publish ./dist/npm/sorodriguez-modai-<versión>.tgz --access public
 ```
 
 También puedes publicar desde el workspace; su `prepack` construye contratos, SDK, Core y CLI:

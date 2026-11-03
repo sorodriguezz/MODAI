@@ -8,4 +8,4 @@ Se eliminan InferenceService, las variables MODAI_OLLAMA_* y las rutas /inferenc
 
 El paquete @adapters/ollama solo distribuye configuración para el runtime del equipo cliente. No es un servicio Docker.
 
-En 0.5, ADR-003 añade un worker opcional en un proceso separado con su propio runtime. La API HTTP conserva este límite y no aloja modelos.
+ADR-003 añade un worker opcional en un proceso separado con su propio runtime. La API HTTP conserva este límite y no aloja modelos.

@@ -17,8 +17,10 @@ export class AuditService {
       .map((item) => ({ ...item, details: JSON.parse(item.detailsJson as string), detailsJson: undefined }));
   }
 
-  prune(days: number): number {
-    const cutoff = new Date(Date.now() - Math.max(days, 1) * 86_400_000).toISOString();
+  /** Deletes events older than `days` days (0 = all of them). `dryRun` only counts. */
+  prune(days: number, dryRun = false): number {
+    const cutoff = new Date(Date.now() - Math.max(days, 0) * 86_400_000).toISOString();
+    if (dryRun) return (this.db.connection.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE created_at < ?").get(cutoff) as { n: number }).n;
     return this.db.connection.prepare("DELETE FROM audit_log WHERE created_at < ?").run(cutoff).changes;
   }
 }

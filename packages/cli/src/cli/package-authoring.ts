@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import YAML from "yaml";
 import { signaturePayload } from "@modai/contracts/security";
-import type { PackageType, PublishPackageInput } from "@modai/contracts/types";
+import type { PublishPackageInput } from "@modai/contracts/types";
 
 function writeNew(path: string, content: string): void {
   if (existsSync(path)) throw new Error(`No se sobrescribió ${path}`);

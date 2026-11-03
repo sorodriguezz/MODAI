@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "modai-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "MODAI_PORT=8799 MODAI_HOST=127.0.0.1 MODAI_DATABASE_PATH=/private/tmp/claude-501/-Users-sorodriguezz-Desktop-MODAI/4a39d254-ce1c-40a7-9abf-5f8310c4923a/scratchpad/devserver/db.sqlite MODAI_ARTIFACT_DIR=/private/tmp/claude-501/-Users-sorodriguezz-Desktop-MODAI/4a39d254-ce1c-40a7-9abf-5f8310c4923a/scratchpad/devserver/artifacts MODAI_API_TOKEN=dev-bootstrap-token-local-only MODAI_ADMIN_USERNAME=admin MODAI_ADMIN_PASSWORD=dev-admin-password-local node --no-warnings apps/server/dist/server.js"],
+      "port": 8799
+    }
+  ]
+}

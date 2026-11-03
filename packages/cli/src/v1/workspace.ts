@@ -5,7 +5,7 @@
 import { lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import type { Command } from "commander";
-import { isLegacyProject, isV1Project, loadV1Project } from "@modai/core";
+import { isV1Project, loadV1Project } from "@modai/core";
 import { addPackages, parseSpec, removePackage } from "./commands.js";
 import { confirm, projectRegistry, runSync, summarize } from "./runtime.js";
 import { commaList } from "../cli/agent-commands.js";
@@ -16,7 +16,7 @@ const MAX_DIRECTORIES = 20_000;
 const LOCK_FILE = ".modai/.workspace.lock";
 const STALE_LOCK_MS = 15 * 60 * 1000;
 
-export interface DiscoveredProject { root: string; path: string; format: "v1" | "0.5" }
+export interface DiscoveredProject { root: string; path: string }
 
 /**
  * Finds MODAI projects under `root`. Symlinks are never followed (a link cannot pull the walk
@@ -30,8 +30,7 @@ export function discoverProjects(root: string, options: { depth?: number; filter
   let visited = 0;
   const walk = (directory: string, level: number) => {
     if (++visited > MAX_DIRECTORIES) throw new Error(`Hay más de ${MAX_DIRECTORIES} carpetas bajo ${base}; usa una raíz más concreta o --depth menor`);
-    if (isV1Project(directory)) found.push({ root: directory, path: relative(base, directory) || ".", format: "v1" });
-    else if (isLegacyProject(directory)) found.push({ root: directory, path: relative(base, directory) || ".", format: "0.5" });
+    if (isV1Project(directory)) found.push({ root: directory, path: relative(base, directory) || "." });
     if (level >= depth) return;
     let entries: string[];
     try { entries = readdirSync(directory); } catch { return; }
@@ -75,7 +74,6 @@ async function runOnProjects(action: Action, options: RunOptions, print: Print):
   // 1. Plan: read-only checks for every project before touching any of them.
   const plan: Array<{ project: DiscoveredProject; outcome: Outcome }> = [];
   for (const project of projects) {
-    if (project.format === "0.5") { plan.push({ project, outcome: { project: project.path, result: "omitido", detail: "formato 0.5: conviértelo con modai migrate" } }); continue; }
     try { plan.push({ project, outcome: await action.plan(project) }); }
     catch (error) { plan.push({ project, outcome: { project: project.path, result: "error", detail: (error as Error).message } }); }
   }
@@ -136,9 +134,8 @@ export function registerWorkspaceCommands(program: Command, print: Print): void 
     .action((options: { root: string; depth: string; filter?: string[] }) => {
       const projects = discoverProjects(options.root, { depth: Number(options.depth), filter: options.filter });
       printList(projects.map(project => {
-        if (project.format === "0.5") return { project: project.path, format: "0.5 (modai migrate)", packages: "" };
         const loaded = loadV1Project(project.root);
-        return { project: project.path, format: "v1", name: loaded.file.name, packages: Object.keys(loaded.file.dependencies).join(", ") };
+        return { project: project.path, name: loaded.file.name, packages: Object.keys(loaded.file.dependencies).join(", ") };
       }), `No hay proyectos MODAI bajo ${resolve(options.root)}.`);
     });
 

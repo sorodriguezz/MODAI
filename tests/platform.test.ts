@@ -29,8 +29,9 @@ process.env.MODAI_CONFIG_DIR=approvalDirectory;
 after(()=>rmSync(approvalDirectory,{recursive:true,force:true}));
 const admin = "platform-test-secret";
 const headers = { authorization: `Bearer ${admin}` };
-function input(name: string, extra: Partial<PackageManifest> = {}, files: Record<string,string> = {}): PublishPackageInput {
-  return { manifest: {schemaVersion:1,name,version:"1.0.0",type:"tool",description:"Capacidad de prueba verificable",...extra},files:Object.entries(files).map(([path,content])=>({path,content:Buffer.from(content).toString("base64"),sha256:sha256(content)})) };
+/** A v1 package; `spec` is merged into spec (permissions, dependencies, contributes...). */
+function input(name: string, spec: Record<string,unknown> = {}, files: Record<string,string> = {}): PublishPackageInput {
+  return { manifest: {apiVersion:"modai.dev/v1",kind:"Package",metadata:{name,version:"1.0.0",description:"Capacidad de prueba verificable"},spec:{category:"test",...spec}} as PackageManifest,files:Object.entries(files).map(([path,content])=>({path,content:Buffer.from(content).toString("base64"),sha256:sha256(content)})) };
 }
 async function fixture(overrides: Partial<AppOptions> = {}) {
   const root=mkdtempSync(join(tmpdir(),"modai-platform-"));
@@ -40,7 +41,7 @@ async function fixture(overrides: Partial<AppOptions> = {}) {
   return {root,app,api,server,close:async()=>{await app.close();rmSync(root,{recursive:true,force:true})}};
 }
 async function publishExamples(api:ApiClient) {
-  for(const name of ["skill-design-patterns","tool-context","agent-backend-reviewer"])await api.publish(loadPackageSource(join(process.cwd(),"examples/packages",name)));
+  for(const name of ["skill-design-patterns","agent-backend-reviewer"])await api.publish(loadPackageSource(join(process.cwd(),"examples/packages",name)));
 }
 /** A v1 project linked to server project `id`, with the server as its registry (what `modai init --project` creates). */
 async function localProject(root:string,server:string,id:string) {
@@ -112,11 +113,11 @@ test("separa memoria de proyecto y sesión; compartir organización exige permis
 
 test("bloquea hooks, rutas reservadas, permisos sin conceder y escapes mediante symlinks",async()=>{
   const f=await fixture();try{
-    for(const target of [".git/hooks/pre-commit",".GIT/config",".github/workflows/pwn.yml","package.json",".env",".agents/skills/a/../../escape","C:\\escape",".modai/manifest.yaml"]){await assert.rejects(()=>f.api.publish(input("@paths/test",{files:[{source:"x",target}]},{x:"safe marker"})),/UNSAFE_/)}
-    const p=await f.api.publish(input("@paths/linked",{files:[{source:"x",target:".agents/skills/linked/file.txt"}]},{x:"safe marker"}));
+    for(const target of [".git/hooks/pre-commit",".GIT/config",".github/workflows/pwn.yml","package.json",".env",".agents/skills/a/../../escape","C:\\escape",".modai/manifest.yaml"]){await assert.rejects(()=>f.api.publish(input("@paths/test",{contributes:{files:[{source:"x",target}]}},{x:"safe marker"})),/UNSAFE_/)}
+    const p=await f.api.publish(input("@paths/linked",{contributes:{files:[{source:"x",target:".agents/skills/linked/file.txt"}]}},{x:"safe marker"}));
     const project=join(f.root,"install"),outside=join(f.root,"outside");mkdirSync(project);mkdirSync(outside);mkdirSync(join(project,".agents"));symlinkSync(outside,join(project,".agents/skills"));
     await assert.rejects(()=>installV1(f.server,project,{[p.name]:"*"}),/simbólic|symlink/i);assert.equal(existsSync(join(outside,"linked/file.txt")),false);
-    const executable=input("@paths/exec",{permissions:["process.execute"],files:[{source:"x",target:".modai/packages/script.sh",executable:true}]},{x:"marker"});await f.api.publish(executable);
+    const executable=input("@paths/exec",{permissions:["process.execute"],contributes:{files:[{source:"x",target:".modai/packages/script.sh",executable:true}]}},{x:"marker"});await f.api.publish(executable);
     rmSync(join(project,".agents/skills"));
     await assert.rejects(()=>installV1(f.server,project,{"@paths/exec":"*"}),/conceder process\.execute/);
   }finally{await f.close()}
@@ -143,7 +144,7 @@ test("compone y fija agentes con skills y herramientas; activación conserva arc
     assert.equal(activation.bundle.agent.version,"1.0.0");assert.equal(activation.bundle.capabilities.length,2);assert.ok(activation.bundle.instructions.some(i=>i.packageName==="@skills/design-patterns"));
     assert.match(readFileSync(join(project,"AGENTS.md"),"utf8"),/\.modai\/agent.md/);assert.ok(existsSync(join(project,".agents/skills/design-patterns/SKILL.md")));
     assert.equal(loadActivation(project).bundle.digest,activation.bundle.digest);
-    const old=loadPackageSource(join(process.cwd(),"examples/packages/agent-backend-reviewer"));old.manifest.version="2.0.0";await f.api.publish(old);
+    const old=loadPackageSource(join(process.cwd(),"examples/packages/agent-backend-reviewer"));old.manifest.metadata.version="2.0.0";await f.api.publish(old);
     assert.equal(loadActivation(project).bundle.agent.version,"1.0.0");
     const upgraded=await activateAgent(f.api,project,f.server,"@agents/backend-reviewer","2.0.0",{adapter:"agents-md"});assert.equal(upgraded.bundle.agent.version,"2.0.0");
     writeFileSync(join(project,".modai/agent.md"),"user changes");await assert.rejects(()=>activateAgent(f.api,project,f.server,"@agents/backend-reviewer","1.0.0"),/cambios del usuario/);
@@ -151,14 +152,23 @@ test("compone y fija agentes con skills y herramientas; activación conserva arc
   }finally{await f.close()}
 });
 
-test("rechaza herramientas ausentes, colisiones y escritura incompatible con la política del agente",async()=>{
+test("rechaza herramientas ausentes, políticas de memoria incompatibles y colisiones de servidores MCP",async()=>{
   const f=await fixture();try{
-    const definition={instructions:"Revisa",skills:[],capabilities:["missing"],memory:{read:["project"] as ["project"],write:false}};
-    await f.api.publish(input("@agents/missing",{type:"agent",agent:definition}));await f.api.createProject({id:"p",name:"p"});
-    await assert.rejects(()=>f.api.composeAgent("p","@agents/missing"),/CAPABILITY_NOT_FOUND/);
-    await f.api.publish(loadPackageSource(join(process.cwd(),"examples/packages/tool-context")));
-    await f.api.publish(input("@agents/write",{type:"agent",dependencies:{"@tools/context":"*"},agent:{...definition,capabilities:["modai_remember"]}}));
-    await assert.rejects(()=>f.api.composeAgent("p","@agents/write"),/MEMORY_POLICY/);
+    const agent=(name:string,capabilities:string[],write=false)=>({contributes:{agents:[{name,instructions:"Revisa",skills:[],capabilities,memory:{read:["project"],write}}]}});
+    // Sin dependencias, un nombre que no es integrado ni servidor propio no puede resolverse nunca.
+    await assert.rejects(()=>f.api.publish(input("@agents/missing",agent("missing",["missing"]))),/AGENT_CAPABILITY/);
+    await assert.rejects(()=>f.api.publish(input("@agents/write",agent("write",["modai_remember"]))),/MEMORY_POLICY/);
+    await f.api.publish(input("@agents/writer",agent("writer",["modai_remember"],true)));
+    await f.api.createProject({id:"p",name:"p"});
+    assert.deepEqual((await f.api.composeAgent("p","@agents/writer")).capabilities.map(c=>c.name),["modai_remember"]);
+    // Con dependencias el servidor solo puede comprobarlo al componer, cuando sabe qué aportan.
+    await f.api.publish(input("@lib/empty"));
+    await f.api.publish(input("@agents/lost",{dependencies:{"@lib/empty":"*"},...agent("lost",["missing"])}));
+    await assert.rejects(()=>f.api.composeAgent("p","@agents/lost"),/CAPABILITY_NOT_FOUND/);
+    const server=(name:string)=>({permissions:["mcp.connect"],contributes:{mcpServers:[{name:"echo",description:"Echo",command:"node",args:["-e","0"]}]}});
+    await f.api.publish(input("@mcp/one",server("one")));await f.api.publish(input("@mcp/two",server("two")));
+    await f.api.publish(input("@agents/clash",{dependencies:{"@mcp/one":"*","@mcp/two":"*"},...agent("clash",["echo"])}));
+    await assert.rejects(()=>f.api.composeAgent("p","@agents/clash"),/CAPABILITY_COLLISION/);
   }finally{await f.close()}
 });
 
@@ -192,8 +202,8 @@ test("MCP descubre herramientas de un proceso aprobado y aplica la política del
   const f=await fixture();let client:Client|undefined;
   try{
     const script=join(f.root,"echo.mjs");writeFileSync(script,`import {Server} from ${JSON.stringify(import.meta.resolve("@modelcontextprotocol/sdk/server/index.js"))};\nimport {StdioServerTransport} from ${JSON.stringify(import.meta.resolve("@modelcontextprotocol/sdk/server/stdio.js"))};\nimport {ListToolsRequestSchema,CallToolRequestSchema} from ${JSON.stringify(import.meta.resolve("@modelcontextprotocol/sdk/types.js"))};\nconst s=new Server({name:'echo',version:'1'},{capabilities:{tools:{}}});s.setRequestHandler(ListToolsRequestSchema,async()=>({tools:[{name:'ping',description:'Echo',inputSchema:{type:'object',properties:{},additionalProperties:false}}]}));s.setRequestHandler(CallToolRequestSchema,async()=>({content:[{type:'text',text:'pong'}]}));await s.connect(new StdioServerTransport());`);
-    await f.api.publish(input("@mcp/echo",{type:"mcp",permissions:["mcp.connect"],capabilities:[{kind:"mcp",name:"echo",description:"Echo fixture",command:process.execPath,args:[script],envKeys:[]}]}));
-    await f.api.publish(input("@agents/echo",{type:"agent",dependencies:{"@mcp/echo":"*"},agent:{instructions:"Usa echo",skills:[],capabilities:["echo"],memory:{read:[],write:false}}}));
+    await f.api.publish(input("@mcp/echo",{permissions:["mcp.connect"],contributes:{mcpServers:[{name:"echo",description:"Echo fixture",command:process.execPath,args:[script],envKeys:[]}]}}));
+    await f.api.publish(input("@agents/echo",{dependencies:{"@mcp/echo":"*"},contributes:{agents:[{name:"echo",instructions:"Usa echo",skills:[],capabilities:["echo"],memory:{read:[],write:false}}]}}));
     await f.api.createProject({id:"p",name:"p"});const project=await localProject(f.root,f.server,"p");
     await assert.rejects(()=>activateAgent(f.api,project,f.server,"@agents/echo","*",{grants:["mcp.connect"]}),/allow-mcp/);
     await activateAgent(f.api,project,f.server,"@agents/echo","*",{grants:["mcp.connect"],allowedMcp:["echo"]});
@@ -229,7 +239,7 @@ test("restaura proyectos, organización, memorias y tareas sin credenciales ni l
 test("la búsqueda vectorial limita candidatos y mantiene disponible la API después del rechazo",async()=>{
   const f=await fixture();try{
     const db=new Database(join(f.root,"db.sqlite"));
-    db.connection.transaction(()=>{const doc=db.connection.prepare("INSERT INTO knowledge_documents (id,title,content,tags_json,created_at) VALUES (?, 'doc', 'content', '[]', '2026-01-01')");const vector=db.connection.prepare("INSERT INTO knowledge_vectors (document_id,model,dimensions,embedding_json,embedding_blob,updated_at) VALUES (?, 'large', 1, '[]', ?, '2026-01-01')");const blob=Buffer.alloc(4);blob.writeFloatLE(1);for(let i=0;i<2001;i++){doc.run(String(i));vector.run(String(i),blob)}})();db.close();
+    db.connection.transaction(()=>{const doc=db.connection.prepare("INSERT INTO knowledge_documents (id,title,content,tags_json,created_at,updated_at) VALUES (?, 'doc', 'content', '[]', '2026-01-01', '2026-01-01')");const vector=db.connection.prepare("INSERT INTO knowledge_vectors (document_id,model,dimensions,embedding_blob,updated_at) VALUES (?, 'large', 1, ?, '2026-01-01')");const blob=Buffer.alloc(4);blob.writeFloatLE(1);for(let i=0;i<2001;i++){doc.run(String(i));vector.run(String(i),blob)}})();db.close();
     await assert.rejects(()=>f.api.vectorSearch("large",[1]),/VECTOR_CANDIDATE_LIMIT/);assert.equal((await f.api.health()).status,"ok");
     const empty=await f.api.vectorSearch("large",[1],[]);assert.deepEqual(empty,[]);
   }finally{await f.close()}
@@ -245,13 +255,20 @@ test("la cola abandona una tarea después de tres workers vencidos",async()=>{
 });
 
 
-test("herramientas locales requieren aprobación y bindings externos; los argumentos llegan por stdin sin shell",async()=>{
+test("los servidores MCP de un agente usan ${packageDir} solo desde un store que coincide con modai.lock",async()=>{
   const f=await fixture();try{
-    await f.api.publish(input("@tools/local",{permissions:["process.execute"],capabilities:[{kind:"tool",name:"echo_marker",description:"Echo de prueba",binding:"local:echo",inputSchema:{type:"object",properties:{message:{type:"string"}},required:["message"],additionalProperties:false}}]}));
-    await f.api.publish(input("@agents/local",{type:"agent",dependencies:{"@tools/local":"*"},agent:{instructions:"Echo",skills:[],capabilities:["echo_marker"],memory:{read:[],write:false}}}));await f.api.createProject({id:"p",name:"p"});
-    const bundle=await f.api.composeAgent("p","@agents/local");await assert.rejects(()=>new CapabilityHost(f.api,bundle,{cwd:f.root}).start(),/no autorizada/);
-    const host=new CapabilityHost(f.api,bundle,{cwd:f.root,allowedTools:["echo_marker"],bindings:{echo:{command:process.execPath,args:["-e","let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>process.stdout.write(JSON.parse(s).message));"]}}});
-    await host.start();try{const marker="$(touch should-not-exist)";assert.equal(await host.call("echo_marker",{message:marker}),marker);assert.equal(existsSync(join(f.root,"should-not-exist")),false);await assert.rejects(()=>host.call("echo_marker",{message:42}),/Entrada inválida/)}finally{await host.close()}
+    const sdk=(path:string)=>JSON.stringify(import.meta.resolve(`@modelcontextprotocol/sdk/${path}`));
+    const script=`import {Server} from ${sdk("server/index.js")};\nimport {StdioServerTransport} from ${sdk("server/stdio.js")};\nimport {ListToolsRequestSchema,CallToolRequestSchema} from ${sdk("types.js")};\nconst s=new Server({name:'pkg',version:'1'},{capabilities:{tools:{}}});s.setRequestHandler(ListToolsRequestSchema,async()=>({tools:[{name:'ping',description:'Ping',inputSchema:{type:'object',properties:{},additionalProperties:false}}]}));s.setRequestHandler(CallToolRequestSchema,async()=>({content:[{type:'text',text:'from-store'}]}));await s.connect(new StdioServerTransport());`;
+    await f.api.publish(input("@mcp/packaged",{permissions:["mcp.connect"],contributes:{mcpServers:[{name:"packaged",description:"Servidor empaquetado",command:"node",args:["${packageDir}/server.mjs"]}]}},{"server.mjs":script}));
+    await f.api.publish(input("@agents/packaged",{dependencies:{"@mcp/packaged":"*"},contributes:{agents:[{name:"packaged",instructions:"Usa el servidor",skills:[],capabilities:["packaged"],memory:{read:[],write:false}}]}}));
+    await f.api.createProject({id:"p",name:"p"});const project=await localProject(f.root,f.server,"p");
+    const activation=await activateAgent(f.api,project,f.server,"@agents/packaged","*",{grants:["mcp.connect"],allowedMcp:["packaged"]});
+    const options={cwd:project,allowedMcp:["packaged"]};
+    const host=new CapabilityHost(f.api,activation.bundle,options);await host.start();
+    try{assert.deepEqual(host.list().map(tool=>tool.name),["packaged__ping"]);assert.match(JSON.stringify(await host.call("packaged__ping",{})),/from-store/)}finally{await host.close()}
+    await assert.rejects(()=>new CapabilityHost(f.api,activation.bundle,{cwd:project}).start(),/no autorizado/);
+    writeFileSync(join(project,".modai/store/@mcp/packaged/files/server.mjs"),"process.exit(0)");
+    await assert.rejects(()=>new CapabilityHost(f.api,activation.bundle,options).start(),/contenido cambió/);
   }finally{await f.close()}
 });
 

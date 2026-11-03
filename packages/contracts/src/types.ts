@@ -1,52 +1,7 @@
-import type { PackageManifestV1Input } from "./spec-v1.js";
-export const PACKAGE_TYPES = [
-  "methodology",
-  "harness",
-  "knowledge",
-  "skill",
-  "memory",
-  "tool",
-  "adapter",
-  "template",
-  "mcp",
-  "profile",
-  "agent",
-] as const;
-
-export type PackageType = (typeof PACKAGE_TYPES)[number];
-
-export interface PackageFileRule {
-  source: string;
-  target: string;
-  executable?: boolean;
-}
-
-export interface KnowledgeRule {
-  source: string;
-  title: string;
-  tags?: string[];
-}
-
-export interface PackageManifest {
-  schemaVersion: 1;
-  name: string;
-  version: string;
-  type: PackageType;
-  description: string;
-  dependencies?: Record<string, string>;
-  files?: PackageFileRule[];
-  knowledge?: KnowledgeRule[];
-  configuration?: Record<string, unknown>;
-  permissions?: Permission[];
-  capabilities?: CapabilityDefinition[];
-  agent?: AgentDefinition;
-}
-
-/** Legacy (schemaVersion: 1) or v1 (apiVersion: modai.dev/v1) manifest, exactly as published. */
-export type AnyPackageManifest = PackageManifest | PackageManifestV1Input;
-export function isV1Manifest(manifest: unknown): manifest is PackageManifestV1Input {
-  return typeof manifest === "object" && manifest !== null && (manifest as { apiVersion?: unknown }).apiVersion === "modai.dev/v1";
-}
+import type { PackageManifestV1Input, PermissionV1 } from "./spec-v1.js";
+import type { BuiltinToolName } from "./agent-tools.js";
+/** A package manifest exactly as published (apiVersion: modai.dev/v1). */
+export type PackageManifest = PackageManifestV1Input;
 
 export type PackageStatus = "active" | "deprecated" | "yanked";
 
@@ -75,7 +30,7 @@ export interface ArtifactFile {
 }
 
 export interface PublishPackageInput {
-  manifest: AnyPackageManifest;
+  manifest: PackageManifest;
   files: ArtifactFile[];
   signature?: PackageSignature;
 }
@@ -83,11 +38,11 @@ export interface PublishPackageInput {
 export interface PackageRecord {
   name: string;
   version: string;
-  /** Legacy type or v1 category; informative only. */
+  /** Package category (spec.category); informative only. */
   type: string;
   description: string;
   artifactId: string;
-  manifest: AnyPackageManifest;
+  manifest: PackageManifest;
   publishedAt: string;
   status: PackageStatus;
   deprecatedMessage?: string;
@@ -113,11 +68,11 @@ export interface MemoryInput {
   sessionId?: string;
 }
 
-export type Permission = "project.instructions" | "project.files" | "process.execute" | "mcp.connect";
 export type SignaturePolicy = "optional" | "signed" | "trusted";
-export type CapabilityDefinition =
-  | { kind: "tool"; name: string; description: string; inputSchema: Record<string, unknown>; binding: string }
-  | { kind: "mcp"; name: string; description: string; command: string; args: string[]; envKeys: string[] };
+/** What an activated agent may call, resolved from its definition and the packages it depends on. */
+export type AgentCapability =
+  | { kind: "builtin"; name: BuiltinToolName; description: string; inputSchema: Record<string, unknown> }
+  | { kind: "mcp"; name: string; package: string; description: string; command: string; args: string[]; envKeys: string[] };
 export interface AgentDefinition {
   instructions: string;
   skills: string[];
@@ -131,9 +86,9 @@ export interface AgentBundle {
   projectId: string;
   agent: { name: string; version: string; definition: AgentDefinition };
   packages: PackageRecord[];
-  capabilities: CapabilityDefinition[];
+  capabilities: AgentCapability[];
   instructions: Array<{ packageName: string; path: string; content: string }>;
-  permissions: Permission[];
+  permissions: PermissionV1[];
   digest: string;
 }
 export interface RunRecord {
@@ -143,9 +98,8 @@ export interface RunRecord {
   createdAt: string; updatedAt: string; leaseExpiresAt?: string;
 }
 export interface ClaimedRun { run: RunRecord; leaseToken: string }
-export interface RunnerBinding { command: string; args: string[]; envKeys?: string[]; timeoutMs?: number }
 export interface Activation {
   schemaVersion: 1; server: string; bundle: AgentBundle;
   adapter: "files" | "agents-md" | "claude-md";
-  allowedTools: string[]; allowedMcp: string[]; allowedEnv?: string[];
+  allowedMcp: string[]; allowedEnv?: string[];
 }

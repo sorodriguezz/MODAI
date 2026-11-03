@@ -3,6 +3,7 @@ import { icon } from "../lib/icons.js";
 import { get, post, patch, del } from "../lib/api.js";
 import { openDialog, closeDialog, bindForm, confirmDialog, toast, skeletonRows, emptyState, errorState, timeTag, debounce } from "../lib/ui.js";
 import { store, can } from "../state.js";
+import { pruneDialog } from "./audit.js";
 
 const kinds = { decision: "Decisión", convention: "Convención", learning: "Aprendizaje", note: "Nota", todo: "Pendiente" };
 const scopes = { project: "Proyecto", organization: "Organización", session: "Sesión" };
@@ -55,7 +56,7 @@ export default {
     let projects = [], memories = [];
     const project = () => projects.find((p) => p.id === $project.value);
     const updateActions = () => {
-      mount(actions, project() && can.writeMemory() ? html`<button class="btn primary" data-action="new">${icon("plus")}Añadir memoria</button>` : "");
+      mount(actions, html`${can.admin() ? html`<button class="btn" data-action="prune">${icon("trash")}Depurar antiguas</button>` : ""}${project() && can.writeMemory() ? html`<button class="btn primary" data-action="new">${icon("plus")}Añadir memoria</button>` : ""}`);
       // Organization memory only exists for projects linked to an organization.
       $org.disabled = !project()?.organizationId;
       if ($org.disabled) $org.checked = false;
@@ -121,6 +122,7 @@ export default {
     $kind.addEventListener("change", draw);
     $org.addEventListener("change", loadMemories);
     const handlers = {
+      prune: () => pruneDialog("memories", loadMemories),
       new: () => project() && memoryForm(project(), null, loadMemories),
       edit: (button) => {
         const memory = memories.find((m) => m.id === button.dataset.id);

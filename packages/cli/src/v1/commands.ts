@@ -6,7 +6,7 @@ import YAML from "yaml";
 import { ApiClient } from "@modai/sdk";
 import { API_VERSION, type ProjectFile } from "@modai/contracts/spec-v1";
 import {
-  BUILTIN_ADAPTERS, INSTALL_PERMISSIONS, availableAdapters, createProjectFile, inspectWorkspace, isLegacyProject, isV1Project, loadContextIndex, loadGrants,
+  BUILTIN_ADAPTERS, INSTALL_PERMISSIONS, availableAdapters, createProjectFile, inspectWorkspace, isV1Project, loadContextIndex, loadGrants,
   loadPackageSource, loadV1Project, normalizeManifest, readKnowledgeChunk, runTool, saveGrants, saveProjectFile, searchKnowledge, suggestProviders,
 } from "@modai/core";
 import { loadClientConfig } from "../cli/config.js";
@@ -32,7 +32,6 @@ export function parseSpec(spec: string, root: string): { name: string; value: st
 
 export async function initV1(root: string, options: { name?: string; registry?: string[]; adapter?: string[]; allow?: string[]; profile?: string; memory?: string; project?: string; server?: string }, print: Print): Promise<void> {
   if (isV1Project(root)) throw new Error("El proyecto ya está inicializado (modai.yaml existe).");
-  if (isLegacyProject(root)) throw new Error("Este proyecto usa el formato 0.5 (.modai/manifest.yaml). Conviértelo con 'modai migrate'.");
   const config = loadClientConfig();
   const server = (options.server ?? config?.server)?.replace(/\/+$/, "");
   const registries = options.registry?.length
@@ -200,30 +199,6 @@ export function scaffoldV1(directory: string, options: { name: string; kind?: st
   return root;
 }
 
-/** Converts a 0.5 project (.modai/manifest.yaml + lock.yaml) into modai.yaml + modai.lock without losing installed files. */
-export async function migrateV1(root: string, options: { allow?: string[]; force?: boolean }, print: Print): Promise<void> {
-  if (isV1Project(root)) throw new Error("El proyecto ya usa modai.yaml");
-  const legacyPath = join(root, ".modai", "manifest.yaml");
-  if (!existsSync(legacyPath)) throw new Error("No hay un proyecto 0.5 que migrar (.modai/manifest.yaml)");
-  const legacy = YAML.parse(readFileSync(legacyPath, "utf8")) as { projectId: string; server?: string; packages: Record<string, string>; overrides?: Record<string, string>; grants?: string[] };
-  const server = (legacy.server ?? loadClientConfig()?.server)?.replace(/\/+$/, "");
-  const file = createProjectFile(basename(root), {
-    registries: server ? [{ name: "central", url: server }] : [{ name: "local", path: defaultLocalRegistry() }],
-    dependencies: legacy.packages, overrides: legacy.overrides ?? {},
-    context: server ? { memory: "remote", server, projectId: legacy.projectId } : { memory: "local" },
-  });
-  saveProjectFile(root, file);
-  try {
-    const { report } = await runSync(root, undefined, { allow: [...(legacy.grants ?? []), ...(options.allow ?? [])], force: options.force });
-    const archive = join(root, ".modai", "legacy-0.5");
-    mkdirSync(archive, { recursive: true });
-    for (const name of ["manifest.yaml", "lock.yaml", "config.yaml"]) if (existsSync(join(root, ".modai", name))) renameSync(join(root, ".modai", name), join(archive, name));
-    print(`Proyecto migrado a ${API_VERSION}. Archivos 0.5 archivados en .modai/legacy-0.5/.\n${summarize(report)}`);
-  } catch (error) {
-    renameSync(join(root, "modai.yaml"), join(root, ".modai", "modai.yaml.failed"));
-    throw error;
-  }
-}
 
 const v1Project = () => requireV1Project();
 
@@ -300,7 +275,6 @@ export function registerV1Commands(program: Command, print: Print): void {
     print(`Adaptador ${id} desactivado.\n${summarize(report)}`);
   });
 
-  program.command("migrate").description("Convierte un proyecto 0.5 al formato modai.yaml / modai.lock").option("--allow <permissions>", "Permisos de instalación", commaList).option("--force", "Sobrescribe conflictos").action((options) => migrateV1(process.cwd(), options, print));
 }
 
 export { tokenFor };

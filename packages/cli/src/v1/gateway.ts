@@ -24,7 +24,7 @@ interface GatewayTool { name: string; description: string; inputSchema: Record<s
  * executable contributions of installed packages — only those authorised on this machine and whose
  * extracted content still matches modai.lock.
  */
-export async function startV1Gateway(root: string, options: { bindings?: string } = {}): Promise<void> {
+export async function startV1Gateway(root: string): Promise<void> {
   const project = loadV1Project(root);
   const installed = inspectWorkspace(project);
   const grants = loadGrants(project.root);
@@ -55,12 +55,15 @@ export async function startV1Gateway(root: string, options: { bindings?: string 
   // must not bypass the agent's memory policy.
   let host: CapabilityHost | undefined;
   let activeInstructions: string | undefined;
+  // MCP servers the active agent selected run under the agent's own approvals (host), not a second time here.
+  const agentServers = new Set<string>();
   if (existsSync(join(project.root, ".modai", "activation.json"))) {
     const activation = loadActivation(project.root);
     const target = serverProject(project.root), api = serverClient(target);
     await verifyBundle(api, activation.bundle, await installationPolicy(api, target));
     activeInstructions = agentInstructions(activation.bundle);
-    host = new CapabilityHost(api, activation.bundle, { ...runtimeOptions(options, activation), cwd: project.root });
+    for (const capability of activation.bundle.capabilities) if (capability.kind === "mcp") agentServers.add(`${capability.package}:${capability.name}`);
+    host = new CapabilityHost(api, activation.bundle, { ...runtimeOptions({}, activation), cwd: project.root });
     await host.start();
     for (let index = tools.length - 1; index >= 0; index--) if (["modai_remember", "modai_recall", "modai_search_knowledge"].includes(tools[index].name)) tools.splice(index, 1);
   }
@@ -80,6 +83,7 @@ export async function startV1Gateway(root: string, options: { bindings?: string 
         call: input => runTool(tool, input, { packageDir: item.packageDir, projectDir: project.root, grant: grants.packages[item.name] }) });
     }
     for (const server of item.manifest.spec.contributes.mcpServers) {
+      if (agentServers.has(`${item.name}:${server.name}`)) continue;
       const launch = mcpServerLaunch(server, { packageDir: item.packageDir, projectDir: project.root, grant: grants.packages[item.name] });
       const client = new Client({ name: "modai-gateway", version: CORE_VERSION });
       const transport = new StdioClientTransport({ ...launch, env: { ...getDefaultEnvironment(), ...launch.env }, stderr: "pipe" });

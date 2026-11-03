@@ -1,21 +1,24 @@
-schemaVersion: 1
-name: "@skills/harness-authoring"
-version: 1.0.0
-type: skill
-description: Diseña, audita y mejora harnesses fiables para agentes de programación.
-files:
-  - source: content/SKILL.md
-    target: .agents/skills/harness-authoring/SKILL.md
-  - source: content/references/five-subsystems.md
-    target: .agents/skills/harness-authoring/references/five-subsystems.md
-  - source: content/references/review-rubric.md
-    target: .agents/skills/harness-authoring/references/review-rubric.md
-  - source: content/references/sources.md
-    target: .agents/skills/harness-authoring/references/sources.md
-knowledge:
-  - source: content/references/five-subsystems.md
-    title: Cinco subsistemas de un harness fiable
-    tags: [harness, agentes, verificacion, continuidad]
-  - source: content/references/review-rubric.md
-    title: Rúbrica para auditar harnesses
-    tags: [harness, auditoria, calidad]
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@skills/harness-authoring"
+  version: 1.0.0
+  description: Diseña, audita y mejora harnesses fiables para agentes de programación.
+spec:
+  category: skill
+  contributes:
+    skills:
+      - name: harness-authoring
+        path: content
+        files:
+          - SKILL.md
+          - references/five-subsystems.md
+          - references/review-rubric.md
+          - references/sources.md
+    knowledge:
+      - path: content/references/five-subsystems.md
+        title: Cinco subsistemas de un harness fiable
+        tags: [harness, agentes, verificacion, continuidad]
+      - path: content/references/review-rubric.md
+        title: Rúbrica para auditar harnesses
+        tags: [harness, auditoria, calidad]

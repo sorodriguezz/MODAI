@@ -1,7 +1,8 @@
 import semver from "semver";
 import { AppError, invariant } from "@modai/contracts/errors";
 import { assertSafeRelativePath, requiredTargetPermission, sha256 } from "@modai/contracts/security";
-import type { AnyPackageManifest, ArtifactFile } from "@modai/contracts/types";
+import { isBuiltinTool } from "@modai/contracts/agent-tools";
+import type { ArtifactFile, PackageManifest } from "@modai/contracts/types";
 import type { PackageManifestV1 } from "@modai/contracts/spec-v1";
 import { normalizeManifest } from "./normalize.js";
 import { adapterTargetPermission, componentTargetPermission, expandTemplate } from "./targets.js";
@@ -34,7 +35,7 @@ export function packageFileReferences(args: string[]): string[] {
  * It checks contracts, never categories: a "testing" or "frontend" package is validated
  * exactly like any other.
  */
-export function validatePackage(raw: AnyPackageManifest, files: ArtifactFile[]): PackageManifestV1 {
+export function validatePackage(raw: PackageManifest, files: ArtifactFile[]): PackageManifestV1 {
   const manifest = normalizeManifest(raw);
   const declared = new Set<string>(manifest.spec.permissions);
   const requirePermission = (permission: string, reason: string) =>
@@ -110,6 +111,12 @@ export function validatePackage(raw: AnyPackageManifest, files: ArtifactFile[]):
   }
   for (const agent of contributes.agents) {
     for (const skill of agent.skills) invariant(Boolean(spec.dependencies[skill]), 400, "AGENT_DEPENDENCY", `La skill ${skill} debe declararse como dependencia`);
+    invariant(!agent.capabilities.includes("modai_remember") || agent.memory.write, 400, "MEMORY_POLICY", `El agente ${agent.name} usa modai_remember pero memory.write es false`);
+    // A capability that is not a built-in names an MCP server: declared here or contributed by a dependency
+    // (dependencies are only known at resolution time, so the exact check happens when the agent is composed).
+    for (const capability of agent.capabilities) {
+      invariant(isBuiltinTool(capability) || contributes.mcpServers.some(server => server.name === capability) || Object.keys(spec.dependencies).length > 0, 400, "AGENT_CAPABILITY", `La capacidad ${capability} no es una herramienta de MODAI ni un servidor MCP: decláralo en contributes.mcpServers o depende del paquete que lo aporta`);
+    }
   }
   if (spec.adapter) {
     const targets = spec.adapter.targets;
@@ -126,7 +133,7 @@ export function validatePackage(raw: AnyPackageManifest, files: ArtifactFile[]):
   return manifest;
 }
 
-export function assertValid(raw: AnyPackageManifest, files: ArtifactFile[]): PackageManifestV1 {
+export function assertValid(raw: PackageManifest, files: ArtifactFile[]): PackageManifestV1 {
   try { return validatePackage(raw, files); }
   catch (error) { if (error instanceof AppError) throw error; throw new AppError(400, "INVALID_PACKAGE", (error as Error).message); }
 }

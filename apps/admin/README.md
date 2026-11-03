@@ -6,7 +6,7 @@ Aplicación privada del monorepo, en JavaScript sin dependencias de runtime. El 
 - `src/main.js`: arranque, inicio de sesión/instalación, navegación por hash (`#/paquetes…`) y menú del usuario.
 - `src/views/`: una sección por archivo (`dashboard`, `packages`, `agents`, `knowledge`, `projects`, `memories`, `runs`, `connect`, `users`, `access`, `audit`) más `auth` y `account`.
 - `src/lib/`: `api.js` (fetch con cabecera CSRF), `html.js` (plantillas que escapan todo por defecto), `ui.js` (diálogos, confirmaciones, toasts, formularios, esqueletos) e `icons.js`.
-- `src/state.js`: identidad actual, caché de datos, permisos por rol y normalización de manifiestos legados y `modai.dev/v1`.
+- `src/state.js`: identidad actual, caché de datos, permisos por rol y normalización de manifiestos `modai.dev/v1`.
 - `styles.css` y `theme.js`: tokens de color, tema claro/oscuro/sistema y diseño responsive.
 
 La CSP es estricta (`script-src 'self'`): no uses scripts ni manejadores en línea; enlaza eventos con `addEventListener` o `delegate()` y construye HTML solo con la plantilla `html\`\``.

@@ -1,8 +1,13 @@
-schemaVersion: 1
-name: "@skills/nestjs"
-version: 1.0.0
-type: skill
-description: Convenciones para implementar servicios mantenibles con NestJS.
-files:
-  - source: content/SKILL.md
-    target: .agents/skills/nestjs/SKILL.md
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@skills/nestjs"
+  version: 1.0.0
+  description: Convenciones para implementar servicios mantenibles con NestJS.
+spec:
+  category: skill
+  contributes:
+    skills:
+      - name: nestjs
+        path: content
+        files: [SKILL.md]

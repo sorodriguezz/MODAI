@@ -34,12 +34,13 @@ export function initials(name) {
 
 // ------------------------------------------------------------------ labels
 
-export const roleLabels = { admin: "Administración", publisher: "Publicación", worker: "Worker", reader: "Lectura" };
+export const roleLabels = { admin: "Administración global", "org-admin": "Administración de organización", publisher: "Publicación", worker: "Worker", reader: "Lectura" };
 export const roleDescriptions = {
   reader: "Consulta catálogo, conocimiento y la memoria de sus proyectos.",
   publisher: "Además publica paquetes y conocimiento, crea proyectos, guarda memoria y envía tareas.",
   worker: "Pensado para workers: reclama y completa ejecuciones de sus proyectos.",
-  admin: "Control total: usuarios, API keys, auditoría y retención.",
+  "org-admin": "Gestiona usuarios, API keys, proyectos y namespaces de sus organizaciones, y publica en sus namespaces.",
+  admin: "Control total: todas las organizaciones, auditoría, backups y retención.",
 };
 
 export function roleBadge(role) {
@@ -101,6 +102,13 @@ export function openDialog({ title, description, body, size = "md", onClose } = 
 export function closeDialog() {
   const dialog = $("dialog");
   if (dialog.open) dialog.close();
+}
+
+/** Closes the shared dialog and resolves once its (async) close handler cleared it, so another dialog can open next. */
+export function closeDialogAndWait() {
+  const dialog = $("dialog");
+  if (!dialog.open) return Promise.resolve();
+  return new Promise((resolve) => { dialog.addEventListener("close", resolve, { once: true }); dialog.close(); });
 }
 
 export function initDialog() {

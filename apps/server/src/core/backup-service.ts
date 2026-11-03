@@ -1,3 +1,4 @@
+import type { TemplateService } from "./template-service.js";
 import { manifestIdentity } from "@modai/core";
 import { Database } from "./database.js";
 import { AppError, invariant } from "@modai/contracts/errors";
@@ -6,7 +7,7 @@ import { RunService } from "./run-service.js";
 import { publicKeyFingerprint } from "@modai/contracts/security";
 import { parseInput, publishSchema, memorySchema, projectSchema } from "@modai/contracts/schemas";
 import { PackageService } from "./package-service.js";
-import type { PackageSignature, PublishPackageInput, RunRecord } from "@modai/contracts/types";
+import type { ArtifactFile, PackageSignature, PublishPackageInput, RunRecord } from "@modai/contracts/types";
 
 interface Snapshot {
   schemaVersion: 1;
@@ -14,12 +15,14 @@ interface Snapshot {
   packages: Array<PublishPackageInput & { status?: string; deprecatedMessage?: string }>;
   knowledge: Array<{ title: string; content: string; tags: string[]; packageName?: string }>;
   memories: Array<{ projectId: string; scope: string; kind: string; content: string; metadata: Record<string, unknown>; sessionId?: string }>;
-  organizations?: Array<{ id: string; name: string; createdAt: string }>;
+  organizations?: Array<{ id: string; name: string; description?: string; createdAt: string }>;
+  namespaces?: Array<{ name: string; organizationId?: string; description?: string; visibility?: "internal" | "restricted"; createdAt: string }>;
   projects?: Array<{ id: string; name: string; organizationId?: string; createdAt: string }>;
   runs?: RunRecord[];
   /** What each project had installed when the backup was taken (from client reports). */
   installations?: Array<{ projectId: string; packageName: string; version: string; direct: boolean; reportedAt: string }>;
   publishers: Array<{ fingerprint: string; label?: string; publicKey: string; trusted: boolean }>;
+  templates?: Array<{ name: string; version: string; description: string; tags: string[]; stack?: string; status: "active" | "yanked"; publishedBy: string; files: ArtifactFile[] }>;
 }
 
 export class BackupService {
@@ -27,6 +30,7 @@ export class BackupService {
     private readonly db: Database,
     private readonly packages: PackageService,
     private readonly context: ContextService,
+    private readonly templates?: TemplateService,
   ) {}
 
   export(): Snapshot {
@@ -53,13 +57,19 @@ export class BackupService {
       packages: packageRows,
       knowledge,
       memories,
-      organizations: this.db.connection.prepare("SELECT id, name, created_at AS createdAt FROM organizations").all() as Snapshot["organizations"],
+      organizations: this.db.connection.prepare("SELECT id, name, description, created_at AS createdAt FROM organizations").all() as Snapshot["organizations"],
+      namespaces: (this.db.connection.prepare("SELECT name, organization_id AS organizationId, description, visibility, created_at AS createdAt FROM namespaces").all() as NonNullable<Snapshot["namespaces"]>)
+        .map(({ organizationId, ...item }) => ({ ...item, ...(organizationId ? { organizationId } : {}) })),
       projects: this.db.connection.prepare("SELECT id, name, organization_id AS organizationId, created_at AS createdAt FROM projects").all() as Snapshot["projects"],
       runs: (this.db.connection.prepare("SELECT id FROM runs").all() as Array<{ id: string }>).map(row => new RunService(this.db).get(row.id)),
       installations: (this.db.connection.prepare(`SELECT project_id AS projectId, package_name AS packageName, version, direct, reported_at AS reportedAt
         FROM project_installations ORDER BY project_id, package_name`).all() as Array<{ projectId: string; packageName: string; version: string; direct: number; reportedAt: string }>)
         .map(item => ({ ...item, direct: Boolean(item.direct) })),
       publishers: publishers.map((item) => ({ ...item, trusted: Boolean(item.trusted) })),
+      templates: this.templates ? (this.db.connection.prepare("SELECT name, version FROM templates ORDER BY name, published_at").all() as Array<{ name: string; version: string }>).map(row => {
+        const { template, files } = this.templates!.files(row.name, row.version);
+        return { name: template.name, version: template.version, description: template.description, tags: template.tags, ...(template.stack ? { stack: template.stack } : {}), status: template.status, publishedBy: template.publishedBy, files };
+      }) : [],
     };
   }
 
@@ -81,7 +91,12 @@ export class BackupService {
       invariant(publicKeyFingerprint(item.publicKey) === item.fingerprint, 400, "INVALID_PUBLISHER", "Fingerprint del publicador inválido");
       this.packages.registerPublisher(item.publicKey, item.label ?? "restored", item.trusted);
     }
-    for (const item of snapshot.organizations ?? []) this.db.connection.prepare("INSERT OR IGNORE INTO organizations VALUES (?, ?, ?)").run(item.id,item.name,item.createdAt);
+    for (const item of snapshot.organizations ?? []) this.db.connection.prepare("INSERT OR IGNORE INTO organizations (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(item.id, item.name, item.description ?? "", item.createdAt, item.createdAt);
+    for (const item of snapshot.namespaces ?? []) {
+      const owner = item.organizationId && this.db.connection.prepare("SELECT 1 FROM organizations WHERE id = ?").get(item.organizationId) ? item.organizationId : null;
+      this.db.connection.prepare("INSERT OR IGNORE INTO namespaces (name, organization_id, description, visibility, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'restored-admin', ?, ?)")
+        .run(item.name, owner, item.description ?? "", item.visibility === "restricted" ? "restricted" : "internal", item.createdAt, item.createdAt);
+    }
     for (const item of snapshot.projects ?? []) this.db.connection.prepare("INSERT OR IGNORE INTO projects (id,name,organization_id,created_by,created_at) VALUES (?, ?, ?, 'restored-admin', ?)").run(item.id,item.name,item.organizationId ?? null,item.createdAt);
     for (const item of snapshot.memories ?? []) this.db.connection.prepare("INSERT OR IGNORE INTO projects (id,name,created_by,created_at) VALUES (?, ?, 'restored-admin', ?)").run(item.projectId,item.projectId,new Date().toISOString());
     let importedPackages = 0;
@@ -118,6 +133,11 @@ export class BackupService {
         VALUES (?, ?, ?, ?, ?) ON CONFLICT(fingerprint) DO UPDATE SET label = excluded.label,
         public_key = excluded.public_key, trusted = excluded.trusted`)
         .run(item.fingerprint, item.label ?? null, item.publicKey, item.trusted ? 1 : 0, new Date().toISOString());
+    }
+    for (const item of snapshot.templates ?? []) {
+      if (!this.templates || this.db.connection.prepare("SELECT 1 FROM templates WHERE name = ? AND version = ?").get(item.name, item.version)) continue;
+      this.templates.publish({ name: item.name, version: item.version, description: item.description, tags: item.tags, stack: item.stack, files: item.files }, item.publishedBy || "restored-admin");
+      if (item.status === "yanked") this.templates.setStatus(item.name, item.version, "yanked");
     }
     return { packages: importedPackages, skipped, knowledge: snapshot.knowledge?.length ?? 0, memories: snapshot.memories?.length ?? 0, installations: snapshot.installations?.length ?? 0 };
   }

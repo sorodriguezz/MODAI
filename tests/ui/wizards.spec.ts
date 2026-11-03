@@ -1,0 +1,209 @@
+import { expect, test, type Page } from "@playwright/test";
+import { UI } from "../../playwright.config.ts";
+import { writeZip } from "../../packages/core/src/archive.ts";
+
+const auth = { authorization: `Bearer ${UI.token}` };
+
+async function login(page: Page) {
+  await page.goto("/admin");
+  await page.getByLabel("Usuario").fill(UI.username);
+  await page.getByLabel("Contraseña", { exact: true }).fill(UI.password);
+  await page.getByRole("button", { name: /iniciar sesión|entrar/i }).click();
+  await expect(page).toHaveURL(/#\/dashboard/);
+}
+
+test.describe.configure({ mode: "serial" });
+
+test("crea un usuario paso a paso eligiendo organización, proyectos y namespaces por nombre", async ({ page, request }) => {
+  const org = (await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Logística" } })).json()).organization;
+  const other = (await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Otra" } })).json()).organization;
+  await request.post("/api/v1/projects", { headers: auth, data: { id: "ui-rutas", name: "Rutas", organizationId: org.id } });
+  await request.post("/api/v1/projects", { headers: auth, data: { id: "ui-ajeno", name: "Ajeno", organizationId: other.id } });
+  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-logistica", organizationId: org.id } });
+
+  await login(page);
+  await page.goto("/admin#/users");
+  await page.getByRole("button", { name: "Nuevo usuario" }).click();
+  const dialog = page.getByRole("dialog");
+  const next = () => dialog.getByRole("button", { name: "Siguiente" }).click();
+  await dialog.getByLabel("Usuario", { exact: true }).fill("ui.logistica");
+  await dialog.getByRole("button", { name: "Generar contraseña segura" }).click();
+  await next();
+  await dialog.getByRole("radio", { name: /Publicación/ }).check();
+  await next();
+  await dialog.getByRole("checkbox", { name: "UI Logística" }).check();
+  await next();
+  // Only the projects of the chosen organization are offered.
+  await expect(dialog.getByRole("checkbox", { name: /Rutas/ })).toBeVisible();
+  await expect(dialog.getByRole("checkbox", { name: /Ajeno/ })).toBeHidden();
+  await dialog.getByRole("checkbox", { name: /Rutas/ }).check();
+  await next();
+  await dialog.getByRole("checkbox", { name: "@ui-logistica" }).check();
+  await next();
+  await expect(dialog.locator("[data-review]")).toContainText("UI Logística");
+  await expect(dialog.locator("[data-review]")).toContainText("Rutas");
+  await expect(dialog.locator("[data-review]")).toContainText("@ui-logistica");
+  await dialog.getByRole("button", { name: "Crear usuario" }).click();
+  await expect(dialog.getByRole("heading", { name: "Usuario creado" })).toBeVisible();
+  const users = (await (await request.get("/api/v1/admin/users", { headers: auth })).json()).users;
+  const created = users.find((u: { username: string }) => u.username === "ui.logistica");
+  expect(created).toMatchObject({ role: "publisher", organizationIds: [org.id], projectIds: ["ui-rutas"], packageScopes: ["@ui-logistica"] });
+});
+
+test("importa un .skill con vista previa y lo publica", async ({ page }) => {
+  await login(page);
+  await page.goto("/admin#/packages");
+  await page.getByRole("button", { name: "Crear paquete" }).first().click();
+  const dialog = page.getByRole("dialog");
+  // Inside "Crear paquete": type Skill, then upload instead of writing it.
+  await dialog.getByRole("radio", { name: /^Skill/ }).check();
+  await dialog.getByRole("radio", { name: /Subir un archivo \.skill/ }).check();
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(dialog.getByRole("heading", { name: "Subir skill (.skill)" })).toBeVisible();
+  const zip = writeZip([{ path: "pr-review/SKILL.md", bytes: Buffer.from("---\nname: pr-review\ndescription: Revisa pull requests con foco en regresiones y pruebas.\n---\n\n# PR review\n") }]);
+  await dialog.getByLabel("Archivo .skill o .zip").setInputFiles({ name: "pr-review.skill", mimeType: "application/zip", buffer: zip });
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await dialog.getByLabel("Namespace").fill("@ui-skills");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(dialog.locator("#skillPreview")).toContainText("@ui-skills/pr-review");
+  await expect(dialog.locator("#skillPreview")).toContainText("skills/pr-review/SKILL.md");
+  await dialog.getByRole("button", { name: "Publicar skill" }).click();
+  await expect(page.getByText("Publicado @ui-skills/pr-review@1.0.0")).toBeVisible();
+});
+
+test("sube un template desde un .zip y muestra cómo usarlo", async ({ page }) => {
+  await login(page);
+  await page.goto("/admin#/templates");
+  await page.getByRole("button", { name: "Subir template" }).first().click();
+  const dialog = page.getByRole("dialog");
+  const zip = writeZip([{ path: "nest/package.json", bytes: Buffer.from('{ "name": "{{projectName}}" }\n') }, { path: "nest/node_modules/x.js", bytes: Buffer.from("x") }]);
+  await dialog.locator("#tplZip").setInputFiles({ name: "nest.zip", mimeType: "application/zip", buffer: zip });
+  await expect(dialog.locator("#tplSourceSummary")).toContainText("nest.zip");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await dialog.locator("#tplNamespace").fill("@ui-plantillas");
+  await dialog.locator("#tplName").fill("nest-sdd");
+  await dialog.getByLabel("Descripción").fill("NestJS con SDD para pruebas del panel");
+  await dialog.getByLabel(/Stack/).fill("NestJS · SDD");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(dialog.locator("#tplReview")).toContainText("@ui-plantillas/nest-sdd@1.0.0");
+  await dialog.getByRole("button", { name: "Publicar template" }).click();
+  await expect(dialog.getByRole("heading", { name: "@ui-plantillas/nest-sdd" })).toBeVisible();
+  await expect(dialog.locator(".code-block").first()).toContainText("modai template use @ui-plantillas/nest-sdd@1.0.0");
+  await expect(dialog.getByRole("link", { name: "Descargar .zip" })).toHaveAttribute("href", /template\/download/);
+  await dialog.getByText(/Archivos \(1/).click();
+  await expect(dialog.locator(".file-summary")).toContainText("package.json");
+  await expect(dialog.locator(".file-summary")).not.toContainText("node_modules");
+});
+
+test("conectar un cliente guía por objetivo y crea una API key acotada al proyecto", async ({ page, request }) => {
+  await request.post("/api/v1/projects", { headers: auth, data: { id: "ui-conectar", name: "Para conectar" } });
+  await login(page);
+  await page.goto("/admin#/connect");
+  const form = page.locator("#connectWizard");
+  const next = () => form.getByRole("button", { name: "Siguiente" }).click();
+  await form.getByRole("radio", { name: /Ejecutar un worker/ }).check();
+  await next();
+  await next();
+  await expect(form.locator(".form-error")).toBeVisible();
+  await form.getByLabel(/Proyecto/).selectOption("ui-conectar");
+  await next();
+  await form.getByLabel(/Qué equipo o programa/).fill("Worker CI");
+  await form.getByRole("button", { name: "Crear mi API key" }).click();
+  await expect(form.locator("#credentialStep")).toContainText("Copia el token");
+  await next();
+  await expect(form.locator("#connectCommands")).toContainText("modai agent worker --project 'ui-conectar'");
+  await next();
+  await expect(form.locator("#verifyStep")).toContainText("Esperando");
+  const keys = (await (await request.get("/api/v1/admin/api-keys", { headers: auth })).json()).keys;
+  expect(keys.find((k: { label: string }) => k.label === "Worker CI")).toMatchObject({ role: "worker", projectIds: ["ui-conectar"], ownerName: UI.username, inherit: false });
+});
+
+test("una persona sin rol de administración crea y revoca sus propias API keys", async ({ page, request }) => {
+  await request.post("/api/v1/admin/users", { headers: auth, data: { username: "ui.lectora", password: "ui-lectora-password", role: "reader" } });
+  await page.goto("/admin");
+  await page.getByLabel("Usuario").fill("ui.lectora");
+  await page.getByLabel("Contraseña", { exact: true }).fill("ui-lectora-password");
+  await page.getByRole("button", { name: /iniciar sesión|entrar/i }).click();
+  await expect(page).toHaveURL(/#\/dashboard/);
+  await expect(page.getByRole("link", { name: "Accesos" })).toHaveCount(0);
+  await page.goto("/admin#/my-keys");
+  await page.getByRole("button", { name: "Nueva API key" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel(/Dónde se usará/).fill("Notebook");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  // A reader can only create reader keys.
+  await expect(dialog.getByRole("radio")).toHaveCount(1);
+  await expect(dialog.getByRole("radio", { name: /Lectura/ })).toBeChecked();
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(dialog.locator("[data-review]")).toContainText("Los mismos que la cuenta");
+  await dialog.getByRole("button", { name: "Crear API key" }).click();
+  await expect(dialog.getByRole("heading", { name: "API key creada: Notebook" })).toBeVisible();
+  await dialog.getByRole("button", { name: "He guardado el token" }).click();
+  await expect(page.locator("#myKeys")).toContainText("Notebook");
+  await page.getByRole("button", { name: "Revocar" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Revocar API key" }).click();
+  await expect(page.locator("#myKeys")).not.toContainText("Notebook");
+});
+
+test("crea un template desde cero en el editor del panel y publica una versión editada", async ({ page, request }) => {
+  await login(page);
+  await page.goto("/admin#/templates");
+  await page.getByRole("button", { name: "Subir template" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("radio", { name: /Crear aquí/ }).check();
+  // Starts with a minimal skeleton that can be edited, extended and trimmed.
+  await expect(dialog.locator("#tplEditor")).toContainText("README.md");
+  await dialog.getByRole("button", { name: "Nuevo archivo" }).click();
+  await dialog.getByLabel("Ruta").fill("src/{{projectName}}.ts");
+  await dialog.getByLabel("Contenido").fill("export const name = '{{projectName}}';\n");
+  await dialog.getByRole("button", { name: "Guardar archivo" }).click();
+  await dialog.getByRole("button", { name: "Eliminar AGENTS.md" }).click();
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await dialog.locator("#tplNamespace").fill("@ui-plantillas");
+  await dialog.locator("#tplName").fill("desde-cero");
+  await dialog.getByLabel("Descripción").fill("Template creado en el panel");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(dialog.locator("#tplReview")).toContainText("src/{{projectName}}.ts");
+  await expect(dialog.locator("#tplReview")).not.toContainText("AGENTS.md");
+  await dialog.getByRole("button", { name: "Publicar template" }).click();
+  await expect(dialog.getByRole("heading", { name: "@ui-plantillas/desde-cero" })).toBeVisible();
+
+  // New version: the editor starts from the published files.
+  await dialog.getByRole("button", { name: "Nueva versión" }).click();
+  await expect(dialog.locator("#tplEditor")).toContainText("src/{{projectName}}.ts");
+  await dialog.getByRole("button", { name: "Editar README.md" }).click();
+  await dialog.getByLabel("Contenido").fill("# {{projectName}}\n\nVersión 2\n");
+  await dialog.getByRole("button", { name: "Guardar archivo" }).click();
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(dialog.locator("#tplVersion")).toHaveValue("1.0.1");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await dialog.getByRole("button", { name: "Publicar template" }).click();
+  await expect(dialog.getByRole("heading", { name: "@ui-plantillas/desde-cero" })).toBeVisible();
+  const files = (await (await request.get("/api/v1/template/files?name=" + encodeURIComponent("@ui-plantillas/desde-cero"), { headers: auth })).json()).files;
+  const readme = files.find((f: { path: string }) => f.path === "README.md");
+  expect(Buffer.from(readme.content, "base64").toString()).toContain("Versión 2");
+});
+
+test("una administración de organización ve Deprecar y Retirar solo en sus namespaces", async ({ page, request }) => {
+  const org = (await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Pagos" } })).json()).organization;
+  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-pagos", organizationId: org.id } });
+  for (const name of ["@ui-pagos/cobro", "@ui-otro/cosa"]) {
+    const content = "# Guía\n";
+    await request.post("/api/v1/packages", { headers: auth, data: { manifest: { apiVersion: "modai.dev/v1", kind: "Package", metadata: { name, version: "1.0.0", description: `${name}: paquete de prueba del panel con descripción suficiente` }, spec: { contributes: { knowledge: [{ path: "knowledge/README.md", title: "Guía" }] } } }, files: [{ path: "knowledge/README.md", content: Buffer.from(content).toString("base64"), sha256: (await import("node:crypto")).createHash("sha256").update(content).digest("hex") }] } });
+  }
+  await request.post("/api/v1/admin/users", { headers: auth, data: { username: "ui.orgadmin", password: "ui-orgadmin-password", role: "org-admin", organizationIds: [org.id] } });
+  await page.goto("/admin");
+  await page.getByLabel("Usuario").fill("ui.orgadmin");
+  await page.getByLabel("Contraseña", { exact: true }).fill("ui-orgadmin-password");
+  await page.getByRole("button", { name: /iniciar sesión|entrar/i }).click();
+  await expect(page).toHaveURL(/#\/dashboard/);
+  const dialog = page.getByRole("dialog");
+  await page.goto("/admin#/packages?name=@ui-pagos/cobro");
+  await dialog.getByRole("tab", { name: /Versiones/ }).click();
+  await expect(dialog.getByRole("button", { name: "Deprecar" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Retirar" })).toBeVisible();
+  await page.goto("/admin#/packages?name=@ui-otro/cosa");
+  await dialog.getByRole("tab", { name: /Versiones/ }).click();
+  await expect(dialog.getByRole("button", { name: "Deprecar" })).toHaveCount(0);
+});

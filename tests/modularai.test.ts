@@ -43,8 +43,9 @@ function payload(manifest: PackageManifest, sources: Record<string, string> = {}
   };
 }
 
-function manifest(name: string, version: string, dependencies?: Record<string, string>): PackageManifest {
-  return { schemaVersion: 1, name, version, type: "tool", description: `${name} ${version}`, dependencies };
+/** A v1 package manifest; `spec` extends spec (dependencies, contributes, permissions...). */
+function manifest(name: string, version: string, dependencies?: Record<string, string>, spec: Record<string, unknown> = {}): PackageManifest {
+  return { apiVersion: "modai.dev/v1", kind: "Package", metadata: { name, version, description: `${name} ${version}` }, spec: { category: "test", ...(dependencies ? { dependencies } : {}), ...spec } } as PackageManifest;
 }
 
 test("publica, resuelve con backtracking y ordena dependencias primero", async () => {
@@ -73,14 +74,7 @@ test("publica, resuelve con backtracking y ordena dependencias primero", async (
 });
 
 test("indexa conocimiento de paquetes y aísla memorias por proyecto", async () => {
-  const knowledge: PackageManifest = {
-    schemaVersion: 1,
-    name: "@test/knowledge",
-    version: "1.0.0",
-    type: "knowledge",
-    description: "Conocimiento de prueba",
-    knowledge: [{ source: "guide.md", title: "Puertos y adaptadores", tags: ["hexagonal"] }],
-  };
+  const knowledge = manifest("@test/knowledge", "1.0.0", undefined, { category: "knowledge", contributes: { knowledge: [{ path: "guide.md", title: "Puertos y adaptadores", tags: ["hexagonal"] }] } });
   const published = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/packages",
@@ -117,10 +111,7 @@ test("indexa conocimiento de paquetes y aísla memorias por proyecto", async () 
 });
 
 test("la CLI conserva al retirar un archivo modificado por el usuario", async () => {
-  const packageManifest: PackageManifest = {
-    ...manifest("@test/installable", "1.0.0"),
-    files: [{ source: "content.txt", target: ".modai/packages/content.txt" }],
-  };
+  const packageManifest = manifest("@test/installable", "1.0.0", undefined, { contributes: { files: [{ source: "content.txt", target: ".modai/packages/content.txt" }] } });
   const published = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/packages",
@@ -147,10 +138,7 @@ test("la CLI conserva al retirar un archivo modificado por el usuario", async ()
 });
 
 test("rechaza rutas que intentan salir del proyecto", async () => {
-  const unsafe: PackageManifest = {
-    ...manifest("@test/unsafe", "1.0.0"),
-    files: [{ source: "file.txt", target: "../escape.txt" }],
-  };
+  const unsafe = manifest("@test/unsafe", "1.0.0", undefined, { contributes: { files: [{ source: "file.txt", target: "../escape.txt" }] } });
   const response = await app.inject({ headers: { authorization: "Bearer test-secret" },
     method: "POST",
     url: "/api/v1/packages",

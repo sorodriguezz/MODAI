@@ -6,7 +6,7 @@ import { ApiClient } from "@modai/sdk";
 import { AppError } from "@modai/contracts/errors";
 import { sha256 } from "@modai/contracts/security";
 import { packageNameSchema } from "@modai/contracts/schemas";
-import type { AnyPackageManifest, ArtifactFile, PackageSignature, PackageStatus, PublishPackageInput } from "@modai/contracts/types";
+import type { PackageManifest, ArtifactFile, PackageSignature, PackageStatus, PublishPackageInput } from "@modai/contracts/types";
 import { computeIntegrity, verifyFiles, verifySignature } from "./integrity.js";
 import { manifestIdentity } from "./normalize.js";
 import { validatePackage } from "./validate.js";
@@ -15,14 +15,14 @@ export interface PackageVersion {
   name: string;
   version: string;
   status: PackageStatus;
-  manifest: AnyPackageManifest;
+  manifest: PackageManifest;
   registry: string;
 }
 
 export interface PackageArtifact {
   name: string;
   version: string;
-  manifest: AnyPackageManifest;
+  manifest: PackageManifest;
   files: ArtifactFile[];
   signature?: PackageSignature;
   integrity: string;
@@ -54,7 +54,7 @@ function latestPerName(versions: PackageVersion[], query?: string): PackageVersi
   return [...best.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-interface StoredArtifact { manifest: AnyPackageManifest; files: ArtifactFile[]; signature?: PackageSignature; integrity: string; status: PackageStatus; publishedAt: string }
+interface StoredArtifact { manifest: PackageManifest; files: ArtifactFile[]; signature?: PackageSignature; integrity: string; status: PackageStatus; publishedAt: string }
 
 /** Registry on disk: <root>/@scope/name/<version>.json. Works offline and can live in a shared folder or a git repo. */
 export class LocalRegistry implements Registry {
@@ -115,7 +115,7 @@ export class LocalRegistry implements Registry {
   }
 }
 
-/** The MODAI central server used purely as a registry. Compatible with 0.5 servers. */
+/** The MODAI central server used purely as a registry. */
 export class HttpRegistry implements Registry {
   readonly id: string;
   private readonly api: ApiClient;

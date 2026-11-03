@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import type { Activation, AgentBundle, Permission } from "@modai/contracts/types";
+import type { Activation, AgentBundle } from "@modai/contracts/types";
+import type { PermissionV1 } from "@modai/contracts/spec-v1";
 import type { ApiClient } from "@modai/sdk";
 import { sha256 } from "@modai/contracts/security";
-import { agentDefinitionOf, legacyCapabilities, normalizeManifest } from "@modai/core/normalize";
-import { loadV1Project } from "@modai/core";
+import { agentDefinitionOf, loadV1Project, normalizeManifest, resolveAgentCapabilities } from "@modai/core";
 import { installationPolicy, verifyPackage } from "./trust.js";
 import { localApproval, saveLocalApproval } from "../cli/approvals.js";
 import { safeProjectPath, writeProjectFile } from "../cli/safe-path.js";
@@ -31,8 +31,7 @@ export async function verifyBundle(api: ApiClient, bundle: AgentBundle, policy: 
   const rootDefinition = root ? agentDefinitionOf(root.manifest) : undefined;
   if (!root || !rootDefinition) throw new Error("El bundle no contiene la definición del agente");
   // Definitions are normalized through the shared schema; instructions must match signed artifacts.
-  const { agentDefinitionSchema, capabilitySchema, anyManifestSchema } = await import("@modai/contracts/schemas");
-  for (const item of bundle.packages) anyManifestSchema.parse(item.manifest);
+  const { agentDefinitionSchema } = await import("@modai/contracts/schemas");
   const visited = new Set<string>();
   const visit = (name: string) => {
     if (visited.has(name)) return;
@@ -47,9 +46,7 @@ export async function verifyBundle(api: ApiClient, bundle: AgentBundle, policy: 
   if (JSON.stringify(expectedPermissions) !== JSON.stringify([...bundle.permissions].sort())) throw new Error("Los permisos no corresponden a los paquetes");
   if (JSON.stringify(agentDefinitionSchema.parse(rootDefinition)) !== JSON.stringify(bundle.agent.definition)) throw new Error("La definición no corresponde al paquete");
   for (const instruction of bundle.instructions) if (sources.get(`${instruction.packageName}:${instruction.path}`) !== instruction.content) throw new Error("Las instrucciones no corresponden al artefacto");
-  const available = bundle.packages.flatMap(item => legacyCapabilities(item.manifest).map(c => capabilitySchema.parse(c)));
-  const expected = bundle.agent.definition.capabilities.map(name => available.find(c => c.name === name));
-  if (JSON.stringify(expected) !== JSON.stringify(bundle.capabilities)) throw new Error("Las capacidades no corresponden a los paquetes");
+  if (JSON.stringify(resolveAgentCapabilities(bundle.agent.definition, bundle.packages)) !== JSON.stringify(bundle.capabilities)) throw new Error("Las capacidades no corresponden a los paquetes");
 }
 
 export function agentInstructions(bundle: AgentBundle): string {
@@ -66,7 +63,6 @@ export function loadActivation(root: string): Activation {
   const approval = localApproval(root, target.projectId, activation.server);
   // Repository files describe requested capabilities; only machine-local approvals authorize processes.
   const approved = approval.digest === activation.bundle.digest;
-  activation.allowedTools = approved ? approval.allowedTools ?? [] : [];
   activation.allowedMcp = approved ? approval.allowedMcp ?? [] : [];
   activation.allowedEnv = approved ? approval.allowedEnv ?? [] : [];
   return activation;
@@ -77,7 +73,7 @@ export function loadActivation(root: string): Activation {
  * dependency (modai.yaml + modai.lock), pinning the exact versions the server composed.
  */
 export async function activateAgent(api: ApiClient, root: string, server: string, name: string, range: string, options: {
-  adapter?: Activation["adapter"]; grants?: Permission[]; allowedTools?: string[]; allowedMcp?: string[]; allowedEnv?: string[];
+  adapter?: Activation["adapter"]; grants?: PermissionV1[]; allowedMcp?: string[]; allowedEnv?: string[];
 } = {}): Promise<Activation> {
   const target = serverProject(root);
   if (server.replace(/\/+$/, "") !== target.server) throw new Error(`El proyecto está vinculado a ${target.server}, no a ${server}`);
@@ -88,14 +84,13 @@ export async function activateAgent(api: ApiClient, root: string, server: string
   const bundle = await api.composeAgent(target.projectId, name, range, overrides);
   const grants = [...new Set([...localApproval(root, target.projectId, target.server).permissions, ...(options.grants ?? [])])];
   for (const permission of bundle.permissions) if (!grants.includes(permission)) throw new Error(`El agente necesita --allow ${permission}`);
-  const allowedTools = options.allowedTools ?? [], allowedMcp = options.allowedMcp ?? [];
+  const allowedMcp = options.allowedMcp ?? [];
   for (const capability of bundle.capabilities) {
     if (capability.kind === "mcp" && !allowedMcp.includes(capability.name)) throw new Error(`Autoriza el proceso MCP con --allow-mcp ${capability.name}`);
-    if (capability.kind === "tool" && capability.binding.startsWith("local:") && !allowedTools.includes(capability.name)) throw new Error(`Autoriza la herramienta local con --allow-tool ${capability.name}`);
   }
   await verifyBundle(api, bundle, await installationPolicy(api, target));
   const adapter = options.adapter ?? "files";
-  const activation: Activation = { schemaVersion: 1, server: target.server, bundle, adapter, allowedTools, allowedMcp, allowedEnv: options.allowedEnv ?? [] };
+  const activation: Activation = { schemaVersion: 1, server: target.server, bundle, adapter, allowedMcp, allowedEnv: options.allowedEnv ?? [] };
   const instructionPath = safeProjectPath(root, ".modai/agent.md");
   if (existsSync(instructionPath) && (!previous || readFileSync(instructionPath, "utf8") !== agentInstructions(previous.bundle))) throw new Error(".modai/agent.md contiene cambios del usuario");
   const hostFile = hostFileOf(adapter);
@@ -122,7 +117,7 @@ export async function activateAgent(api: ApiClient, root: string, server: string
     if ((start < 0) !== (end < 0) || (start >= 0 && end < start)) throw new Error(`Bloque MODAI incompleto en ${hostFile}`);
     writeProjectFile(root, hostFile, start < 0 ? `${content}${content ? "\n\n" : ""}${AGENT_ROUTER_BLOCK}\n` : content.slice(0, start) + AGENT_ROUTER_BLOCK + content.slice(end + "<!-- modai:agent:end -->".length));
   }
-  saveLocalApproval(root, target.projectId, target.server, { permissions: grants, digest: bundle.digest, allowedTools, allowedMcp, allowedEnv: options.allowedEnv ?? [] });
+  saveLocalApproval(root, target.projectId, target.server, { permissions: grants, digest: bundle.digest, allowedMcp, allowedEnv: options.allowedEnv ?? [] });
   return activation;
 }
 

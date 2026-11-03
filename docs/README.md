@@ -2,13 +2,13 @@
 
 Empieza por el [README del proyecto](../README.md) para entender el producto y levantar el servidor.
 
-## Plataforma de paquetes (0.6)
+## Plataforma de paquetes
 
 - [ADR-004: MODAI como plataforma de paquetes y capacidades](architecture/ADR-004-package-platform.md).
 - [Especificación de paquetes v1](spec/PACKAGE-SPEC-v1.md): manifiesto, capacidades, contribuciones, permisos, adaptadores, `modai.yaml` y `modai.lock`.
 - [Crear, publicar e instalar paquetes](guides/AUTHORING-PACKAGES.md).
-- [Migración a 0.6](guides/MIGRATION-0.6.md).
 - [Panel web: inicio de sesión, usuarios y roles](guides/ADMIN-PANEL.md).
+- [Templates de proyecto: publicar y crear proyectos desde una plantilla](guides/TEMPLATES.md).
 
 ## Guías
 
@@ -30,5 +30,4 @@ Empieza por el [README del proyecto](../README.md) para entender el producto y l
 - [ADR 002: modelos e inferencia en el cliente](architecture/ADR-002-client-inference.md).
 
 - [Agentes, capacidades, CLI independiente y workers](guides/AGENTS-AND-CAPABILITIES.md).
-- [Migración a 0.5](guides/MIGRATION-0.5.md).
 - [ADR 003: composición y ejecución de agentes](architecture/ADR-003-agent-composition.md).

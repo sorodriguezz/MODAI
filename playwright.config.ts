@@ -25,7 +25,7 @@ export default defineConfig({
     timeout: 30_000,
     env: {
       MODAI_PORT: String(port), MODAI_HOST: "127.0.0.1", MODAI_API_TOKEN: UI.token,
-      MODAI_ADMIN_USERNAME: UI.username, MODAI_ADMIN_PASSWORD: UI.password,
+      MODAI_ADMIN_USERNAME: UI.username, MODAI_ADMIN_PASSWORD: UI.password, MODAI_LOGIN_RATE_LIMIT: "1000",
       MODAI_DATABASE_PATH: join(data, "modai.db"), MODAI_ARTIFACT_DIR: join(data, "artifacts"),
     },
   },

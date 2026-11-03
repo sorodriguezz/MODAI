@@ -4,7 +4,7 @@ import { ApiClient } from "@modai/sdk";
 import type { ProjectFile, RegistrySource } from "@modai/contracts/spec-v1";
 import type { SignaturePolicy } from "@modai/contracts/types";
 import {
-  CompositeRegistry, FileMemoryStore, HttpRegistry, LocalMemoryProvider, LocalRegistry, configDirectory, createRegistries, isLegacyProject, isV1Project, loadGrants,
+  CompositeRegistry, FileMemoryStore, HttpRegistry, LocalMemoryProvider, LocalRegistry, configDirectory, createRegistries, isV1Project, loadGrants,
   loadV1Project, saveGrants, saveProjectFile, syncWorkspace, type MemoryProvider, type Registry, type SyncOptions, type SyncReport, type V1Project,
 } from "@modai/core";
 import { loadClientConfig } from "../cli/config.js";
@@ -42,10 +42,9 @@ export function trustPolicy(file: ProjectFile): SyncOptions["trust"] {
   return { policy: order[Math.max(rank, 0)], trustedPublishers: config?.trustedPublishers ?? [] };
 }
 
-/** Root of a v1 project, or a clear error (0.5 projects are converted with `modai migrate`). */
+/** Root of a MODAI project, or a clear error. */
 export function requireV1Project(root = process.cwd()): string {
   if (isV1Project(root)) return resolve(root);
-  if (isLegacyProject(root)) throw new Error("Este proyecto usa el formato 0.5 (.modai/manifest.yaml), que ya no se admite. Conviértelo con: modai migrate");
   throw new Error("No es un proyecto MODAI: ejecuta 'modai init'.");
 }
 
