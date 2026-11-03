@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from "node:child_process";
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import type { Command } from "commander";
@@ -46,8 +46,19 @@ export function detectInstall(entry = process.argv[1], globalRoot = npmGlobalRoo
 }
 
 function npmGlobalRoot(): string | undefined {
-  const result = spawnSync("npm", ["root", "-g"], { encoding: "utf8", shell: process.platform === "win32" });
-  return result.status === 0 ? result.stdout.trim() : undefined;
+  const result = run("npm", ["root", "-g"], { encoding: "utf8" });
+  return result.status === 0 ? String(result.stdout).trim() : undefined;
+}
+
+/**
+ * spawnSync that works with npm/pnpm/yarn shims on Windows (.cmd needs a shell). Passing an args
+ * array together with `shell: true` triggers Node's DEP0190 warning, which printed over the
+ * confirmation prompt, so on Windows the (trusted, fixed) arguments go in one command string.
+ */
+function run(binary: string, args: string[], options: SpawnSyncOptions = {}): SpawnSyncReturns<string | Buffer> {
+  return process.platform === "win32"
+    ? spawnSync([binary, ...args].join(" "), { ...options, shell: true })
+    : spawnSync(binary, args, options);
 }
 
 // ------------------------------------------------------------------ daily notice
@@ -96,6 +107,7 @@ export function registerUpgradeCommand(program: Command, print: Print): void {
     .action(async (options: { check?: boolean; tag: string; yes?: boolean }) => {
       const current = program.version()!;
       const latest = await fetchDistTag(options.tag);
+      if (!semver.valid(latest)) throw new Error(`El registry devolvió una versión no válida: ${latest}`);
       writeCache(options.tag === "latest" ? latest : readCache()?.latest ?? latest);
       if (!semver.gt(latest, current)) { print(`MODAI ${current} ya es la última versión (${options.tag}: ${latest}).`); return; }
       if (options.check) { print(`Hay una versión nueva: ${current} → ${latest}. Actualiza con: modai upgrade${options.tag === "latest" ? "" : ` --tag ${options.tag}`}`); return; }
@@ -111,7 +123,7 @@ export function registerUpgradeCommand(program: Command, print: Print): void {
       }
       if (!(await confirm(`¿Actualizar MODAI ${current} → ${latest} con ${[...install.command, spec].join(" ")}?`, options.yes))) { print("Sin cambios."); return; }
       const [binary, ...args] = install.command;
-      const result = spawnSync(binary, [...args, spec], { stdio: "inherit", shell: process.platform === "win32" });
+      const result = run(binary, [...args, spec], { stdio: "inherit" });
       if (result.status !== 0) {
         throw new Error(`La actualización falló (código ${result.status ?? result.error?.message}). Si es un problema de permisos, revisa el prefijo global de npm o repite: ${[...install.command, spec].join(" ")}`);
       }

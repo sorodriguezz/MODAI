@@ -68,6 +68,11 @@ test("el servidor previsualiza e importa un .skill respetando el namespace", asy
 test("los templates se publican desde archivos o ZIP, son inmutables y siguen la visibilidad del namespace", async () => {
   const file = (path: string, content: string) => ({ path, content: Buffer.from(content).toString("base64"), sha256: sha256(Buffer.from(content)) });
   const files = [file("package.json", '{ "name": "{{projectName}}" }\n'), file("src/main.ts", "console.log('hola');\n"), file(".env", "SECRET=1"), file(".env.example", "PORT=3000"), file("node_modules/x/index.js", "x")];
+  const missing = await call(admin, "POST", "/templates", { name: "@plantillas/nestjs-sdd", version: "1.0.0", description: "NestJS con SDD", files });
+  assert.equal(missing.status, 404);
+  assert.equal(missing.body.error.code, "NAMESPACE_NOT_FOUND");
+  assert.equal((await call(admin, "GET", "/templates")).body.templates.length, 0);
+  assert.equal((await call(admin, "POST", "/namespaces", { name: "@plantillas" })).status, 201);
   const first = await call(admin, "POST", "/templates", { name: "@plantillas/nestjs-sdd", version: "1.0.0", description: "NestJS con SDD", stack: "NestJS · SDD", tags: ["backend"], files });
   assert.equal(first.status, 201, JSON.stringify(first.body));
   assert.equal(first.body.template.files, 3, ".env y node_modules quedan fuera");

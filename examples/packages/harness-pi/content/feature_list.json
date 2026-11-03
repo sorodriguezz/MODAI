@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "wipLimit": 1,
+  "features": [
+    {
+      "id": "bootstrap-001",
+      "behavior": "El proyecto instala dependencias, compila y ejecuta sus pruebas desde un estado limpio",
+      "verification": "npm test && npm run build",
+      "status": "not_started",
+      "dependencies": []
+    }
+  ]
+}

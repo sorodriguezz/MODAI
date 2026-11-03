@@ -54,7 +54,7 @@ async function templateForm(base, onSaved) {
       </div></section>
       <section data-step="data" data-title="Datos"><div class="stack">
         <div class="field-row">
-          <div class="field"><label for="tplNamespace">Namespace</label>${base ? html`<input id="tplNamespace" value="${baseNamespace}" readonly>` : !state.permissions?.publish.all && namespaces.length ? html`<select id="tplNamespace" required>${namespaces.map((ns) => html`<option value="${ns}">${ns}</option>`)}</select>` : html`<input id="tplNamespace" required pattern="@[a-z0-9][a-z0-9._\\-]*" placeholder="@plantillas" list="tplNamespaces"><datalist id="tplNamespaces">${namespaces.map((ns) => html`<option value="${ns}"></option>`)}</datalist>`}</div>
+          <div class="field"><label for="tplNamespace">Namespace</label>${base ? html`<input id="tplNamespace" value="${baseNamespace}" readonly>` : namespaces.length ? html`<select id="tplNamespace" required>${namespaces.map((ns) => html`<option value="${ns}">${ns}</option>`)}</select>` : html`<select id="tplNamespace" required disabled><option value="">No hay namespaces</option></select><p class="hint">Crea uno primero en el menú Namespaces; publicar no lo crea.</p>`}</div>
           <div class="field"><label for="tplName">Nombre</label><input id="tplName" required pattern="[a-z0-9][a-z0-9._\\-]*" placeholder="nestjs-sdd" value="${baseShort}" ${base ? "readonly" : ""}></div>
           <div class="field"><label for="tplVersion">Versión</label><input id="tplVersion" required pattern="\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.\\-]+)?" value="${nextVersion}"></div>
         </div>

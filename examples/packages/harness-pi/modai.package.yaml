@@ -1,0 +1,22 @@
+apiVersion: modai.dev/v1
+kind: Package
+metadata:
+  name: "@harness/pi"
+  version: 1.0.0
+  description: Baseline de harness (AGENTS.md y .agent/) para Pi, que lee AGENTS.md del proyecto.
+spec:
+  category: harness
+  permissions:
+    - project.instructions
+  contributes:
+    files:
+      - source: content/AGENTS.md
+        target: AGENTS.md
+      - source: content/feature_list.json
+        target: .agent/feature_list.json
+      - source: content/progress.md
+        target: .agent/progress.md
+      - source: content/verification.md
+        target: .agent/verification.md
+      - source: content/session-handoff.md
+        target: .agent/session-handoff.md

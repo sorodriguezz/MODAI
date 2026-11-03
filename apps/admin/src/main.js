@@ -17,14 +17,15 @@ import access from "./views/access.js";
 import audit from "./views/audit.js";
 import connect from "./views/connect.js";
 import organizations from "./views/organizations.js";
+import namespaces from "./views/namespaces.js";
 import templates from "./views/templates.js";
 import myKeys from "./views/my-keys.js";
 
-const views = [dashboard, packages, templates, agents, knowledge, projects, memories, runs, connect, myKeys, organizations, users, access, audit];
+const views = [dashboard, packages, templates, agents, knowledge, projects, memories, runs, connect, myKeys, organizations, namespaces, users, access, audit];
 const sections = [
   { id: "library", label: "Biblioteca", views: ["dashboard", "packages", "templates", "agents", "knowledge"] },
   { id: "work", label: "Proyectos", views: ["projects", "memories", "runs", "connect", "my-keys"] },
-  { id: "admin", label: "Administración", views: ["organizations", "users", "access", "audit"] },
+  { id: "admin", label: "Administración", views: ["organizations", "namespaces", "users", "access", "audit"] },
 ];
 const byId = Object.fromEntries(views.map((view) => [view.id, view]));
 let current = null;

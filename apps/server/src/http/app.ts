@@ -117,7 +117,7 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     });
   });
 
-  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.9.0", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
+  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.9.1", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
   app.get("/", async (_request, reply) => reply.redirect("/admin"));
   if (options.adminDirectory !== false) {
     try { registerAdminAssets(app, options.adminDirectory); }
@@ -438,9 +438,9 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
       files: { type: "array", maxItems: 5000, items: { type: "object", required: ["path", "content", "sha256"], additionalProperties: false, properties: { path: { type: "string", maxLength: 1024 }, content: { type: "string" }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" } } } } } } },
   }, async (request, reply) => {
     auth.requirePublish(identityOf(request), request.body.name);
+    auth.requireNamespaceExists(request.body.name);
     if (!request.body.archive && !request.body.files?.length) throw new AppError(400, "INVALID_TEMPLATE", "Envía un ZIP (archive) o la lista de archivos");
     const template = templates.publish(request.body, identityOf(request)!.label);
-    auth.ensureNamespace(template.name, identityOf(request)!);
     record(request, "template.publish", `${template.name}@${template.version}`, { files: template.files });
     return reply.code(201).send({ template });
   });

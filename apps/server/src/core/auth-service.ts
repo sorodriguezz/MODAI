@@ -329,6 +329,14 @@ export class AuthService {
     this.db.connection.prepare("INSERT OR IGNORE INTO namespaces (name, created_by, created_at, updated_at) VALUES (?, ?, ?, ?)").run(namespaceOf(packageName), actor.id, now, now);
   }
 
+  /** Templates never create a namespace: it must already exist (created from the Namespaces menu or `POST /api/v1/namespaces`). */
+  requireNamespaceExists(templateName: string): void {
+    const scope = namespaceOf(templateName);
+    if (!this.db.connection.prepare("SELECT 1 FROM namespaces WHERE name = ?").get(scope)) {
+      throw new AppError(404, "NAMESPACE_NOT_FOUND", `El namespace ${scope} no existe. Créalo antes en el menú Namespaces (o con POST /api/v1/namespaces).`);
+    }
+  }
+
   createProject(identity: Identity | undefined, input: { id?: string; name: string; organizationId?: string }): ProjectRecord {
     const actor = this.require(identity, "publisher");
     if (actor.role === "org-admin" && !input.organizationId) throw new AppError(400, "ORGANIZATION_REQUIRED", "Elige la organización del proyecto");

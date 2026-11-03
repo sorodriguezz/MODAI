@@ -1,5 +1,11 @@
 # Cambios
 
+## Sin publicar (0.9.1)
+
+- **Los templates no crean namespaces**: publicar un template en un namespace que no existe responde `404 NAMESPACE_NOT_FOUND` y no guarda nada; hay que crear el namespace antes. El asistente de templates del panel solo deja elegir namespaces existentes. Los paquetes siguen registrando su namespace al publicar el primero.
+- **Namespaces con su propio menú** en Administración, separado de Organizaciones.
+- **`modai upgrade` en Windows**: ya no aparece el aviso `DEP0190` sobre el prompt de confirmación `[s/N]`.
+
 ## Sin publicar (0.9.0)
 
 - **Las API keys pertenecen a un usuario**: cada persona crea las suyas (**Mis API keys**, **Conectar un cliente**) sin pedírselas a un admin, y nunca superan sus permisos: el rol es el de la cuenta o uno menor, y los accesos son los mismos de la cuenta o una parte. Se evalúa en cada petición, así que quitar accesos o desactivar a la persona afecta de inmediato a sus keys. Las administraciones ven, ajustan y revocan las keys de quienes gestionan, y pueden crear una a nombre de alguien (`modai admin create-key --owner`). `modai server keys` y `modai server revoke-key` gestionan las tuyas desde la CLI.
