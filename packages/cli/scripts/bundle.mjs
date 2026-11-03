@@ -20,6 +20,9 @@ await build({
   outdir: "dist",
   outbase: "src",
   bundle: true,
+  // Shared code (Core, contracts, SDK) goes into chunks once instead of being inlined in every entry.
+  splitting: true,
+  chunkNames: "internal/chunks/[name]-[hash]",
   platform: "node",
   format: "esm",
   target: "node26",

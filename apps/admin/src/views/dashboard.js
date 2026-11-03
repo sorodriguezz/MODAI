@@ -2,7 +2,7 @@ import { html, mount, delegate } from "../lib/html.js";
 import { icon } from "../lib/icons.js";
 import { get } from "../lib/api.js";
 import { timeTag, skeletonRows, roleLabels, emptyState } from "../lib/ui.js";
-import { state, store, can, latestByName, describeManifest } from "../state.js";
+import { state, store, can } from "../state.js";
 
 const MEMORY_PROJECT_SAMPLE = 12;
 
@@ -72,28 +72,26 @@ export default {
       </dl>`);
     }
 
-    const [packagesResult, projectsResult, documentsResult, usersResult] = await Promise.allSettled([
-      store.packages(), store.projects(), store.documents(), can.admin() ? get("/admin/users") : Promise.resolve(null),
+    const [summaryResult, projectsResult, documentsResult, usersResult] = await Promise.allSettled([
+      store.summary(), store.projects(), store.documents(), can.admin() ? get("/admin/users") : Promise.resolve(null),
     ]);
     if (!isCurrent()) return;
-    const packageList = packagesResult.status === "fulfilled" ? packagesResult.value : [];
+    const summary = summaryResult.status === "fulfilled" ? summaryResult.value : null;
     const projectList = projectsResult.status === "fulfilled" ? projectsResult.value : [];
-    const latest = latestByName(packageList);
-    const agentCount = latest.filter((item) => describeManifest(item).agents.length > 0 || item.type === "agent").length;
     const memory = await memoryCount(projectList);
     if (!isCurrent()) return;
     mount(root.querySelector("#stats"), [
-      stat({ label: "Paquetes", value: latest.length, hint: packageList.length + " versiones publicadas", iconName: "package", href: "#/packages" }),
-      stat({ label: "Agentes", value: agentCount, hint: "Listos para activar", iconName: "bot", href: "#/agents" }),
+      stat({ label: "Paquetes", value: summary ? summary.packages : "—", hint: summary ? summary.versions + " versiones publicadas" : "No disponible", iconName: "package", href: "#/packages" }),
+      stat({ label: "Agentes", value: summary ? summary.agents : "—", hint: "Listos para activar", iconName: "bot", href: "#/agents" }),
       stat({ label: "Conocimiento", value: documentsResult.status === "fulfilled" ? documentsResult.value.length : "—", hint: "Documentos compartidos", iconName: "book", href: "#/knowledge" }),
       stat({ label: "Proyectos", value: projectList.length, hint: can.admin() ? "En el servidor" : "Con acceso", iconName: "folder", href: "#/projects" }),
       stat({ label: "Memorias", value: memory.total + (memory.capped ? "+" : ""), hint: memory.capped ? `Muestra de ${Math.min(projectList.length, MEMORY_PROJECT_SAMPLE)} proyectos` : "En tus proyectos", iconName: "brain", href: "#/memories" }),
       usersResult.status === "fulfilled" && usersResult.value ? stat({ label: "Usuarios", value: usersResult.value.users.filter((u) => !u.disabledAt).length, hint: "Cuentas activas del panel", iconName: "users", href: "#/users" }) : "",
     ]);
 
-    const recent = [...packageList].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt)).slice(0, 6);
+    const recent = summary?.recent ?? [];
     mount(root.querySelector("#recentPackages"), recent.length
-      ? html`<ul class="list">${recent.map((item) => html`<li><a href="#/packages?name=${encodeURIComponent(item.name)}"><span class="list-icon">${icon("package")}</span><span class="list-main"><b>${item.name}</b><span class="muted">v${item.version} · ${describeManifest(item).category}</span></span>${timeTag(item.publishedAt)}</a></li>`)}</ul>`
+      ? html`<ul class="list">${recent.map((item) => html`<li><a href="#/packages?name=${encodeURIComponent(item.name)}"><span class="list-icon">${icon("package")}</span><span class="list-main"><b>${item.name}</b><span class="muted">v${item.version} · ${item.category}</span></span>${timeTag(item.publishedAt)}</a></li>`)}</ul>`
       : emptyState({ iconName: "package", title: "Aún no hay paquetes", text: "Publica el primero con modai publish desde la CLI." }));
 
     if (can.admin()) {

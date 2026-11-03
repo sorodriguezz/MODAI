@@ -7,14 +7,16 @@ import { permissionSchema, signaturePolicySchema } from "@modai/contracts/schema
 import { activateAgent, deactivateAgent, loadActivation, verifyBundle } from "../agent/activation.js";
 import { executeAgent, type RuntimeOptions } from "../agent/runtime.js";
 import { workOnce } from "../agent/worker.js";
-import { installationPolicy } from "./installer.js";
-import { loadClientConfig, loadProject, readYaml } from "./config.js";
-import { isV1Project } from "@modai/core/project";
-import { capabilitiesV1 } from "../v1/commands.js";
+import { installationPolicy } from "../agent/trust.js";
+import { serverClient, serverProject } from "../agent/project.js";
+import { loadClientConfig, readYaml } from "./config.js";
+import { effectiveConnection } from "./connection.js";
+import type { Print } from "./output.js";
 
 export const commaList = (value: string, previous: string[] = []) => [...previous, ...value.split(",").map(item => item.trim()).filter(Boolean)];
-function packageSpec(spec: string) { const i = spec.lastIndexOf("@"); return i > spec.indexOf("/") ? { name: spec.slice(0,i), range: spec.slice(i+1) } : { name: spec, range: "*" }; }
+function packageSpec(spec: string) { const i = spec.lastIndexOf("@"); return i > spec.indexOf("/") ? { name: spec.slice(0, i), range: spec.slice(i + 1) } : { name: spec, range: "*" }; }
 interface Options { model?: string; url?: string; maxSteps?: string; bindings?: string; allowTool?: string[]; allowMcp?: string[]; allowEnv?: string[] }
+
 export function runtimeOptions(options: Options, activation?: Activation): RuntimeOptions {
   let bindings: Record<string, RunnerBinding> = {};
   if (options.bindings) {
@@ -28,58 +30,77 @@ export function runtimeOptions(options: Options, activation?: Activation): Runti
   return { cwd: process.cwd(), model: options.model, url: options.url, maxSteps, bindings,
     allowedTools: options.allowTool ?? activation?.allowedTools ?? [], allowedMcp: options.allowMcp ?? activation?.allowedMcp ?? [], allowedEnv: options.allowEnv ?? activation?.allowedEnv ?? [] };
 }
+
 function executionOptions(command: Command): Command {
   return command.option("--model <model>", "Modelo local de Ollama").option("--url <url>", "Ollama en loopback")
     .option("--max-steps <number>", "Máximo de pasos, de 1 a 32").option("--bindings <file>", "Mapa YAML de ejecutores locales")
     .option("--allow-tool <names>", "Herramientas locales autorizadas", commaList).option("--allow-mcp <names>", "Procesos MCP autorizados", commaList)
     .option("--allow-env <names>", "Variables que pueden recibir esos procesos", commaList);
 }
-export function registerAgentCommands(program: Command, connect: () => { server: string; token?: string }, print: (value: unknown) => void) {
-  const client = () => { const c = connect(); return new ApiClient(c.server,c.token); };
-  const agent = program.command("agent").description("Compone, activa y ejecuta agentes versionados");
-  agent.command("deactivate").description("Desactiva el agente conservando archivos modificados").action(()=>print(deactivateAgent(process.cwd())));
-  agent.command("list").action(async () => print(await client().agents()));
-  agent.command("compose").argument("<package>").action(async spec => { const p = loadProject(), item = packageSpec(spec); print(await client().composeAgent(p.manifest.projectId,item.name,item.range,p.manifest.overrides)); });
-  agent.command("activate").argument("<package>")
+
+/** Agents, remote runs and workers. They work on a v1 project linked to a server project (modai init --project). */
+export function registerAgentCommands(program: Command, print: Print) {
+  const agent = program.command("agent").description("Compone, activa y ejecuta agentes versionados del servidor");
+  agent.command("list").description("Agentes publicados en el servidor").action(async () => {
+    const connection = effectiveConnection();
+    print((await new ApiClient(connection.server, connection.token).agents()).map(item => ({ agent: item.name, version: item.version, description: item.description })));
+  });
+  agent.command("compose").argument("<package>").description("Muestra qué paquetes, instrucciones y capacidades tendría el agente").action(async (spec: string) => {
+    const target = serverProject(), item = packageSpec(spec);
+    print(await serverClient(target).composeAgent(target.projectId, item.name, item.range, target.overrides));
+  });
+  agent.command("activate").argument("<package>").description("Instala el agente en el proyecto y deja sus instrucciones en .modai/agent.md")
     .option("--adapter <adapter>", "files, agents-md o claude-md", "files")
     .option("--allow <permissions>", "Permisos de instalación autorizados", commaList)
     .option("--allow-tool <names>", "Herramientas locales autorizadas", commaList).option("--allow-mcp <names>", "Procesos MCP autorizados", commaList).option("--allow-env <names>", "Variables autorizadas", commaList)
-    .action(async (spec, options) => {
-      if (!["files","agents-md","claude-md"].includes(options.adapter)) throw new Error("Adaptador inválido");
-      const item=packageSpec(spec), c=connect();
-      const activation=await activateAgent(new ApiClient(c.server,c.token),process.cwd(),c.server,item.name,item.range,{adapter:options.adapter,grants:(options.allow??[]).map((v:string)=>permissionSchema.parse(v)) as Permission[],allowedTools:options.allowTool,allowedMcp:options.allowMcp,allowedEnv:options.allowEnv});
-      print({agent:`${activation.bundle.agent.name}@${activation.bundle.agent.version}`,adapter:activation.adapter,instructions:".modai/agent.md",mcp:".modai/mcp.json",tools:activation.bundle.capabilities.map(c=>c.name),next:"Configura el MCP de tu cliente con .modai/mcp.json o ejecuta modai agent run"});
+    .action(async (spec: string, options) => {
+      if (!["files", "agents-md", "claude-md"].includes(options.adapter)) throw new Error("Adaptador inválido: usa files, agents-md o claude-md");
+      const target = serverProject(), item = packageSpec(spec);
+      const activation = await activateAgent(serverClient(target), target.root, target.server, item.name, item.range, {
+        adapter: options.adapter, grants: (options.allow ?? []).map((value: string) => permissionSchema.parse(value)) as Permission[],
+        allowedTools: options.allowTool, allowedMcp: options.allowMcp, allowedEnv: options.allowEnv,
+      });
+      print({ agent: `${activation.bundle.agent.name}@${activation.bundle.agent.version}`, adapter: activation.adapter, instructions: ".modai/agent.md",
+        tools: activation.bundle.capabilities.map(capability => capability.name), next: "Tu cliente MCP verá el agente en el servidor modai del proyecto (modai-mcp), o ejecútalo con: modai agent run \"<tarea>\"" });
     });
-  executionOptions(agent.command("run").argument("<task>"))
-    .action(async (task,options) => {
-      const p=loadProject(), activation=loadActivation(p.paths.root), api=client();
-      await verifyBundle(api,activation.bundle,await installationPolicy(api,p.manifest));
-      print(await executeAgent(api,activation.bundle,task,runtimeOptions(options,activation)));
+  agent.command("deactivate").description("Desactiva el agente conservando archivos modificados").action(() => print(deactivateAgent(serverProject().root)));
+  executionOptions(agent.command("run").argument("<task>").description("Ejecuta el agente activo con un modelo local"))
+    .action(async (task: string, options) => {
+      const target = serverProject(), activation = loadActivation(target.root), api = serverClient(target);
+      await verifyBundle(api, activation.bundle, await installationPolicy(api, target));
+      print(await executeAgent(api, activation.bundle, task, { ...runtimeOptions(options, activation), cwd: target.root }));
     });
-  agent.command("submit").argument("<task>").option("--agent <package>","Agente; por defecto el activo").option("--idempotency-key <key>")
-    .action(async (task,options) => { const p=loadProject();const item=options.agent?packageSpec(options.agent):(()=>{const a=loadActivation(p.paths.root);return {name:a.bundle.agent.name,range:a.bundle.agent.version}})();print(await client().submitRun({projectId:p.manifest.projectId,...item,task,overrides:p.manifest.overrides,idempotencyKey:options.idempotencyKey})); });
-  const runs=program.command("runs").description("Consulta y cancela ejecuciones remotas");
-  runs.command("list").action(async()=>print(await client().runs(loadProject().manifest.projectId)));
-  runs.command("show").argument("<id>").action(async id=>print(await client().run(id)));
-  runs.command("cancel").argument("<id>").action(async id=>print(await client().cancelRun(id)));
-  program.command("capabilities").description("Capacidades: contratos provistos/requeridos, herramientas y skills del proyecto").action(async()=>{
-    if (isV1Project(process.cwd())) return capabilitiesV1(process.cwd(), print);
-    print(await client().capabilities());
+  agent.command("submit").argument("<task>").description("Encola la tarea para que la procese un worker")
+    .option("--agent <package>", "Agente; por defecto el activo").option("--idempotency-key <key>")
+    .action(async (task: string, options: { agent?: string; idempotencyKey?: string }) => {
+      const target = serverProject();
+      const item = options.agent ? packageSpec(options.agent) : (() => { const active = loadActivation(target.root); return { name: active.bundle.agent.name, range: active.bundle.agent.version }; })();
+      print(await serverClient(target).submitRun({ projectId: target.projectId, ...item, task, overrides: target.overrides, idempotencyKey: options.idempotencyKey }));
+    });
+
+  const runs = program.command("runs").description("Consulta y cancela ejecuciones remotas");
+  runs.command("list").action(async () => {
+    const target = serverProject();
+    print((await serverClient(target).runs(target.projectId)).map(run => ({ id: run.id, agent: `${run.agentName}@${run.agentVersion}`, status: run.status, created: run.createdAt })));
   });
-  executionOptions(program.command("worker").description("Ejecutor opcional de tareas de un proyecto"))
-    .requiredOption("--project <id>").option("--once", "Procesa una tarea y termina").option("--signature-policy <policy>","optional, signed o trusted", "trusted")
+  runs.command("show").argument("<id>").action(async (id: string) => { const target = serverProject(); print(await serverClient(target).run(id)); });
+  runs.command("cancel").argument("<id>").action(async (id: string) => { const target = serverProject(); print(await serverClient(target).cancelRun(id)); });
+
+  executionOptions(program.command("worker").description("Ejecutor opcional de tareas de un proyecto del servidor"))
+    .requiredOption("--project <id>").option("--once", "Procesa una tarea y termina").option("--signature-policy <policy>", "optional, signed o trusted", "trusted")
     .action(async options => {
-      const api=client(); await api.assertCompatible();
-      const config=loadClientConfig(), requested=signaturePolicySchema.parse(options.signaturePolicy);
-      const order:SignaturePolicy[]=["optional","signed","trusted"], info=await api.health();
-      const policy=order[Math.max(order.indexOf(requested),order.indexOf(config?.signaturePolicy??"optional"),order.indexOf(info.signaturePolicy))];
-      const controller=new AbortController();const stop=()=>controller.abort();process.once("SIGINT",stop);process.once("SIGTERM",stop);
+      const connection = effectiveConnection();
+      const api = new ApiClient(connection.server, connection.token); await api.assertCompatible();
+      const config = loadClientConfig(), requested = signaturePolicySchema.parse(options.signaturePolicy);
+      const order: SignaturePolicy[] = ["optional", "signed", "trusted"], info = await api.health();
+      const policy = order[Math.max(order.indexOf(requested), order.indexOf(config?.signaturePolicy ?? "optional"), order.indexOf(info.signaturePolicy))];
+      const controller = new AbortController(); const stop = () => controller.abort(); process.once("SIGINT", stop); process.once("SIGTERM", stop);
       try {
         do {
-          const worked=await workOnce(api,options.project,{...runtimeOptions(options),signal:controller.signal,signaturePolicy:policy,trustedPublishers:config?.trustedPublishers??[]});
-          if(options.once){print({processed:worked});break}
-          if(!worked)await delay(2000,undefined,{signal:controller.signal});
-        }while(!controller.signal.aborted);
-      }catch(error){if(!controller.signal.aborted)throw error}finally{process.removeListener("SIGINT",stop);process.removeListener("SIGTERM",stop)}
+          const worked = await workOnce(api, options.project, { ...runtimeOptions(options), signal: controller.signal, signaturePolicy: policy, trustedPublishers: config?.trustedPublishers ?? [] });
+          if (options.once) { print({ processed: worked }); break; }
+          if (!worked) await delay(2000, undefined, { signal: controller.signal });
+        } while (!controller.signal.aborted);
+      } catch (error) { if (!controller.signal.aborted) throw error; } finally { process.removeListener("SIGINT", stop); process.removeListener("SIGTERM", stop); }
     });
 }

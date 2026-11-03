@@ -25,7 +25,17 @@ function cached(key, loader) {
 }
 
 export const store = {
-  packages: cached("packages", async () => (await get("/packages?includeYanked=true")).packages),
+  /** Counters and recent publications for the dashboard. */
+  summary: cached("summary", async () => get("/packages/summary")),
+  /** Latest version of each agent package. The server filters; pages of 100 until complete. */
+  agents: cached("agents", async () => {
+    const items = [];
+    for (let offset = 0; ; offset += 100) {
+      const page = await get("/packages/catalog?type=agents&status=latest&limit=100&offset=" + offset);
+      items.push(...page.items);
+      if (!page.items.length || items.length >= page.total) return items;
+    }
+  }),
   projects: cached("projects", async () => (await get("/projects")).projects),
   documents: cached("documents", async () => (await get("/knowledge/documents?limit=500")).documents),
   invalidate(...keys) {
@@ -123,15 +133,4 @@ export function describeManifest(record) {
     agents: manifest.agent ? [{ name: manifest.name, ...manifest.agent }] : [],
     files: list(manifest.files),
   };
-}
-
-/** Latest active version per package name (falls back to latest of any status when all are inactive). */
-export function latestByName(packages, includeInactive = false) {
-  const map = new Map();
-  for (const item of packages) {
-    if (!includeInactive && item.status !== "active") continue;
-    const current = map.get(item.name);
-    if (!current || new Date(item.publishedAt) > new Date(current.publishedAt)) map.set(item.name, item);
-  }
-  return [...map.values()];
 }

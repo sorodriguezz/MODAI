@@ -2,7 +2,7 @@ import { html, mount, delegate } from "../lib/html.js";
 import { icon } from "../lib/icons.js";
 import { get, post } from "../lib/api.js";
 import { openDialog, closeDialog, bindForm, confirmDialog, toast, skeletonRows, emptyState, errorState, timeTag, statusBadge, formatDate } from "../lib/ui.js";
-import { store, can, describeManifest, latestByName } from "../state.js";
+import { store, can } from "../state.js";
 
 let lastProject = "";
 
@@ -41,8 +41,7 @@ function runDetail(run, onChange) {
 }
 
 async function newRun(project, onCreated) {
-  const packages = await store.packages();
-  const agents = latestByName(packages).filter((item) => describeManifest(item).agents.length || item.type === "agent");
+  const agents = await store.agents();
   const body = openDialog({
     title: "Nueva tarea",
     description: "Proyecto " + project.name,

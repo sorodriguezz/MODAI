@@ -197,7 +197,8 @@ export const projectFileSchema = z.object({
 export type ProjectFile = z.output<typeof projectFileSchema>;
 export type RegistrySource = z.output<typeof registrySourceSchema>;
 
-const managedFile = z.object({ type: z.literal("file"), path: z.string(), sha256: z.string(), owner: z.string(), adapter: z.string().optional() }).strict();
+/** `userSha256`: the user chose to keep their version (--keep-mine); MODAI's content is `sha256`. */
+const managedFile = z.object({ type: z.literal("file"), path: z.string(), sha256: z.string(), owner: z.string(), adapter: z.string().optional(), userSha256: z.string().optional() }).strict();
 const managedBlock = z.object({ type: z.literal("block"), path: z.string(), id: z.string(), sha256: z.string(), owners: z.array(z.string()), adapter: z.string().optional() }).strict();
 const managedJson = z.object({ type: z.literal("json"), path: z.string(), pointer: z.string(), sha256: z.string(), adapter: z.string().optional() }).strict();
 export const managedEntrySchema = z.discriminatedUnion("type", [managedFile, managedBlock, managedJson]);

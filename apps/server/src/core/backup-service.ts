@@ -17,6 +17,8 @@ interface Snapshot {
   organizations?: Array<{ id: string; name: string; createdAt: string }>;
   projects?: Array<{ id: string; name: string; organizationId?: string; createdAt: string }>;
   runs?: RunRecord[];
+  /** What each project had installed when the backup was taken (from client reports). */
+  installations?: Array<{ projectId: string; packageName: string; version: string; direct: boolean; reportedAt: string }>;
   publishers: Array<{ fingerprint: string; label?: string; publicKey: string; trusted: boolean }>;
 }
 
@@ -54,16 +56,27 @@ export class BackupService {
       organizations: this.db.connection.prepare("SELECT id, name, created_at AS createdAt FROM organizations").all() as Snapshot["organizations"],
       projects: this.db.connection.prepare("SELECT id, name, organization_id AS organizationId, created_at AS createdAt FROM projects").all() as Snapshot["projects"],
       runs: (this.db.connection.prepare("SELECT id FROM runs").all() as Array<{ id: string }>).map(row => new RunService(this.db).get(row.id)),
+      installations: (this.db.connection.prepare(`SELECT project_id AS projectId, package_name AS packageName, version, direct, reported_at AS reportedAt
+        FROM project_installations ORDER BY project_id, package_name`).all() as Array<{ projectId: string; packageName: string; version: string; direct: number; reportedAt: string }>)
+        .map(item => ({ ...item, direct: Boolean(item.direct) })),
       publishers: publishers.map((item) => ({ ...item, trusted: Boolean(item.trusted) })),
     };
   }
 
-  import(snapshot: Snapshot): { packages: number; skipped: number; knowledge: number; memories: number } {
+  import(snapshot: Snapshot): { packages: number; skipped: number; knowledge: number; memories: number; installations: number } {
     invariant(snapshot?.schemaVersion === 1 && Array.isArray(snapshot.packages), 400, "INVALID_BACKUP", "Snapshot ModularAI inválido");
     // Validate every package and memory before starting an import; secrets and active leases are never restored.
     for (const item of snapshot.packages) parseInput(publishSchema, { manifest: item.manifest, files: item.files, signature: item.signature });
     for (const item of snapshot.memories ?? []) parseInput(memorySchema, item);
     for (const item of snapshot.projects ?? []) parseInput(projectSchema, { id: item.id, name: item.name, organizationId: item.organizationId ?? undefined });
+    const knownProjects = new Set((snapshot.projects ?? []).map(item => item.id));
+    for (const item of snapshot.installations ?? []) {
+      invariant(typeof item.projectId === "string" && item.projectId.length > 0 && item.projectId.length <= 200, 400, "INVALID_BACKUP", "Instalación sin proyecto válido");
+      invariant(typeof item.packageName === "string" && /^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/.test(item.packageName) && item.packageName.length <= 214, 400, "INVALID_BACKUP", `Nombre de paquete inválido en instalaciones: ${item.packageName}`);
+      invariant(typeof item.version === "string" && item.version.length > 0 && item.version.length <= 100, 400, "INVALID_BACKUP", "Versión inválida en instalaciones");
+      invariant(typeof item.reportedAt === "string" && !Number.isNaN(Date.parse(item.reportedAt)), 400, "INVALID_BACKUP", "Fecha inválida en instalaciones");
+      invariant(knownProjects.has(item.projectId) || Boolean(this.db.connection.prepare("SELECT 1 FROM projects WHERE id = ?").get(item.projectId)), 400, "INVALID_BACKUP", `La instalación apunta a un proyecto ausente: ${item.projectId}`);
+    }
     for (const item of snapshot.publishers ?? []) {
       invariant(publicKeyFingerprint(item.publicKey) === item.fingerprint, 400, "INVALID_PUBLISHER", "Fingerprint del publicador inválido");
       this.packages.registerPublisher(item.publicKey, item.label ?? "restored", item.trusted);
@@ -95,12 +108,17 @@ export class BackupService {
       this.db.connection.prepare(`INSERT OR IGNORE INTO runs (id,project_id,agent_name,agent_version,task,bundle_json,status,result,error,attempts,created_by,created_at,updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'restored-admin', ?, ?)`).run(run.id,run.projectId,run.agentName,run.agentVersion,run.task,JSON.stringify(run.bundle),run.status === "running" ? "queued" : run.status,run.result ?? null,run.error ?? null,run.status === "running" ? 0 : run.attempts,run.createdAt,run.updatedAt);
     }
+    // A report already on this server that is newer than the backup wins: it describes the present.
+    const installation = this.db.connection.prepare(`INSERT INTO project_installations (project_id, package_name, version, direct, reported_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(project_id, package_name) DO UPDATE SET version = excluded.version, direct = excluded.direct, reported_at = excluded.reported_at
+      WHERE excluded.reported_at > project_installations.reported_at`);
+    for (const item of snapshot.installations ?? []) installation.run(item.projectId, item.packageName, item.version, item.direct ? 1 : 0, new Date(item.reportedAt).toISOString());
     for (const item of snapshot.publishers ?? []) {
       this.db.connection.prepare(`INSERT INTO publishers (fingerprint, label, public_key, trusted, created_at)
         VALUES (?, ?, ?, ?, ?) ON CONFLICT(fingerprint) DO UPDATE SET label = excluded.label,
         public_key = excluded.public_key, trusted = excluded.trusted`)
         .run(item.fingerprint, item.label ?? null, item.publicKey, item.trusted ? 1 : 0, new Date().toISOString());
     }
-    return { packages: importedPackages, skipped, knowledge: snapshot.knowledge?.length ?? 0, memories: snapshot.memories?.length ?? 0 };
+    return { packages: importedPackages, skipped, knowledge: snapshot.knowledge?.length ?? 0, memories: snapshot.memories?.length ?? 0, installations: snapshot.installations?.length ?? 0 };
   }
 }

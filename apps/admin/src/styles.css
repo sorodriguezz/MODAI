@@ -641,3 +641,11 @@ button.card:hover { border-color: var(--border-strong); box-shadow: var(--shadow
 @media (forced-colors: active) {
   .btn, .badge, .nav a.active { border: 1px solid CanvasText; }
 }
+
+/* Catalog pagination and the package editor's folder rows */
+.pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 20px; }
+.file-table .folder-row td { background: var(--surface-2); }
+.folder-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.folder-actions { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.folder-actions input { width: min(260px, 100%); padding: 4px 8px; }
+.file-table .folder-row ~ tr .file-cell { padding-left: 28px; }

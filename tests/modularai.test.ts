@@ -9,8 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../apps/server/src/http/app.js";
 import { ApiClient } from "@modai/sdk";
-import { synchronize } from "../packages/cli/src/cli/installer.js";
-import type { ProjectLock, ProjectManifest } from "../packages/cli/src/cli/config.js";
+import { HttpRegistry, createProjectFile, loadV1Project, saveProjectFile, syncWorkspace } from "@modai/core";
 import type { PackageManifest, PublishPackageInput } from "@modai/contracts/types";
 import { signaturePayload } from "@modai/contracts/security";
 import { auditHarness, createHarness } from "../packages/cli/src/cli/harness-tools.js";
@@ -130,20 +129,19 @@ test("la CLI conserva al retirar un archivo modificado por el usuario", async ()
   assert.equal(published.statusCode, 201, published.body);
 
   const address = app.server.address() as AddressInfo;
-  const api = new ApiClient(`http://127.0.0.1:${address.port}`, "test-secret");
+  const server = `http://127.0.0.1:${address.port}`;
   const projectRoot = mkdtempSync(join(root, "project-"));
-  const project: ProjectManifest = {
-    schemaVersion: 1,
-    projectId: "project-install",
-    packages: { "@test/installable": "*" },
-  };
-  const empty: ProjectLock = { schemaVersion: 1, generatedAt: new Date(0).toISOString(), packages: [] };
-  const installed = await synchronize(api, projectRoot, project, empty);
+  saveProjectFile(projectRoot, createProjectFile("install", { registries: [{ name: "central", url: server }], adapters: [], dependencies: { "@test/installable": "*" } }));
+  const options = { registries: [new HttpRegistry(server, "test-secret")], grants: [], trust: { policy: "optional" as const, trustedPublishers: [] } };
+  await syncWorkspace(loadV1Project(projectRoot), options);
   const target = join(projectRoot, ".modai", "packages", "content.txt");
   assert.equal(readFileSync(target, "utf8"), "original");
 
   writeFileSync(target, "cambio del usuario", "utf8");
-  const removed = await synchronize(api, projectRoot, { ...project, packages: {} }, installed.lock);
+  const file = loadV1Project(projectRoot).file;
+  file.dependencies = {};
+  saveProjectFile(projectRoot, file);
+  const removed = await syncWorkspace(loadV1Project(projectRoot), options);
   assert.equal(existsSync(target), true);
   assert.equal(removed.preserved.length, 1);
 });
@@ -266,10 +264,7 @@ test("el servidor no expone inferencia y recibe vectores calculados en clientes"
 test("expone conocimiento y estado mediante un servidor MCP stdio real", async () => {
   const address = app.server.address() as AddressInfo;
   const projectRoot = mkdtempSync(join(root, "mcp-project-"));
-  const modaiDir = join(projectRoot, ".modai");
-  mkdirSync(modaiDir, { recursive: true });
-  writeFileSync(join(modaiDir, "manifest.yaml"), `schemaVersion: 1\nprojectId: mcp-test\nserver: http://127.0.0.1:${address.port}\npackages: {}\noverrides: {}\n`);
-  writeFileSync(join(modaiDir, "lock.yaml"), `schemaVersion: 1\ngeneratedAt: 2026-01-01T00:00:00.000Z\npackages: []\n`);
+  saveProjectFile(projectRoot, createProjectFile("mcp-test", { registries: [{ name: "central", url: `http://127.0.0.1:${address.port}` }], adapters: [], context: { memory: "remote", server: `http://127.0.0.1:${address.port}`, projectId: "mcp-test" } }));
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"), join(process.cwd(), "packages", "cli", "src", "mcp.ts")],

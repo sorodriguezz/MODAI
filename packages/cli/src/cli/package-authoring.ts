@@ -29,31 +29,3 @@ export function signPackage(input: PublishPackageInput, privateKeyPem: string): 
   const signature = sign(null, signaturePayload(input.manifest, input.files), privateKey).toString("base64");
   return { ...input, signature: { algorithm: "ed25519", publicKey, signature } };
 }
-
-export function scaffoldPackage(directory: string, name: string, type: PackageType): string {
-  const root = resolve(directory);
-  if (existsSync(root)) throw new Error(`La carpeta ya existe: ${root}`);
-  mkdirSync(join(root, "content"), { recursive: true });
-  const shortName = name.split("/").pop() ?? basename(root);
-  const target = type === "skill" ? `.agents/skills/${shortName}/SKILL.md` : `.modai/packages/${shortName}/README.md`;
-  const source = type === "skill" ? "content/SKILL.md" : "content/README.md";
-  const manifest = {
-    schemaVersion: 1,
-    name,
-    version: "0.1.0",
-    type,
-    description: `Describe con precisión la capacidad ${name} y cuándo debe utilizarse.`,
-    files: [{ source, target }],
-    ...(type === "agent" ? { agent: { instructions: "Define el objetivo del agente, su alcance y los criterios de verificación.", skills: [], capabilities: [], memory: { read: ["project"], write: false }, runtime: { provider: "ollama" } } } : {}),
-    ...(type === "tool" ? { capabilities: [{ kind: "tool", name: shortName.replaceAll("-", "_"), description: "Describe los paquetes fijados del agente.", binding: "packages.list", inputSchema: { type: "object", properties: {}, additionalProperties: false } }] } : {}),
-    ...(type === "mcp" ? { permissions: ["mcp.connect"], capabilities: [{ kind: "mcp", name: shortName.replaceAll("-", "_"), description: "Describe el proceso MCP stdio que conectarás.", command: "REEMPLAZAR_POR_COMANDO", args: [], envKeys: [] }] } : {}),
-    ...(type === "knowledge" ? { knowledge: [{ source, title: shortName, tags: [shortName] }] } : {}),
-  };
-  writeNew(join(root, "modai.package.yaml"), YAML.stringify(manifest, { lineWidth: 0 }));
-  if (type === "skill") {
-    writeNew(join(root, source), `---\nname: ${shortName}\ndescription: Explica la capacidad, cuándo se activa y qué solicitudes similares quedan fuera.\n---\n\n# ${shortName}\n\nDefine aquí el resultado esperado, las decisiones no obvias y los límites reales.\n\n## Flujo\n\n1. Inspecciona el contexto relevante.\n2. Ejecuta el trabajo manteniendo el alcance solicitado.\n3. Verifica el resultado con evidencia observable.\n\n## Recursos\n\nAñade references/ solo para detalle condicional que no deba cargarse siempre.\n`);
-  } else {
-    writeNew(join(root, source), `# ${shortName}\n\nContenido administrado por el paquete ${name}.\n`);
-  }
-  return root;
-}

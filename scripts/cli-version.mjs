@@ -1,45 +1,63 @@
-// The CLI version lives in packages/cli/package.json and is repeated in sources bundled into the
-// npm package. `set <version>` updates every copy; `check` fails when any copy disagrees (used by CI).
-//   node scripts/cli-version.mjs set 0.7.0
-//   node scripts/cli-version.mjs check
+// MODAI ships one product version: CLI, Core, contracts, SDK, server and panel move together.
+// The version lives in every workspace package.json and is repeated in a few sources.
+//   node scripts/cli-version.mjs set 0.8.0   (updates everything and refreshes package-lock.json)
+//   node scripts/cli-version.mjs check       (fails when any copy disagrees; used by CI)
+import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
-const manifestPath = resolve(root, "packages/cli/package.json");
-const COPIES = [
+const MANIFESTS = ["package.json", "packages/contracts/package.json", "packages/sdk/package.json", "packages/core/package.json", "packages/cli/package.json", "apps/server/package.json", "apps/admin/package.json"];
+const SOURCES = [
   { file: "packages/cli/src/cli/index.ts", pattern: /(\.version\(")([^"]+)("\))/ },
-  { file: "packages/cli/src/mcp.ts", pattern: /(new Server\(\{ name: "modai", version: ")([^"]+)(")/ },
   { file: "packages/cli/src/agent/capabilities.ts", pattern: /(name: "modai-capabilities", version: ")([^"]+)(")/ },
   { file: "packages/core/src/version.ts", pattern: /(CORE_VERSION = ")([^"]+)(")/ },
+  { file: "apps/server/src/http/app.ts", pattern: /(service: "modularai", version: ")([^"]+)(")/ },
 ];
+const INTERNAL = /^@modai\//;
 
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+const read = file => readFileSync(resolve(root, file), "utf8");
+const cliVersion = () => JSON.parse(read("packages/cli/package.json")).version;
+
+/** Every place that states a version, with what it currently says. */
+function copies() {
+  const found = [];
+  for (const file of MANIFESTS) {
+    const manifest = JSON.parse(read(file));
+    found.push({ where: `${file} (version)`, value: manifest.version });
+    for (const field of ["dependencies", "devDependencies"]) for (const [name, range] of Object.entries(manifest[field] ?? {})) if (INTERNAL.test(name)) found.push({ where: `${file} (${name})`, value: range });
+  }
+  for (const { file, pattern } of SOURCES) found.push({ where: file, value: read(file).match(pattern)?.[2] });
+  return found;
+}
+
 const [command, next] = process.argv.slice(2);
-
 if (command === "set") {
   if (!SEMVER.test(next ?? "")) throw new Error(`Versión SemVer inválida: ${next}`);
-  manifest.version = next;
-  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  for (const { file, pattern } of COPIES) {
-    const path = resolve(root, file);
-    const text = readFileSync(path, "utf8");
-    if (!pattern.test(text)) throw new Error(`No se encontró la versión en ${file}`);
-    writeFileSync(path, text.replace(pattern, `$1${next}$3`));
+  for (const file of MANIFESTS) {
+    const manifest = JSON.parse(read(file));
+    manifest.version = next;
+    for (const field of ["dependencies", "devDependencies"]) for (const name of Object.keys(manifest[field] ?? {})) if (INTERNAL.test(name)) manifest[field][name] = next;
+    writeFileSync(resolve(root, file), `${JSON.stringify(manifest, null, 2)}\n`);
   }
-  console.log(`CLI ${next}: actualizados package.json y ${COPIES.length} archivos. Recuerda el CHANGELOG.`);
+  for (const { file, pattern } of SOURCES) {
+    const text = read(file);
+    if (!pattern.test(text)) throw new Error(`No se encontró la versión en ${file}`);
+    writeFileSync(resolve(root, file), text.replace(pattern, `$1${next}$3`));
+  }
+  const lock = spawnSync("npm", ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
+  if (lock.status !== 0) throw new Error("No se pudo actualizar package-lock.json; ejecuta npm install --package-lock-only");
+  console.log(`MODAI ${next}: ${MANIFESTS.length} package.json, ${SOURCES.length} archivos de código y package-lock.json. Recuerda el CHANGELOG.`);
 } else if (command === "check") {
-  const wrong = COPIES.flatMap(({ file, pattern }) => {
-    const found = readFileSync(resolve(root, file), "utf8").match(pattern)?.[2];
-    return found === manifest.version ? [] : [`${file}: ${found ?? "no encontrada"}`];
-  });
+  const expected = cliVersion();
+  const wrong = copies().filter(item => item.value !== expected);
   if (wrong.length) {
-    console.error(`La versión de packages/cli/package.json es ${manifest.version}, pero difiere en:\n${wrong.join("\n")}\nCorrígelo con: node scripts/cli-version.mjs set ${manifest.version}`);
+    console.error(`La versión del producto es ${expected} (packages/cli/package.json), pero difiere en:\n${wrong.map(item => `${item.where}: ${item.value ?? "no encontrada"}`).join("\n")}\nCorrígelo con: node scripts/cli-version.mjs set ${expected}`);
     process.exit(1);
   }
-  console.log(manifest.version);
+  console.log(expected);
 } else {
   console.error("Uso: node scripts/cli-version.mjs set <versión> | check");
   process.exit(2);

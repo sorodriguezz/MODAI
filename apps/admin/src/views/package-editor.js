@@ -116,6 +116,7 @@ export async function openPackageEditor({ base, template = "component", onPublis
     manifestDirty: Boolean(base),
     starter: new Set(),
     editing: null,
+    folderEdit: null,
   };
   if (base) {
     try {
@@ -223,19 +224,44 @@ export async function openPackageEditor({ base, template = "component", onPublis
       : root ? "Los archivos subidos se guardan en " + root + "/." : "Los archivos subidos se guardan en la raíz del paquete.";
   };
 
+  const dirOf = (path) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+  const filesUnder = (dir) => [...s.files.keys()].filter((path) => path.startsWith(dir + "/"));
+  const fileRow = (path) => {
+    const text = bytesToText(s.files.get(path).bytes);
+    return html`<tr>
+      <td class="file-cell"><code>${path.slice(dirOf(path).length ? dirOf(path).length + 1 : 0)}</code>${text === null ? html` <span class="badge">binario</span>` : ""}</td>
+      <td class="hide-sm">${formatBytes(s.files.get(path).bytes.length)}</td>
+      <td class="actions">${text !== null ? html`<button type="button" class="btn small ghost" data-action="editFile" data-path="${path}">${icon("edit", 16)}Editar</button>` : ""}<button type="button" class="btn small ghost danger-text" data-action="removeFile" data-path="${path}" aria-label="Eliminar ${path}">${icon("trash", 16)}</button></td>
+    </tr>`;
+  };
+  const folderRow = (dir) => {
+    const count = filesUnder(dir).length;
+    const editing = s.folderEdit?.dir === dir ? s.folderEdit.mode : null;
+    return html`<tr class="folder-row" data-folder="${dir}"><td colspan="3"><div class="folder-head">
+      ${icon("folder", 16)}<b><code>${dir}/</code></b><span class="muted small">${count} ${count === 1 ? "archivo" : "archivos"}</span>
+      <span class="folder-actions">${editing === "rename"
+        ? html`<label class="sr-only" for="folderName">Nuevo nombre de ${dir}</label><input id="folderName" class="mono" value="${dir}"><button type="button" class="btn small primary" data-action="renameFolderSave" data-dir="${dir}">Guardar nombre</button><button type="button" class="btn small ghost" data-action="folderCancel">Cancelar</button>`
+        : editing === "delete"
+          ? html`<span class="small">¿Eliminar ${count} ${count === 1 ? "archivo" : "archivos"}?</span><button type="button" class="btn small danger" data-action="deleteFolderConfirm" data-dir="${dir}">Eliminar carpeta</button><button type="button" class="btn small ghost" data-action="folderCancel">Cancelar</button>`
+          : html`<button type="button" class="btn small ghost" data-action="renameFolder" data-dir="${dir}" aria-label="Renombrar la carpeta ${dir}">${icon("edit", 16)}Renombrar</button><button type="button" class="btn small ghost danger-text" data-action="deleteFolder" data-dir="${dir}" aria-label="Eliminar la carpeta ${dir}">${icon("trash", 16)}</button>`}</span>
+    </div></td></tr>`;
+  };
+
   const drawFiles = () => {
     const paths = [...s.files.keys()].sort();
     const total = paths.reduce((sum, path) => sum + s.files.get(path).bytes.length, 0);
     $("fileCount").textContent = paths.length;
+    // Grouped by folder: each folder can be renamed or removed as a whole.
+    const groups = new Map();
+    for (const path of paths) groups.set(dirOf(path), [...(groups.get(dirOf(path)) || []), path]);
+    const dirs = [...groups.keys()].sort((x, y) => x.localeCompare(y));
     mount($("fileList"), paths.length
-      ? html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col">Ruta en el paquete</th><th scope="col" class="hide-sm">Tamaño</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
-        <tbody>${paths.map((path) => { const text = bytesToText(s.files.get(path).bytes); return html`<tr>
-          <td><code>${path}</code>${text === null ? html` <span class="badge">binario</span>` : ""}</td>
-          <td class="hide-sm">${formatBytes(s.files.get(path).bytes.length)}</td>
-          <td class="actions">${text !== null ? html`<button type="button" class="btn small ghost" data-action="editFile" data-path="${path}">${icon("edit", 16)}Editar</button>` : ""}<button type="button" class="btn small ghost danger-text" data-action="removeFile" data-path="${path}" aria-label="Eliminar ${path}">${icon("trash", 16)}</button></td>
-        </tr>`; })}</tbody></table></div><p class="hint">${formatBytes(total)} en total (máximo 25 MB).</p>`
+      ? html`<div class="table-wrap"><table class="table file-table"><thead><tr><th scope="col">Ruta en el paquete</th><th scope="col" class="hide-sm">Tamaño</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+        <tbody>${dirs.map((dir) => html`${dir ? folderRow(dir) : ""}${groups.get(dir).map(fileRow)}`)}</tbody></table></div><p class="hint">${formatBytes(total)} en total (máximo 25 MB).</p>`
       : html`<p class="muted small">Sin archivos todavía.</p>`);
+    if (s.folderEdit?.mode === "rename") { const input = $("folderName"); input?.focus(); input?.setSelectionRange(input.value.length, input.value.length); }
   };
+
 
   const drawEditor = () => {
     if (!s.editing) return mount($("fileEditor"), "");
@@ -311,6 +337,29 @@ export async function openPackageEditor({ base, template = "component", onPublis
       } catch (error) { showError(error); }
     },
     removeFile: (button) => { s.files.delete(button.dataset.path); refresh(); },
+    renameFolder: (button) => { s.folderEdit = { dir: button.dataset.dir, mode: "rename" }; drawFiles(); },
+    deleteFolder: (button) => { s.folderEdit = { dir: button.dataset.dir, mode: "delete" }; drawFiles(); },
+    folderCancel: () => { s.folderEdit = null; drawFiles(); },
+    renameFolderSave: (button) => {
+      try {
+        const from = button.dataset.dir, to = cleanPath($("folderName").value);
+        if (to !== from) {
+          if (to.startsWith(from + "/")) throw new Error("Una carpeta no puede moverse dentro de sí misma.");
+          const moves = filesUnder(from).map((path) => [path, to + path.slice(from.length)]);
+          const clash = moves.find(([, next]) => s.files.has(next));
+          if (clash) throw new Error("Ya existe " + clash[1] + "; elige otro nombre.");
+          for (const [path, next] of moves) { s.files.set(next, s.files.get(path)); s.files.delete(path); s.starter.delete(path); }
+        }
+        s.folderEdit = null;
+        clearError();
+        refresh();
+      } catch (error) { showError(error); }
+    },
+    deleteFolderConfirm: (button) => {
+      for (const path of filesUnder(button.dataset.dir)) s.files.delete(path);
+      s.folderEdit = null;
+      refresh();
+    },
     regenerate: () => { s.manifestDirty = false; syncManifest(); },
     validate: async (button) => {
       clearError();
@@ -331,7 +380,7 @@ export async function openPackageEditor({ base, template = "component", onPublis
     try {
       const manifest = currentManifest();
       const { package: published } = await post("/packages", { manifest, files: await toArtifactFiles([...s.files].map(([path, file]) => ({ path, bytes: file.bytes }))) });
-      store.invalidate("packages", "documents");
+      store.invalidate("summary", "agents", "documents");
       // The shared <dialog> clears its body on the (async) close event: wait for it before another view reuses it.
       const dialog = document.getElementById("dialog");
       await new Promise((resolve) => { dialog.addEventListener("close", resolve, { once: true }); closeDialog(); });

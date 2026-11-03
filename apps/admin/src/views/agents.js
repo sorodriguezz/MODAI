@@ -2,12 +2,12 @@ import { html, mount, delegate } from "../lib/html.js";
 import { icon } from "../lib/icons.js";
 import { post } from "../lib/api.js";
 import { openDialog, closeDialog, bindForm, toast, skeletonCards, emptyState, errorState, codeBlock, debounce, setBusy, toastError } from "../lib/ui.js";
-import { store, can, describeManifest, latestByName } from "../state.js";
+import { store, can, describeManifest } from "../state.js";
 
 /** One entry per agent: legacy packages of type agent and v1 packages contributing spec.contributes.agents. */
 function collectAgents(packages) {
   const agents = [];
-  for (const item of latestByName(packages)) {
+  for (const item of packages) {
     const info = describeManifest(item);
     for (const agent of info.agents) agents.push({ item, info, agent, key: item.name + "@" + item.version + "#" + (agent.name || item.name) });
   }
@@ -110,7 +110,7 @@ export default {
     };
     const load = async (force) => {
       try {
-        const [packages, projectList] = await Promise.all([store.packages(force), store.projects(force).catch(() => [])]);
+        const [packages, projectList] = await Promise.all([store.agents(force), store.projects(force).catch(() => [])]);
         agents = collectAgents(packages);
         projects = projectList;
       } catch (error) {

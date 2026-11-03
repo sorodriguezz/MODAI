@@ -205,6 +205,18 @@ export class Database {
       CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
     `);
+    // What each project has installed, as last reported by a client after `modai sync`.
+    this.connection.exec(`
+      CREATE TABLE IF NOT EXISTS project_installations (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        package_name TEXT NOT NULL,
+        version TEXT NOT NULL,
+        direct INTEGER NOT NULL DEFAULT 0,
+        reported_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, package_name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_installations_package ON project_installations(package_name);
+    `);
   }
 
   private ensureColumn(table: string, column: string, definition: string): void {

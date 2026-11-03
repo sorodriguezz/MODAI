@@ -28,6 +28,8 @@ export interface SyncOptions {
   /** Fail instead of changing modai.lock (CI). */
   frozen?: boolean;
   force?: boolean;
+  /** Keep user-modified managed files; the new version is written next to them (.modai-new). */
+  keepMine?: boolean;
 }
 
 export interface SyncReport {
@@ -36,6 +38,8 @@ export interface SyncReport {
   written: string[];
   removed: string[];
   preserved: string[];
+  /** Files written as <file>.modai-new because the user kept their own version. */
+  sideBySide: string[];
   warnings: string[];
   missingOptional: Array<{ package: string; capability: string; range: string }>;
   /** Packages whose content changed since this machine authorised their executable contributions. */
@@ -127,7 +131,7 @@ export async function syncWorkspace(project: V1Project, options: SyncOptions): P
   pruneStore(root, new Set(units.map(unit => unit.name)));
   const adapters = selectAdapters(file.adapters, availableAdapters(units));
   const desired = planContributions(units, adapters);
-  const applied = applyDesiredState({ root, previous: project.lock.managed, desired, grants: options.grants, force: options.force });
+  const applied = applyDesiredState({ root, previous: project.lock.managed, desired, grants: options.grants, force: options.force, keepMine: options.keepMine });
   nextLock.managed = applied.managed;
   saveContextIndex(root, buildContextIndex(units));
   saveLock(root, nextLock);
@@ -137,7 +141,7 @@ export async function syncWorkspace(project: V1Project, options: SyncOptions): P
   return {
     lock: nextLock,
     installed: units.map(unit => ({ name: unit.name, version: unit.version, source: lockedPackages[unit.name].source })),
-    written: applied.written, removed: applied.removed, preserved: applied.preserved,
+    written: applied.written, removed: applied.removed, preserved: applied.preserved, sideBySide: applied.sideBySide,
     warnings: [...warnings, ...(resolution?.warnings ?? [])],
     missingOptional: resolution?.missingOptional ?? [],
     regrant,

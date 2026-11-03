@@ -5,14 +5,14 @@
 ## Qué sigue funcionando sin cambios
 
 - Paquetes publicados con `schemaVersion: 1`: se aceptan, se instalan y se normalizan a v1 al leerse.
-- Proyectos con `.modai/manifest.yaml`: `add`, `remove`, `sync`, `update`, `remember`, `recall` y `modai agent …` mantienen su comportamiento.
+- Desde 0.8.0 los proyectos con `.modai/manifest.yaml` ya no se operan directamente: conviértelos con `modai migrate` (también los que tenían un agente activado; vuelve a activarlo después con `modai agent activate`).
 - API HTTP v1, API keys, workers, MCP de proyectos 0.5 y backups.
 
 ## Qué cambia
 
 | Antes (0.5) | Ahora (0.6) |
 |---|---|
-| `modai init` creaba un proyecto ligado al servidor | `modai init` crea `modai.yaml` y no exige servidor. Usa `modai init --legacy` para el formato anterior (necesario para `modai agent`). |
+| `modai init` creaba un proyecto ligado al servidor | `modai init` crea `modai.yaml` y no exige servidor. El formato anterior ya no se crea; los proyectos existentes se convierten con `modai migrate`. |
 | `.modai/manifest.yaml` + `.modai/lock.yaml` | `modai.yaml` + `modai.lock` en la raíz, con `integrity` por paquete |
 | `type` cerrado | `kind` (`Package`, `Profile`, `Adapter`) + `category` libre + `provides`/`requires` |
 | `modai registry --query x` | `modai registry packages --query x`; `registry add/list/remove` gestionan registries |
@@ -31,7 +31,7 @@ git add modai.yaml modai.lock .modai/.gitignore
 
 `migrate` crea `modai.yaml` con el servidor del proyecto como registry `central` y memoria remota (`context.projectId`), sincroniza sin reescribir archivos idénticos y archiva los archivos 0.5 en `.modai/legacy-0.5/`. Si la sincronización falla, los archivos 0.5 quedan intactos y el `modai.yaml` generado se aparta a `.modai/modai.yaml.failed` para revisarlo.
 
-Si el proyecto tenía un agente activado con `modai agent activate`, mantenlo en formato 0.5 hasta que la composición local de agentes v1 esté disponible (fase 06 del plan).
+Si el proyecto tenía un agente activado con `modai agent activate`, migra el proyecto y vuelve a activarlo: los agentes funcionan sobre `modai.yaml` vinculado al servidor (`context.projectId`).
 
 ## Convertir un paquete
 

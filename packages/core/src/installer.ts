@@ -20,6 +20,20 @@ function currentHash(root: string, path: string): string | undefined {
   return existsSync(absolute) ? sha256(readFileSync(absolute)) : undefined;
 }
 
+const BLOCK_PATTERN = /\n*<!-- modai:begin ([^ ]+) -->[\s\S]*?<!-- modai:end \1 -->\n*/g;
+/**
+ * Hash of a managed file ignoring MODAI's own blocks. A package may own a whole file (a harness
+ * shipping AGENTS.md) while an adapter keeps a block inside it; neither is a user change.
+ */
+export function managedContentHash(content: Buffer): string {
+  if (!content.includes("<!-- modai:begin ")) return sha256(content);
+  return sha256(content.toString("utf8").replace(BLOCK_PATTERN, "\n").replace(/^\n+/, "").replace(/\n+$/, "\n"));
+}
+function managedHash(root: string, path: string): string | undefined {
+  const absolute = safeProjectPath(root, path);
+  return existsSync(absolute) ? managedContentHash(readFileSync(absolute)) : undefined;
+}
+
 export function findBlock(content: string, id: string): { start: number; end: number; body: string } | undefined {
   const start = content.indexOf(BEGIN(id));
   const endMarker = content.indexOf(END(id));
@@ -63,8 +77,13 @@ function readJson(root: string, path: string): Record<string, unknown> {
 }
 const jsonHash = (value: unknown) => sha256(JSON.stringify(value ?? null));
 
-export interface ApplyOptions { root: string; previous: ManagedEntry[]; desired: DesiredState; grants: string[]; force?: boolean }
-export interface ApplyResult { managed: ManagedEntry[]; written: string[]; removed: string[]; preserved: string[] }
+export interface ApplyOptions {
+  root: string; previous: ManagedEntry[]; desired: DesiredState; grants: string[]; force?: boolean;
+  /** On a conflicting file, keep the user's version and write MODAI's next to it as <file>.modai-new. */
+  keepMine?: boolean;
+}
+export interface ApplyResult { managed: ManagedEntry[]; written: string[]; removed: string[]; preserved: string[]; sideBySide: string[] }
+export const SIDE_BY_SIDE_SUFFIX = ".modai-new";
 
 /**
  * Converges the project to the desired state. Every write is recorded with its hash so a later
@@ -75,6 +94,8 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
   const granted = new Set(options.grants);
   const missing = new Set<string>();
   for (const entry of [...desired.files, ...desired.blocks, ...desired.json]) if (entry.permission && !granted.has(entry.permission)) missing.add(`${entry.permission} (${entry.path})`);
+  // Writing an executable file is consent to run code later: it needs the same explicit grant.
+  for (const file of desired.files) if (file.executable && !granted.has("process.execute")) missing.add(`process.execute (${file.path})`);
   if (missing.size) throw new AppError(403, "PERMISSION_REQUIRED", `La instalación requiere conceder ${[...missing].join(", ")}. Repite con --allow ${[...new Set([...missing].map(item => item.split(" ")[0]))].join(",")}`);
 
   const previousFiles = new Map(previous.filter(entry => entry.type === "file").map(entry => [entry.path.toLowerCase(), entry]));
@@ -83,11 +104,16 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
 
   // 1. Detect conflicts before touching anything.
   const conflicts: string[] = [];
+  const keep = new Set<string>();
   for (const file of desired.files) {
-    const existing = currentHash(root, file.path);
-    const desiredHash = sha256(file.content);
+    const existing = managedHash(root, file.path);
+    const desiredHash = managedContentHash(file.content);
     const old = previousFiles.get(file.path.toLowerCase());
-    if (existing && existing !== desiredHash && existing !== old?.sha256) conflicts.push(`${file.path} contiene cambios no administrados`);
+    if (!existing || existing === desiredHash || existing === old?.sha256) continue;
+    // The user already kept their version of this exact content: nothing new to decide.
+    if (old?.type === "file" && old.userSha256 === existing && old.sha256 === desiredHash) { keep.add(file.path.toLowerCase()); continue; }
+    if (options.keepMine && !force) keep.add(file.path.toLowerCase());
+    else conflicts.push(`${file.path} contiene cambios tuyos`);
   }
   for (const block of desired.blocks) {
     const text = readText(root, block.path);
@@ -100,9 +126,9 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
     const old = previousJson.get(`${entry.path.toLowerCase()}#${entry.pointer}`);
     if (current !== undefined && jsonHash(current) !== jsonHash(entry.value) && jsonHash(current) !== old?.sha256) conflicts.push(`${entry.path}:${entry.pointer} fue modificado a mano`);
   }
-  if (conflicts.length && !force) throw new AppError(409, "MANAGED_CONFLICT", `Conflicto: ${conflicts.join("; ")}. Mueve o integra tus cambios, o repite con --force para sobrescribirlos.`);
+  if (conflicts.length && !force) throw new AppError(409, "MANAGED_CONFLICT", `Conflicto: ${conflicts.join("; ")}. Repite con --keep-mine para conservar tus archivos (la versión nueva queda al lado como${SIDE_BY_SIDE_SUFFIX}) o con --force para reemplazarlos.`);
 
-  const written: string[] = [], removed: string[] = [], preserved: string[] = [];
+  const written: string[] = [], removed: string[] = [], preserved: string[] = [], sideBySide: string[] = [];
   const desiredFileKeys = new Set(desired.files.map(file => file.path.toLowerCase()));
   const desiredBlockKeys = new Set(desired.blocks.map(block => `${block.path.toLowerCase()}#${block.id}`));
   const desiredJsonKeys = new Set(desired.json.map(entry => `${entry.path.toLowerCase()}#${entry.pointer}`));
@@ -110,10 +136,11 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
   // 2. Retire what is no longer desired, preserving user modifications.
   for (const [key, old] of previousFiles) {
     if (desiredFileKeys.has(key) || old.type !== "file") continue;
-    const existing = currentHash(root, old.path);
+    const existing = managedHash(root, old.path);
     if (!existing) continue;
     if (existing === old.sha256) { removeProjectFile(root, old.path); removed.push(old.path); }
     else preserved.push(`${old.path} (modificado; pertenecía a ${old.owner})`);
+    removeStaleSideBySide(root, old.path, old.sha256);
   }
   for (const [key, old] of previousBlocks) {
     if (desiredBlockKeys.has(key) || old.type !== "block") continue;
@@ -140,9 +167,22 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
   // 3. Write the desired state.
   const managed: ManagedEntry[] = [];
   for (const file of desired.files) {
-    const hash = sha256(file.content);
-    if (currentHash(root, file.path) !== hash) { writeProjectFile(root, file.path, file.content, file.executable); written.push(file.path); }
-    managed.push({ type: "file", path: file.path, sha256: hash, owner: file.owner, ...(file.adapter ? { adapter: file.adapter } : {}) });
+    const hash = managedContentHash(file.content);
+    const entry: ManagedEntry = { type: "file", path: file.path, sha256: hash, owner: file.owner, ...(file.adapter ? { adapter: file.adapter } : {}) };
+    if (keep.has(file.path.toLowerCase())) {
+      const mine = managedHash(root, file.path)!;
+      const old = previousFiles.get(file.path.toLowerCase());
+      // New upstream content the user has not seen yet goes next to their file.
+      if (!(old?.type === "file" && old.userSha256 === mine && old.sha256 === hash)) {
+        writeProjectFile(root, `${file.path}${SIDE_BY_SIDE_SUFFIX}`, file.content);
+        sideBySide.push(`${file.path}${SIDE_BY_SIDE_SUFFIX}`);
+      }
+      managed.push({ ...entry, userSha256: mine });
+      continue;
+    }
+    if (managedHash(root, file.path) !== hash) { writeProjectFile(root, file.path, file.content, file.executable); written.push(file.path); }
+    removeStaleSideBySide(root, file.path, hash);
+    managed.push(entry);
   }
   const blocksByFile = new Map<string, DesiredBlock[]>();
   for (const block of desired.blocks) blocksByFile.set(block.path, [...(blocksByFile.get(block.path) ?? []), block]);
@@ -167,7 +207,13 @@ export function applyDesiredState(options: ApplyOptions): ApplyResult {
     if (JSON.stringify(data) !== before || !readText(root, path)) { writeProjectFile(root, path, `${JSON.stringify(data, null, 2)}\n`); written.push(path); }
   }
   managed.sort((a, b) => `${a.path}#${a.type}`.localeCompare(`${b.path}#${b.type}`));
-  return { managed, written, removed, preserved };
+  return { managed, written, removed, preserved, sideBySide };
+}
+
+/** Deletes <file>.modai-new once it is obsolete, only if it still holds the content MODAI wrote. */
+function removeStaleSideBySide(root: string, path: string, hash: string): void {
+  const side = `${path}${SIDE_BY_SIDE_SUFFIX}`;
+  if (currentHash(root, side) === hash) removeProjectFile(root, side);
 }
 
 function pruneEmpty(value: Record<string, unknown>): void {

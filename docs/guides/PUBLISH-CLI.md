@@ -16,7 +16,7 @@ El único workspace destinado a npm es `packages/cli` (`@sorodriguez/modai`). Su
 Para lanzar una versión:
 
 ```sh
-npm run version:cli -- 0.7.0      # actualiza package.json, modai --version, MCP y CORE_VERSION
+npm run version:set -- 0.8.0      # una sola versión: CLI, Core, contratos, SDK, servidor, panel y package-lock.json
 # edita CHANGELOG.md
 git commit -am "release: CLI 0.7.0" && git push
 ```

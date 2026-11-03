@@ -174,7 +174,9 @@ Guía completa: [crear, publicar e instalar paquetes](docs/guides/AUTHORING-PACK
 | `modai package scaffold` / `validate` / `keygen`, `modai publish` | Autoría y publicación (firma Ed25519 opcional) |
 | `modai migrate` | Convierte un proyecto 0.5 a `modai.yaml` |
 | `modai connect` / `whoami` / `admin …` / `project …` | Servidor central |
-| `modai agent …` / `runs …` / `worker` | Agentes compuestos por el servidor (proyectos `modai init --legacy`) |
+| `modai agent …` / `runs …` / `worker` | Agentes compuestos por el servidor (proyectos vinculados con `modai init --project`) |
+| `modai workspace add/remove/update/sync/list` | La misma operación en muchos repositorios bajo una raíz, con plan previo y confirmación |
+| `modai ping` | Comprueba si el servidor está arriba: latencia, versión y credencial |
 | `modai client doctor` / `setup` / `embed …` | Modelos y embeddings locales con Ollama |
 | `modai harness init` / `audit` | Harness de cinco subsistemas para agentes de programación |
 
@@ -259,4 +261,4 @@ Paso a paso, respaldos (`deploy/backup.sh`) e imagen multi-arquitectura en GHCR:
 - El Core funciona sin servidor. Los registries de carpeta y el servidor central son intercambiables.
 - El panel web usa cuentas de usuario con sesión. La CLI, MCP y los workers usan API keys con roles, proyectos y namespaces. Aún no hay OIDC ni replicación entre servidores.
 - La búsqueda de conocimiento local usa BM25. La búsqueda semántica con embeddings (`modai embed`) opera con el servidor; los embeddings se calculan siempre en el cliente.
-- Los agentes compuestos por el servidor (`modai agent`) requieren proyectos `--legacy`. La composición local de agentes v1 está planificada (fase 06 de ADR-004).
+- Los agentes compuestos por el servidor (`modai agent`) funcionan sobre proyectos `modai.yaml` vinculados a un proyecto del servidor (`modai init --project`). El formato de proyecto 0.5 ya no se admite: conviértelo con `modai migrate`.

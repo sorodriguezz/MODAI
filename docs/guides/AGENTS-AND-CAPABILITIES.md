@@ -49,7 +49,7 @@ Un publisher puede crear sus propios proyectos; no puede acceder a los de otras 
 
 ## Publicar, componer y activar un agente
 
-Publica los ejemplos mediante `npm run seed:examples` con servidor y token configurados. Incluyen `@tools/context` y `@agents/backend-reviewer`.
+Publica los ejemplos mediante `npm run seed:examples` con servidor y token configurados. Incluyen `@tools/context` y `@agents/backend-reviewer`. Los agentes trabajan sobre un proyecto vinculado al servidor (`modai init --project ID`), cuyo registry es ese servidor: la activación instala los paquetes del agente en `modai.yaml` y `modai.lock` con las versiones exactas que compuso el servidor.
 
 ```sh
 modai agent list

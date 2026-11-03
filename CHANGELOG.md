@@ -1,7 +1,23 @@
 # Cambios
 
-## Sin publicar
+## Sin publicar (0.8.0)
 
+**Incompatible:** el formato de proyecto 0.5 (`.modai/manifest.yaml`) ya no se opera. Conviértelo con `modai migrate`; `modai init --legacy` y `package scaffold --type` se retiraron.
+
+- **Agentes sobre proyectos v1**: `modai agent activate/run/submit`, `runs` y el gateway MCP funcionan con `modai.yaml` vinculado a un proyecto del servidor (`modai init --project`). La activación instala los paquetes del agente como dependencias con las versiones exactas que compuso el servidor. Un solo `modai-mcp` expone conocimiento, memoria, herramientas autorizadas y el agente activo.
+- **Archivos editados**: `modai update/sync/add --keep-mine` conserva tu archivo y deja la versión nueva al lado (`.modai-new`); la decisión queda en `modai.lock` y no vuelve a fallar. `--force` reemplaza.
+- **Harness + `agents-md`**: un paquete que instala `AGENTS.md` completo y el bloque del adaptador conviven sin conflictos al actualizar o retirar.
+- **Escribir un archivo ejecutable** de un paquete requiere conceder `process.execute` al instalar.
+- **`modai workspace`** (`ws`): `add`, `remove`, `update`, `sync` y `list` sobre todos los proyectos bajo una raíz, con plan previo, confirmación, bloqueo por proyecto, aislamiento de fallos y sin seguir enlaces simbólicos.
+- **`modai logout`** (`disconnect`): olvida el servidor y la API key guardados para cambiar de servidor; conserva la política de firmas y los publicadores de confianza, y avisa si quedan `MODAI_API_TOKEN`/`MODAI_SERVER` en el entorno.
+- **Panel sin descargas completas**: Resumen usa `GET /api/v1/packages/summary` y Agentes, Ejecuciones y Conectar piden solo los agentes al catálogo paginado.
+- **Backups**: `admin export/import` incluyen qué proyecto usa qué paquete; al restaurar, un informe más reciente del servidor de destino prevalece.
+- **`modai ping`**: disponibilidad, latencia, versión y validez de la credencial del servidor y de los registries del proyecto; sale con código 1 si algo falla.
+- **Salidas legibles**: tablas y secciones por defecto en todos los comandos; `--json` global para scripts.
+- **Una sola versión de producto**: `npm run version:set -- X.Y.Z` actualiza CLI, Core, contratos, SDK, servidor, panel y `package-lock.json`; `/health` informa la versión real.
+- **Uso por proyecto**: los proyectos vinculados informan qué tienen instalado (`PUT /api/v1/projects/:id/installations`; `MODAI_NO_USAGE_REPORT=1` lo desactiva) y el panel muestra qué proyectos usan cada paquete.
+- **Panel**: catálogo paginado en el servidor (`GET /api/v1/packages/catalog`), pestaña **Proyectos** en cada paquete y renombrar o eliminar carpetas completas en el editor. Tests de interfaz con Playwright (`npm run test:ui`).
+- La CLI se reorganizó por dominio (`cli/commands/*`); el instalador del formato 0.5 se eliminó.
 - CLI: `modai upgrade` (alias `self-update`) actualiza la CLI a la última versión de npm con el gestor con que se instaló; `--check` solo informa y `--tag next` usa prereleases. Aviso diario de versión nueva en terminales interactivas (`MODAI_NO_UPDATE_NOTIFIER=1` lo desactiva; nunca en CI).
 
 ## 0.7.0

@@ -100,6 +100,48 @@ export class PackageService {
     return rows.map(row => this.decorate(row));
   }
 
+  /**
+   * One page of the catalog for the panel: filtering happens here so the browser only receives
+   * the page it shows. `type` filters by what a package contributes, independent of its category.
+   */
+  catalog(options: { q?: string; type?: string; category?: string; format?: string; status?: string; limit?: number; offset?: number }): { items: Array<PackageRecord & { versions: number }>; total: number; categories: string[] } {
+    const all = this.list(undefined, undefined, true);
+    const versions = new Map<string, number>();
+    for (const item of all) versions.set(item.name, (versions.get(item.name) ?? 0) + 1);
+    const status = options.status ?? "latest";
+    let list: PackageRecord[];
+    if (status === "latest") {
+      // Latest active version per name; when every version is inactive the name drops out.
+      const latest = new Map<string, PackageRecord>();
+      for (const item of all) if (item.status === "active" && (!latest.has(item.name) || item.publishedAt > latest.get(item.name)!.publishedAt)) latest.set(item.name, item);
+      list = [...latest.values()];
+    } else list = status === "all" ? all : all.filter(item => item.status === status);
+    const describe = (item: PackageRecord) => {
+      try { const manifest = normalizeManifest(item.manifest); return { manifest, format: isV1Manifest(item.manifest) ? "v1" : "legacy" }; } catch { return undefined; }
+    };
+    const categories = [...new Set(list.map(item => describe(item)?.manifest.spec.category ?? item.type))].sort();
+    const q = options.q?.trim().toLocaleLowerCase();
+    const filtered = list.filter(item => {
+      const info = describe(item);
+      if (!info) return !options.type && !options.category && !options.format && (!q || `${item.name} ${item.description}`.toLocaleLowerCase().includes(q));
+      const { spec, kind, metadata } = info.manifest;
+      if (options.category && spec.category !== options.category) return false;
+      if (options.format && info.format !== options.format) return false;
+      if (options.type && !CATALOG_TYPES[options.type]?.(info.manifest)) return false;
+      if (!q) return true;
+      return [item.name, item.description, spec.category, kind, ...spec.provides.map(capability => capability.capability), ...(metadata.keywords ?? [])].join(" ").toLocaleLowerCase().includes(q);
+    }).sort((a, b) => a.name.localeCompare(b.name) || b.publishedAt.localeCompare(a.publishedAt));
+    const limit = Math.min(Math.max(options.limit ?? 24, 1), 100), offset = Math.max(options.offset ?? 0, 0);
+    return { items: filtered.slice(offset, offset + limit).map(item => ({ ...item, versions: versions.get(item.name) ?? 1 })), total: filtered.length, categories };
+  }
+
+  /** Counters and latest publications for the dashboard, without sending the catalog to the browser. */
+  summary(): { packages: number; versions: number; agents: number; recent: Array<{ name: string; version: string; category: string; publishedAt: string }> } {
+    const counts = this.db.connection.prepare("SELECT COUNT(*) AS versions, COUNT(DISTINCT CASE WHEN status = 'active' THEN name END) AS packages FROM packages").get() as { versions: number; packages: number };
+    const recent = this.db.connection.prepare("SELECT name, version, type, published_at AS publishedAt FROM packages WHERE status <> 'yanked' ORDER BY published_at DESC LIMIT 6").all() as Array<{ name: string; version: string; type: string; publishedAt: string }>;
+    return { ...counts, agents: this.catalog({ type: "agents", limit: 1 }).total, recent: recent.map(({ type, ...item }) => ({ ...item, category: type })) };
+  }
+
   get(name: string, version?: string): PackageRecord {
     let row: PackageRow | undefined;
     if (version) {
@@ -329,3 +371,15 @@ export class PackageService {
     }
   }
 }
+
+/** "What is it?" filters of the catalog; they read contributions, never interpret categories beyond equality. */
+const CATALOG_TYPES: Record<string, (manifest: ReturnType<typeof normalizeManifest>) => boolean> = {
+  components: manifest => manifest.spec.contributes.components.length > 0 || manifest.spec.category === "component",
+  harness: manifest => manifest.spec.category === "harness",
+  skills: manifest => manifest.spec.contributes.skills.length > 0,
+  tools: manifest => manifest.spec.contributes.tools.length + manifest.spec.contributes.mcpServers.length > 0,
+  agents: manifest => manifest.spec.contributes.agents.length > 0,
+  knowledge: manifest => manifest.spec.contributes.knowledge.length > 0,
+  profiles: manifest => manifest.kind === "Profile" || manifest.spec.category === "profile",
+  adapters: manifest => manifest.kind === "Adapter" || manifest.spec.category === "adapter",
+};

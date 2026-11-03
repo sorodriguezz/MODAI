@@ -256,3 +256,59 @@ test("un componente instala código del usuario en el proyecto, exige project.so
   for (const target of [".husky", ".github/workflows", "node_modules/x", "../outside"]) assert.throws(bad({ target }), /UNSAFE|reservado|no escribe|segura/, target);
   assert.throws(() => componentTargetPermission("package.json"), /dentro de una carpeta/);
 });
+
+test("--keep-mine conserva el archivo editado, deja la versión nueva al lado y no vuelve a preguntar", async () => {
+  const registry = new LocalRegistry(join(root, "registry-keep"));
+  const component = (version: string, body: string) => writePackage(join(root, "keep-sources", version), v1("@acme/svc", version, { permissions: ["project.source"], contributes: { components: [{ name: "svc", path: "c", target: "src/{component}" }] } }), { "c/svc.ts": body });
+  await publish(registry, component("1.0.0", "export const v = 1;\n"));
+  await publish(registry, component("1.1.0", "export const v = 2;\n"));
+  const project = join(root, "keep-project");
+  mkdirSync(project);
+  saveProjectFile(project, createProjectFile("keep", { registries: [{ name: "local", path: "../registry-keep" }], adapters: [], dependencies: { "@acme/svc": "1.0.0" } }));
+  const sync = (extra: { keepMine?: boolean; force?: boolean } = {}) => syncWorkspace(loadV1Project(project), { registries: [registry], grants: ["project.source"], trust: { policy: "optional", trustedPublishers: [] }, ...extra });
+  await sync();
+  const file = join(project, "src/svc/svc.ts");
+  writeFileSync(file, "export const v = 1; // mío\n");
+  const bump = loadV1Project(project).file;
+  bump.dependencies["@acme/svc"] = "^1.0.0";
+  saveProjectFile(project, bump);
+
+  await assert.rejects(() => syncWorkspace(loadV1Project(project), { registries: [registry], grants: ["project.source"], trust: { policy: "optional", trustedPublishers: [] }, update: true }), /--keep-mine/);
+  const kept = await syncWorkspace(loadV1Project(project), { registries: [registry], grants: ["project.source"], trust: { policy: "optional", trustedPublishers: [] }, update: true, keepMine: true });
+  assert.equal(readFileSync(file, "utf8"), "export const v = 1; // mío\n");
+  assert.equal(readFileSync(`${file}.modai-new`, "utf8"), "export const v = 2;\n");
+  assert.deepEqual(kept.sideBySide, ["src/svc/svc.ts.modai-new"]);
+  const again = await sync();
+  assert.deepEqual(again.sideBySide, [], "la decisión queda registrada: un sync normal no vuelve a fallar");
+
+  const none = loadV1Project(project).file;
+  none.dependencies = {};
+  saveProjectFile(project, none);
+  const removed = await sync();
+  assert.ok(existsSync(file), "tu versión se conserva al retirar");
+  assert.ok(removed.preserved.some(item => item.startsWith("src/svc/svc.ts")));
+});
+
+test("un harness que instala AGENTS.md convive con el bloque del adaptador agents-md al instalar y retirar", async () => {
+  const registry = new LocalRegistry(join(root, "registry-harness"));
+  await publish(registry, writePackage(join(root, "harness-src"), v1("@acme/harness", "1.0.0", { category: "harness", permissions: ["project.instructions"], contributes: { files: [{ source: "AGENTS.md", target: "AGENTS.md" }] } }), { "AGENTS.md": "# Instrucciones del equipo\n" }));
+  await publish(registry, writePackage(join(root, "harness-rule"), v1("@acme/rules", "1.0.0", { contributes: { rules: [{ name: "style", path: "style.md" }] } }), { "style.md": "Usa nombres descriptivos." }));
+  const project = join(root, "harness-project");
+  mkdirSync(project);
+  const options = { registries: [registry], grants: ["project.instructions"], trust: { policy: "optional" as const, trustedPublishers: [] } };
+  saveProjectFile(project, createProjectFile("harness", { registries: [{ name: "local", path: "../registry-harness" }], adapters: ["agents-md"], dependencies: { "@acme/harness": "^1.0.0", "@acme/rules": "^1.0.0" } }));
+  await syncWorkspace(loadV1Project(project), options);
+  const agents = readFileSync(join(project, "AGENTS.md"), "utf8");
+  assert.match(agents, /^# Instrucciones del equipo/);
+  assert.match(agents, /modai:begin rules[\s\S]*Usa nombres descriptivos/);
+  await syncWorkspace(loadV1Project(project), options);
+
+  const file = loadV1Project(project).file;
+  delete file.dependencies["@acme/harness"];
+  saveProjectFile(project, file);
+  const report = await syncWorkspace(loadV1Project(project), options);
+  assert.ok(report.removed.includes("AGENTS.md"));
+  const after = readFileSync(join(project, "AGENTS.md"), "utf8");
+  assert.doesNotMatch(after, /Instrucciones del equipo/);
+  assert.match(after, /Usa nombres descriptivos/, "el bloque del adaptador sigue en su lugar");
+});

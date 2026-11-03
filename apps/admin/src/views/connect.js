@@ -2,7 +2,7 @@ import { html, mount, delegate } from "../lib/html.js";
 import { icon } from "../lib/icons.js";
 import { post } from "../lib/api.js";
 import { openDialog, bindForm, codeBlock, toastError } from "../lib/ui.js";
-import { state, store, can, describeManifest, latestByName } from "../state.js";
+import { state, store, can } from "../state.js";
 import { showNewKey } from "./access.js";
 
 function quote(value, shell) {
@@ -79,11 +79,10 @@ export default {
     update();
     let projects = [];
     try {
-      const [projectList, packages] = await Promise.all([store.projects(), store.packages()]);
+      const [projectList, agents] = await Promise.all([store.projects(), store.agents()]);
       if (!isCurrent()) return;
       projects = projectList;
       mount($project, html`<option value="">Sin proyecto (solo conectar)</option>${projects.map((p) => html`<option value="${p.id}">${p.name} (${p.id})</option>`)}`);
-      const agents = latestByName(packages).filter((item) => describeManifest(item).agents.length || item.type === "agent");
       mount($agent, html`<option value="">Elegir después</option>${agents.map((item) => html`<option value="${item.name + "@" + item.version}">${item.name}@${item.version}</option>`)}`);
       const wanted = params.get("projectId");
       if (wanted && projects.some((p) => p.id === wanted)) $project.value = wanted;

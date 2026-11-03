@@ -47,9 +47,9 @@ try {
   const login = exec(process.execPath, [cli,'connect',server,'--token-stdin'], {cwd:project,env:{...env,MODAI_API_TOKEN:undefined},timeout:30000});
   login.child.stdin.end(clientToken+'\n');
   assert.match((await login).stdout,/Laptop A/);
-  await call(['init','--legacy','--project',shared.id]);
-  assert.equal(JSON.parse(await call(['whoami'])).label,'Laptop A');
-  const status=JSON.parse(await call(['status']));
+  await call(['init','--project',shared.id]);
+  assert.equal(JSON.parse(await call(['--json','whoami'])).label,'Laptop A');
+  const status=JSON.parse(await call(['--json','status']));
   await call(['remember','Use UUID for orders','--kind','decision']);
   const teammate = new ApiClient(server,teammateKey.key.token);
   assert.match(JSON.stringify(await teammate.recall(shared.id,'UUID')),/Use UUID/);
@@ -63,13 +63,13 @@ try {
   const clone = join(root,'project-on-laptop-b'); cpSync(project,clone,{recursive:true});
   const callB = async args => (await exec(process.execPath,[cli,...args],{cwd:clone,env:{...env,MODAI_CONFIG_DIR:join(root,'config-b'),MODAI_API_TOKEN:teammateKey.key.token},timeout:30000})).stdout;
   await callB(['connect',server]); await callB(['sync']);
-  assert.equal(JSON.parse(await callB(['whoami'])).label,'Laptop B');
+  assert.equal(JSON.parse(await callB(['--json','whoami'])).label,'Laptop B');
   assert.match(await callB(['recall','UUID']),/Use UUID/);
-  assert.equal(JSON.parse(await callB(['status'])).projectId,status.projectId);
+  assert.equal(JSON.parse(await callB(['--json','status'])).projectId,status.projectId);
 
-  const submitted=JSON.parse(await call(['agent','submit','Remote task']));
+  const submitted=JSON.parse(await call(['--json','agent','submit','Remote task']));
   const key=await api.createApiKey('standalone-worker','worker',{projectIds:[status.projectId]});
-  assert.match(await call(['worker','--project',status.projectId,'--model','fixture-model','--url',runtimeUrl,'--signature-policy','optional','--once'],key.key.token),/true/);
+  assert.match(await call(['--json','worker','--project',status.projectId,'--model','fixture-model','--url',runtimeUrl,'--signature-policy','optional','--once'],key.key.token),/true/);
   assert.equal((await api.run(submitted.id)).status,'completed');
   const transport=new StdioClientTransport({command:process.execPath,args:[join(root,'node_modules',packageName,'dist/mcp.js'),'--project',project],cwd:project,env:{...getDefaultEnvironment(),MODAI_API_TOKEN:clientToken,MODAI_SERVER:server,MODAI_CONFIG_DIR:join(root,'config')},stderr:'pipe'});
   mcp=new Client({name:'standalone-smoke',version:'1'});await mcp.connect(transport);

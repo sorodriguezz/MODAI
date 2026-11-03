@@ -4,7 +4,7 @@ import { ApiClient } from "@modai/sdk";
 import type { ProjectFile, RegistrySource } from "@modai/contracts/spec-v1";
 import type { SignaturePolicy } from "@modai/contracts/types";
 import {
-  CompositeRegistry, FileMemoryStore, HttpRegistry, LocalMemoryProvider, LocalRegistry, configDirectory, createRegistries, loadGrants,
+  CompositeRegistry, FileMemoryStore, HttpRegistry, LocalMemoryProvider, LocalRegistry, configDirectory, createRegistries, isLegacyProject, isV1Project, loadGrants,
   loadV1Project, saveGrants, saveProjectFile, syncWorkspace, type MemoryProvider, type Registry, type SyncOptions, type SyncReport, type V1Project,
 } from "@modai/core";
 import { loadClientConfig } from "../cli/config.js";
@@ -42,23 +42,43 @@ export function trustPolicy(file: ProjectFile): SyncOptions["trust"] {
   return { policy: order[Math.max(rank, 0)], trustedPublishers: config?.trustedPublishers ?? [] };
 }
 
-export interface RunSyncOptions { allow?: string[]; update?: boolean | string[]; frozen?: boolean; force?: boolean }
+/** Root of a v1 project, or a clear error (0.5 projects are converted with `modai migrate`). */
+export function requireV1Project(root = process.cwd()): string {
+  if (isV1Project(root)) return resolve(root);
+  if (isLegacyProject(root)) throw new Error("Este proyecto usa el formato 0.5 (.modai/manifest.yaml), que ya no se admite. Conviértelo con: modai migrate");
+  throw new Error("No es un proyecto MODAI: ejecuta 'modai init'.");
+}
+
+export interface RunSyncOptions { allow?: string[]; update?: boolean | string[]; frozen?: boolean; force?: boolean; keepMine?: boolean; registries?: Registry[] }
 
 /** Applies an optional change to modai.yaml and converges the project. modai.yaml is only saved if the sync succeeds. */
 export async function runSync(root: string, change?: (file: ProjectFile) => void, options: RunSyncOptions = {}): Promise<{ report: SyncReport; project: V1Project }> {
-  const project = loadV1Project(root);
+  const project = loadV1Project(requireV1Project(root));
   const file = structuredClone(project.file);
   change?.(file);
   const grants = loadGrants(project.root);
   const install = [...new Set([...grants.install, ...(options.allow ?? [])])];
   const next = { ...project, file };
   const report = await syncWorkspace(next, {
-    registries: createRegistries(project.root, file.registries, tokenFor), grants: install, trust: trustPolicy(file),
-    update: options.update, frozen: options.frozen, force: options.force,
+    registries: options.registries ?? createRegistries(project.root, file.registries, tokenFor), grants: install, trust: trustPolicy(file),
+    update: options.update, frozen: options.frozen, force: options.force, keepMine: options.keepMine,
   });
   if (change) saveProjectFile(project.root, file);
   if (options.allow?.length) saveGrants(project.root, { ...loadGrants(project.root), install });
+  if (!options.frozen) await reportInstallations(file, report);
   return { report, project: { ...next, lock: report.lock } };
+}
+
+/**
+ * Best effort: a project linked to a server (context.projectId) tells it what is installed, so the
+ * panel can show which projects use each package. It never blocks or fails an installation.
+ * Opt out with MODAI_NO_USAGE_REPORT=1.
+ */
+async function reportInstallations(file: ProjectFile, report: SyncReport): Promise<void> {
+  const { projectId, server } = file.context;
+  if (!projectId || !server || process.env.MODAI_NO_USAGE_REPORT) return;
+  const packages = Object.entries(report.lock.packages).map(([name, item]) => ({ name, version: item.version, direct: name in file.dependencies }));
+  try { await new ApiClient(server, tokenFor(server)).reportInstallations(projectId, packages, AbortSignal.timeout(3000)); } catch { /* the server may be down or the key may lack access: not the user's problem now */ }
 }
 
 export function summarize(report: SyncReport): string {
@@ -70,6 +90,7 @@ export function summarize(report: SyncReport): string {
   }
   if (report.removed.length) lines.push(`Retirados: ${report.removed.join(", ")}`);
   if (report.preserved.length) lines.push(`Conservados (cambios del usuario): ${report.preserved.join(", ")}`);
+  if (report.sideBySide.length) lines.push(`Conservé tu versión; la nueva quedó al lado para que la compares: ${report.sideBySide.join(", ")}`);
   for (const warning of report.warnings) lines.push(`Aviso: ${warning}`);
   for (const item of report.missingOptional) lines.push(`Opcional sin proveedor: ${item.package} puede usar ${item.capability}@${item.range}`);
   if (report.regrant.length) lines.push(`Requieren nueva autorización por cambio de contenido: ${report.regrant.map(name => `modai grant ${name}`).join("; ")}`);

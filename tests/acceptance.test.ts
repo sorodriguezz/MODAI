@@ -49,7 +49,8 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
   writeFileSync(join(dev, "regression/modai.package.yaml"), YAML.stringify(regressionManifest));
   writeFileSync(join(dev, "regression/knowledge/README.md"), "# Regresión visual\n\nUna regresión es una prueba que pasaba en la línea base aprobada y ahora falla.\n");
 
-  assert.match(await modai(dev, "package", "validate", "fake-browser"), /"score"/);
+  assert.match(await modai(dev, "--json", "package", "validate", "fake-browser"), /"score"/);
+  assert.match(await modai(dev, "package", "validate", "fake-browser"), /^Score: \d+\/100/m, "sin --json la salida es legible");
   await modai(dev, "publish", "fake-browser", "--registry", registry);
   await modai(dev, "publish", "regression", "--registry", registry);
   assert.match(await modaiFails(dev, "publish", "regression", "--registry", registry), /inmutable/);
@@ -71,7 +72,7 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
   assert.match(lock.packages["@acme/regression"].integrity, /^sha256-[a-f0-9]{64}$/);
   assert.ok(existsSync(join(project, ".agents/skills/regression/SKILL.md")));
   assert.match(readFileSync(join(project, "AGENTS.md"), "utf8"), /browser_run_tests/);
-  const capabilities = JSON.parse(await modai(project, "capabilities"));
+  const capabilities = JSON.parse(await modai(project, "capabilities", "--json"));
   assert.equal(capabilities.tools[0].authorized, false, "instalar no equivale a autorizar");
   assert.match(await modaiFails(project, "tools", "run", "browser_run_tests"), /modai grant/);
 

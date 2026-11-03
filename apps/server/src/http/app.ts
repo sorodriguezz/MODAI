@@ -11,6 +11,7 @@ import { Database } from "../core/database.js";
 import { AppError } from "@modai/contracts/errors";
 import { MetricsService } from "../core/metrics-service.js";
 import { analyzePackageQuality } from "@modai/contracts/package-quality";
+import { UsageService } from "../core/usage-service.js";
 import { PackageService } from "../core/package-service.js";
 import type { MemoryInput, PublishPackageInput, ResolveRequest } from "@modai/contracts/types";
 import { AgentService } from "../core/agent-service.js";
@@ -59,6 +60,7 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
   const agents = new AgentService(packages);
   const runs = new RunService(db, options.workerLeaseMs);
   const auth = new AuthService(db, options.apiToken, { idleMs: options.sessionIdleMs, absoluteMs: options.sessionMaxMs });
+  const usage = new UsageService(db);
   try { await seedInitialAdmin(auth, new AuditService(db), options.initialAdmin); } catch (error) { db.close(); throw error; }
   if (!auth.configured()) { db.close(); throw new AppError(500, "AUTH_NOT_CONFIGURED", "Configura MODAI_API_TOKEN, MODAI_ADMIN_USERNAME/MODAI_ADMIN_PASSWORD o una API key admin activa antes de arrancar"); }
   const audit = new AuditService(db);
@@ -101,7 +103,7 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     });
   });
 
-  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.6.0", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
+  app.get("/health", async () => ({ status: "ok", service: "modularai", version: "0.8.0", apiVersion: 1, signaturePolicy: options.signaturePolicy ?? "optional", runtime: process.version, publicUrl }));
   app.get("/", async (_request, reply) => reply.redirect("/admin"));
   if (options.adminDirectory !== false) {
     try { registerAdminAssets(app, options.adminDirectory); }
@@ -121,6 +123,30 @@ export async function createApp(options: AppOptions): Promise<FastifyInstance> {
     requireRole(request, "reader");
     const list = packages.list(request.query.name ?? request.query.q, request.query.type, request.query.includeYanked === "true");
     return { packages: request.query.name ? list.filter(item => item.name === request.query.name) : list };
+  });
+  app.get<{ Querystring: { q?: string; type?: string; category?: string; format?: string; status?: string; limit?: string; offset?: string } }>("/api/v1/packages/catalog", async (request) => {
+    requireRole(request, "reader");
+    const { limit, offset, ...filters } = request.query;
+    return packages.catalog({ ...filters, limit: limit ? Number(limit) : undefined, offset: offset ? Number(offset) : undefined });
+  });
+  app.get("/api/v1/packages/summary", async (request) => {
+    requireRole(request, "reader");
+    return packages.summary();
+  });
+  app.get<{ Querystring: { name: string } }>("/api/v1/packages/usage", async (request) => {
+    const identity = requireRole(request, "reader");
+    const visible = new Set(auth.listProjects(identity).map(project => project.id));
+    return { projects: usage.usage(String(request.query.name ?? ""), projectId => visible.has(projectId)) };
+  });
+  app.put<{ Params: { id: string }; Body: { packages: Array<{ name: string; version: string; direct?: boolean }> } }>("/api/v1/projects/:id/installations", {
+    schema: { body: { type: "object", required: ["packages"], additionalProperties: false, properties: { packages: { type: "array", maxItems: 1000, items: {
+      type: "object", required: ["name", "version"], additionalProperties: false,
+      properties: { name: { type: "string", minLength: 3, maxLength: 214, pattern: "^@[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$" }, version: { type: "string", minLength: 1, maxLength: 100 }, direct: { type: "boolean" } } } } } } },
+  }, async (request, reply) => {
+    // Any key with access to the project may report what it installed there: it is metadata, not content.
+    auth.requireProject(identityOf(request), request.params.id);
+    usage.report(request.params.id, request.body.packages);
+    return reply.code(204).send();
   });
   app.get<{ Querystring: { name: string; version?: string } }>("/api/v1/package", async (request) => {
     requireRole(request, "reader");

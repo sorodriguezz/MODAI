@@ -139,6 +139,11 @@ export class ApiClient {
     return this.request("/api/v1/admin/prune", { method: "POST", body: JSON.stringify({ memoryDays, auditDays }) });
   }
 
+  /** Tells the server what this project has installed (shown in the panel as "who uses this package"). */
+  async reportInstallations(projectId: string, packages: Array<{ name: string; version: string; direct?: boolean }>, signal?: AbortSignal): Promise<void> {
+    await this.request(`/api/v1/projects/${encodeURIComponent(projectId)}/installations`, { method: "PUT", body: JSON.stringify({ packages }), signal });
+  }
+
   async assertCompatible(): Promise<void> {
     const info = await this.health();
     if (info.apiVersion !== 1) throw new Error(`API incompatible: se requiere v1 (servidor ${info.version})`);

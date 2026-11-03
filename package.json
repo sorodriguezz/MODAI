@@ -1,6 +1,6 @@
 {
   "name": "modularai",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "MODAI: plataforma de paquetes y capacidades extensibles para IA (Core, CLI, registry y gateway de contexto).",
@@ -27,12 +27,15 @@
     "deploy:fly": "fly deploy . --config deploy/fly/fly.toml --dockerfile deploy/Dockerfile --ha=false",
     "backup:docker": "sh deploy/backup.sh",
     "version:cli": "node scripts/cli-version.mjs set",
-    "check:cli-version": "node scripts/cli-version.mjs check"
+    "check:cli-version": "node scripts/cli-version.mjs check",
+    "test:ui": "npm run build -w @modai/admin -w @modai/server && playwright test",
+    "version:set": "node scripts/cli-version.mjs set"
   },
   "engines": {
     "node": ">=26.13.0 <27"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.6.6",
     "@types/semver": "^7.8.0",

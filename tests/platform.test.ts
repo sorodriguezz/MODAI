@@ -17,8 +17,8 @@ import { Database } from "../apps/server/src/core/database.js";
 import { AuthService } from "../apps/server/src/core/auth-service.js";
 import { RunService } from "../apps/server/src/core/run-service.js";
 import { loadPackageSource } from "../packages/cli/src/cli/package-source.js";
-import { createManifest, writeYaml, projectPaths } from "../packages/cli/src/cli/config.js";
-import { synchronize, verifyPackage } from "../packages/cli/src/cli/installer.js";
+import { verifyPackage } from "../packages/cli/src/agent/trust.js";
+import { HttpRegistry, createProjectFile, loadV1Project, saveProjectFile, syncWorkspace } from "@modai/core";
 import { activateAgent, deactivateAgent, loadActivation } from "../packages/cli/src/agent/activation.js";
 import { executeAgent } from "../packages/cli/src/agent/runtime.js";
 import { workOnce } from "../packages/cli/src/agent/worker.js";
@@ -42,9 +42,14 @@ async function fixture(overrides: Partial<AppOptions> = {}) {
 async function publishExamples(api:ApiClient) {
   for(const name of ["skill-design-patterns","tool-context","agent-backend-reviewer"])await api.publish(loadPackageSource(join(process.cwd(),"examples/packages",name)));
 }
+/** A v1 project linked to server project `id`, with the server as its registry (what `modai init --project` creates). */
 async function localProject(root:string,server:string,id:string) {
-  const path=join(root,"project");mkdirSync(path);const manifest=createManifest(server);manifest.projectId=id;
-  const paths=projectPaths(path);writeYaml(paths.manifest,manifest);writeYaml(paths.lock,{schemaVersion:1,generatedAt:new Date().toISOString(),packages:[]});return path;
+  const path=join(root,"project");mkdirSync(path);
+  saveProjectFile(path,createProjectFile(id,{registries:[{name:"central",url:server}],adapters:["agent-skills"],context:{memory:"remote",server,projectId:id}}));return path;
+}
+function installV1(server:string,project:string,dependencies:Record<string,string>,grants:string[]=[]) {
+  saveProjectFile(project,createProjectFile("install",{registries:[{name:"central",url:server}],adapters:["agent-skills"],dependencies}));
+  return syncWorkspace(loadV1Project(project),{registries:[new HttpRegistry(server,admin)],grants,trust:{policy:"optional",trustedPublishers:[]}});
 }
 async function fakeOllama(chat:(body:any,index:number)=>unknown) {
   let count=0;
@@ -110,10 +115,10 @@ test("bloquea hooks, rutas reservadas, permisos sin conceder y escapes mediante 
     for(const target of [".git/hooks/pre-commit",".GIT/config",".github/workflows/pwn.yml","package.json",".env",".agents/skills/a/../../escape","C:\\escape",".modai/manifest.yaml"]){await assert.rejects(()=>f.api.publish(input("@paths/test",{files:[{source:"x",target}]},{x:"safe marker"})),/UNSAFE_/)}
     const p=await f.api.publish(input("@paths/linked",{files:[{source:"x",target:".agents/skills/linked/file.txt"}]},{x:"safe marker"}));
     const project=join(f.root,"install"),outside=join(f.root,"outside");mkdirSync(project);mkdirSync(outside);mkdirSync(join(project,".agents"));symlinkSync(outside,join(project,".agents/skills"));
-    const manifest={schemaVersion:1 as const,projectId:"p",packages:{[p.name]:"*"}},empty={schemaVersion:1 as const,generatedAt:"",packages:[]};
-    await assert.rejects(()=>synchronize(f.api,project,manifest,empty),/enlaces simbólicos/);assert.equal(existsSync(join(outside,"linked/file.txt")),false);
+    await assert.rejects(()=>installV1(f.server,project,{[p.name]:"*"}),/simbólic|symlink/i);assert.equal(existsSync(join(outside,"linked/file.txt")),false);
     const executable=input("@paths/exec",{permissions:["process.execute"],files:[{source:"x",target:".modai/packages/script.sh",executable:true}]},{x:"marker"});await f.api.publish(executable);
-    await assert.rejects(()=>synchronize(f.api,project,{...manifest,packages:{"@paths/exec":"*"},grants:["process.execute"]},empty),/conceder process.execute/);
+    rmSync(join(project,".agents/skills"));
+    await assert.rejects(()=>installV1(f.server,project,{"@paths/exec":"*"}),/conceder process\.execute/);
   }finally{await f.close()}
 });
 

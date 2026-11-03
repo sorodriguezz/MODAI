@@ -4,7 +4,7 @@ import { get, post, del } from "../lib/api.js";
 import { base64ToBytes, bytesToText, formatBytes } from "../lib/files.js";
 import { openPackageEditor } from "./package-editor.js";
 import { openDialog, closeDialog, confirmDialog, promptDialog, toast, toastError, statusBadge, formatDate, timeTag, skeletonCards, emptyState, errorState, codeBlock, debounce, bindTabs } from "../lib/ui.js";
-import { store, can, describeManifest, latestByName } from "../state.js";
+import { store, can, describeManifest } from "../state.js";
 
 const categoryIcons = { component: "code", skill: "spark", agent: "bot", knowledge: "book", memory: "brain", mcp: "plug", tool: "tool", adapter: "layers", harness: "layers", profile: "user", template: "copy", methodology: "book" };
 const permissionLabels = {
@@ -53,7 +53,7 @@ function card(item) {
     <span class="card-title">${item.name}</span>
     <span class="card-text">${item.description}</span>
     <span class="card-meta">
-      <span>v${item.version}</span>
+      <span>v${item.version}${item.versions > 1 ? html` <span class="muted" title="Versiones publicadas">· ${item.versions} versiones</span>` : ""}</span>
       ${info.provides.length ? html`<span title="Capacidades que provee">${icon("spark", 14)}${info.provides.length}</span>` : ""}
       ${item.quality ? html`<span class="${item.quality.score >= 80 ? "text-success" : item.quality.score < 50 ? "text-warning" : ""}" title="Calidad estructural">${item.quality.score}/100</span>` : ""}
       ${item.signerFingerprint ? html`<span title="Firmado">${icon("shield", 14)}${item.publisherTrusted ? "Confiable" : "Firmado"}</span>` : ""}
@@ -130,8 +130,13 @@ function qualityPanel(item) {
     ${item.quality.findings?.length ? html`<ul class="findings">${item.quality.findings.map((finding) => html`<li class="tone-${tone[finding.severity] || "info"}">${icon(finding.severity === "info" ? "info" : "alert", 16)}<span><code>${finding.code}</code> ${finding.message}</span></li>`)}</ul>` : html`<p class="muted small">Sin observaciones.</p>`}`;
 }
 
-export function openPackage(all, name, version, onChange, onPublished = onChange) {
-  const versions = all.filter((item) => item.name === name).sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+export async function openPackage(name, version, onChange, onPublished = onChange) {
+  let versions;
+  try {
+    versions = (await get("/packages?includeYanked=true&name=" + encodeURIComponent(name))).packages.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  } catch (error) {
+    return toastError(error);
+  }
   const item = versions.find((entry) => entry.version === version) || versions[0];
   if (!item) return toastError(new Error("El paquete ya no existe."));
   const info = describeManifest(item);
@@ -143,18 +148,36 @@ export function openPackage(all, name, version, onChange, onPublished = onChange
         <button role="tab" type="button" data-tab="overview" aria-selected="true">Resumen</button>
         <button role="tab" type="button" data-tab="versions" aria-selected="false" tabindex="-1">Versiones <span class="count">${versions.length}</span></button>
         <button role="tab" type="button" data-tab="files" aria-selected="false" tabindex="-1">Archivos</button>
+        <button role="tab" type="button" data-tab="usage" aria-selected="false" tabindex="-1">Proyectos</button>
         <button role="tab" type="button" data-tab="quality" aria-selected="false" tabindex="-1">Calidad</button>
         <button role="tab" type="button" data-tab="manifest" aria-selected="false" tabindex="-1">Manifiesto</button>
       </div>
       <div role="tabpanel" data-panel="overview" class="tab-panel">${overviewPanel(item, info)}</div>
       <div role="tabpanel" data-panel="versions" class="tab-panel" hidden>${versionsPanel(versions)}</div>
       <div role="tabpanel" data-panel="files" class="tab-panel" hidden><div id="packageFiles">${html`<p class="muted small">Cargando archivos…</p>`}</div></div>
+      <div role="tabpanel" data-panel="usage" class="tab-panel" hidden><div id="packageUsage">${html`<p class="muted small">Cargando proyectos…</p>`}</div></div>
       <div role="tabpanel" data-panel="quality" class="tab-panel" hidden>${qualityPanel(item)}</div>
       ${can.publish() ? html`<div class="dialog-actions"><button type="button" class="btn" data-action="newVersion">${icon("edit")}Editar y publicar nueva versión</button></div>` : ""}
       <div role="tabpanel" data-panel="manifest" class="tab-panel" hidden>${codeBlock("manifestJson", JSON.stringify(item.manifest, null, 2), "Copiar JSON")}</div>`,
   });
-  let files = null;
+  let files = null, usageLoaded = false;
   bindTabs(body, async (tab) => {
+    if (tab === "usage" && !usageLoaded) {
+      usageLoaded = true;
+      try {
+        const { projects } = await get("/packages/usage?name=" + encodeURIComponent(name));
+        mount(body.querySelector("#packageUsage"), projects.length
+          ? html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col">Proyecto</th><th scope="col">Versión</th><th scope="col" class="hide-sm">Cómo</th><th scope="col" class="hide-sm">Reportado</th></tr></thead>
+            <tbody>${projects.map((project) => html`<tr><td><b>${project.projectName}</b><div class="muted small"><code>${project.projectId}</code></div></td>
+              <td>${project.version}${versions[0] && project.version !== versions[0].version ? html` <span class="badge tone-warning" title="Hay una versión más nueva">desactualizado</span>` : ""}</td>
+              <td class="hide-sm">${project.direct ? "Directa" : "Dependencia"}</td><td class="hide-sm">${timeTag(project.reportedAt)}</td></tr>`)}</tbody></table></div>
+            <p class="hint">Cada proyecto vinculado a este servidor (modai init --project) informa lo que instala al sincronizar. Solo ves los proyectos a los que tienes acceso.</p>`
+          : emptyState({ iconName: "folder", title: "Ningún proyecto lo usa", text: "O los proyectos que lo instalan no están vinculados a este servidor con modai init --project." }));
+      } catch (error) {
+        mount(body.querySelector("#packageUsage"), errorState(error));
+      }
+      return;
+    }
     if (tab !== "files" || files) return;
     try {
       files = (await get("/artifacts/" + encodeURIComponent(item.artifactId))).files;
@@ -211,13 +234,24 @@ export function openPackage(all, name, version, onChange, onPublished = onChange
   });
 }
 
+const PAGE_SIZE = 24;
+
+function pager(page, pages) {
+  if (pages <= 1) return "";
+  return html`<nav class="pager" aria-label="Páginas del catálogo">
+    <button type="button" class="btn small" data-action="page" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>Anterior</button>
+    <span class="muted small" aria-current="page">Página ${page} de ${pages}</span>
+    <button type="button" class="btn small" data-action="page" data-page="${page + 1}" ${page >= pages ? "disabled" : ""}>Siguiente</button>
+  </nav>`;
+}
+
 export default {
   id: "packages",
   label: "Paquetes",
   icon: "package",
   title: "Paquetes",
   subtitle: "Componentes de código, harnesses, skills, herramientas, conocimiento y agentes publicados en este servidor.",
-  async render(root, { params, navigate, isCurrent, actions }) {
+  async render(root, { params, isCurrent, actions }) {
     if (can.publish()) mount(actions, html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>`);
     mount(root, html`
       <div class="toolbar">
@@ -234,66 +268,65 @@ export default {
     const $q = root.querySelector("#packageSearch"), $category = root.querySelector("#packageCategory"), $format = root.querySelector("#packageFormat"), $status = root.querySelector("#packageStatus");
     $format.value = filters.format;
     $status.value = filters.status;
-    let all = [];
-    const draw = () => {
+    let page = 1, request = 0, items = [], total = 0;
+    // The server filters and paginates: the browser only receives the page it shows.
+    const load = async () => {
       filters.q = $q.value.trim();
       filters.category = $category.value;
       filters.type = $type.value;
       filters.format = $format.value;
       filters.status = $status.value;
-      const q = filters.q.toLocaleLowerCase();
-      let list = filters.status === "latest" ? latestByName(all) : filters.status === "all" ? all : all.filter((item) => item.status === filters.status);
-      list = list.filter((item) => {
-        const info = describeManifest(item);
-        if (filters.category && info.category !== filters.category) return false;
-        if (filters.type && !TYPES[filters.type].test(info)) return false;
-        if (filters.format && info.format !== filters.format) return false;
-        if (!q) return true;
-        return [item.name, item.description, info.category, ...info.provides.map((p) => p.capability), ...(info.keywords || [])].join(" ").toLocaleLowerCase().includes(q);
-      }).sort((a, b) => a.name.localeCompare(b.name) || new Date(b.publishedAt) - new Date(a.publishedAt));
-      root.querySelector("#packageMeta").textContent = list.length + (list.length === 1 ? " paquete" : " paquetes") + (filters.status === "latest" ? " · última versión activa de cada uno" : "");
-      mount(root.querySelector("#packageResults"), list.length
-        ? html`<div class="card-grid">${list.map(card)}</div>`
-        : all.length
+      const token = ++request;
+      const query = new URLSearchParams({ status: filters.status, limit: String(PAGE_SIZE), offset: String((page - 1) * PAGE_SIZE) });
+      for (const key of ["q", "type", "category", "format"]) if (filters[key]) query.set(key, filters[key]);
+      let result;
+      try {
+        result = await get("/packages/catalog?" + query);
+      } catch (error) {
+        if (isCurrent() && token === request) mount(root.querySelector("#packageResults"), errorState(error));
+        return;
+      }
+      if (!isCurrent() || token !== request) return;
+      ({ items, total } = result);
+      const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      if (page > pages) { page = pages; return load(); }
+      const selected = $category.value;
+      mount($category, html`<option value="">Todas las categorías</option>${result.categories.map((category) => html`<option value="${category}">${category}</option>`)}`);
+      $category.value = result.categories.includes(selected) ? selected : "";
+      const filtered = Boolean(filters.q || filters.type || filters.category || filters.format || filters.status !== "latest");
+      root.querySelector("#packageMeta").textContent = total + (total === 1 ? " paquete" : " paquetes") + (filters.status === "latest" ? " · última versión activa de cada uno" : "");
+      mount(root.querySelector("#packageResults"), items.length
+        ? html`<div class="card-grid">${items.map(card)}</div>${pager(page, pages)}`
+        : filtered
           ? emptyState({ iconName: "search", title: "Sin resultados", text: "Prueba con otra búsqueda o cambia los filtros.", action: html`<button class="btn" data-action="clear">Limpiar filtros</button>` })
           : emptyState({ iconName: "package", title: "Aún no hay paquetes", text: "Publica capacidades con la CLI (modai publish ./mi-paquete) o créalas aquí: componentes de código, harnesses, skills y conocimiento.", action: can.publish() ? html`<button class="btn primary" data-action="create">${icon("plus")}Crear paquete</button>` : "" }));
     };
-    const load = async (force = false) => {
-      try {
-        all = await store.packages(force);
-      } catch (error) {
-        if (isCurrent()) mount(root.querySelector("#packageResults"), errorState(error));
-        return;
-      }
-      if (!isCurrent()) return;
-      const categories = [...new Set(all.map((item) => describeManifest(item).category))].sort();
-      mount($category, html`<option value="">Todas las categorías</option>${categories.map((category) => html`<option value="${category}">${category}</option>`)}`);
-      $category.value = categories.includes(filters.category) ? filters.category : "";
-      draw();
-    };
-    $q.addEventListener("input", debounce(draw));
-    [$type, $category, $format, $status].forEach((select) => select.addEventListener("change", draw));
+    const reload = () => { page = 1; return load(); };
+    $q.addEventListener("input", debounce(reload, 250));
+    [$type, $category, $format, $status].forEach((select) => select.addEventListener("change", reload));
     const published = async (record) => {
-      await load(true);
-      if (isCurrent()) openPackage(all, record.name, record.version, () => load(true), published);
+      store.invalidate("summary", "agents");
+      await load();
+      if (isCurrent()) openPackage(record.name, record.version, load, published);
     };
     const create = () => openPackageEditor({ template: filters.type === "harness" ? "harness" : filters.type === "skills" ? "skill" : filters.type === "knowledge" ? "knowledge" : "component", onPublished: published });
     delegate(actions, { create });
     delegate(root, {
       create,
-      open: (button) => openPackage(all, button.dataset.name, button.dataset.version, () => load(true), published),
+      open: (button) => openPackage(button.dataset.name, button.dataset.version, load, published),
+      page: (button) => { page = Number(button.dataset.page); load().then(() => root.querySelector("#packageResults")?.scrollIntoView({ block: "start" })); },
       clear: () => {
         $q.value = "";
         $type.value = "";
         $category.value = "";
         $format.value = "";
         $status.value = "latest";
-        draw();
+        reload();
       },
-      retry: () => load(true),
+      retry: load,
     });
     await load();
     const requested = params.get("name");
-    if (requested && isCurrent() && all.some((item) => item.name === requested)) openPackage(all, requested, params.get("version"), () => load(true), published);
+    if (requested && isCurrent()) openPackage(requested, params.get("version"), load, published);
   },
 };

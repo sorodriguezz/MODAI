@@ -7,9 +7,9 @@ import {
   BUILTIN_ADAPTERS, HttpRegistry, LocalRegistry, availableAdapters, expandTemplate, inspectWorkspace, isV1Project, loadV1Project, normalizeManifest, type Registry,
 } from "@modai/core";
 import { loadClientConfig } from "../cli/config.js";
-import { defaultLocalRegistry, projectRegistry, registryFromArgument, tokenFor } from "./runtime.js";
+import { defaultLocalRegistry, projectRegistry, registryFromArgument, requireV1Project, tokenFor } from "./runtime.js";
 
-type Print = (value: unknown) => void;
+import { formatTable, printList, type Print } from "../cli/output.js";
 type Row = Record<string, string | number | boolean | undefined>;
 interface Entry { name: string; version: string; manifest: PackageManifestV1; installed: boolean; registry?: string }
 
@@ -45,16 +45,7 @@ export function listRows(type: string, entries: Entry[]): { rows: Row[]; matched
   return { rows: entries.filter(entry => [what, category].includes(entry.manifest.spec.category)).map(packageRow), matched: `category:${category}` };
 }
 
-/** Plain-text table; long cells are truncated so a listing stays readable in a terminal. */
-export function formatTable(rows: Row[]): string {
-  if (!rows.length) return "";
-  const columns = [...new Set(rows.flatMap(row => Object.keys(row).filter(key => row[key] !== undefined)))];
-  const cell = (value: Row[string]) => value === undefined ? "" : typeof value === "boolean" ? (value ? "sí" : "no") : String(value).replace(/\s+/g, " ");
-  const widths = columns.map(column => Math.min(60, Math.max(column.length, ...rows.map(row => cell(row[column]).length))));
-  const fit = (text: string, width: number) => (text.length > width ? `${text.slice(0, width - 1)}…` : text).padEnd(width);
-  return [columns.map((column, index) => fit(column.toUpperCase(), widths[index])).join("  "), ...rows.map(row => columns.map((column, index) => fit(cell(row[column]), widths[index])).join("  "))]
-    .map(line => line.trimEnd()).join("\n");
-}
+export { formatTable };
 
 function availableRegistry(options: { registry?: string }): Registry {
   const root = process.cwd();
@@ -82,9 +73,9 @@ async function entriesFor(options: { available?: boolean; registry?: string; que
     .map(item => ({ name: item.name, version: item.version, manifest: item.manifest, installed: true }));
 }
 
-export async function listV1(type: string | undefined, options: { available?: boolean; registry?: string; query?: string; json?: boolean }, print: Print): Promise<void> {
+export async function listV1(type: string | undefined, options: { available?: boolean; registry?: string; query?: string }, _print: Print): Promise<void> {
   const what = (type ?? "packages").toLowerCase();
-  const output = (rows: Row[], empty: string) => print(options.json ? rows : rows.length ? formatTable(rows) : empty);
+  const output = (rows: Row[], empty: string) => printList(rows, empty);
   if (["adapters", "adapter", "adaptadores"].includes(what) && !options.available) {
     const root = process.cwd();
     const project = isV1Project(root) ? loadV1Project(root) : undefined;
@@ -93,11 +84,11 @@ export async function listV1(type: string | undefined, options: { available?: bo
     return output(adapters.map(item => ({ adapter: item.definition.id, source: item.source, active: project?.file.adapters.includes(item.definition.id) ?? false, description: item.definition.description })), "No hay adaptadores.");
   }
   if (["registries", "registry", "registros"].includes(what)) {
-    const project = loadV1Project(process.cwd());
+    const project = loadV1Project(requireV1Project());
     return output(project.file.registries.map(item => ({ registry: item.name, location: item.url ?? item.path })), "No hay registries configurados.");
   }
   if (["capabilities", "capability", "capacidades"].includes(what)) {
-    const project = loadV1Project(process.cwd());
+    const project = loadV1Project(requireV1Project());
     return output(Object.entries(project.lock.capabilities).map(([capability, item]) => ({ capability, version: item.version, provider: item.provider })), "Ningún paquete instalado provee capacidades.");
   }
   const entries = await entriesFor(options);
@@ -143,7 +134,6 @@ export function registerListCommands(program: Command, print: Print, commaList: 
     .option("--available", "Lista lo publicado en los registries en lugar de lo instalado")
     .option("--registry <name|url|path>", "Registry concreto (implica --available)")
     .option("--query <text>", "Filtro de texto")
-    .option("--json", "Salida JSON")
     .action((type: string, options) => listV1(type, options, print));
 
   const component = program.command("component").description("Componentes de código reutilizables (módulos de backend, componentes de UI, servicios…)");
@@ -162,6 +152,6 @@ export function registerListCommands(program: Command, print: Print, commaList: 
       const created = createComponentPackage(directory, options);
       print(`Componente creado en ${created}\nValida:   modai package validate ${directory}\nPublica:  modai publish ${directory} --registry <registry>\nInstala:  modai add ${options.name} --allow project.source`);
     });
-  component.command("list").description("Componentes instalados (o --available)").option("--available").option("--registry <name|url|path>").option("--query <text>").option("--json")
+  component.command("list").description("Componentes instalados (o --available)").option("--available").option("--registry <name|url|path>").option("--query <text>")
     .action(options => listV1("components", options, print));
 }

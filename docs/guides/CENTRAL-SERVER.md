@@ -91,7 +91,7 @@ modai status
 modai agent list
 ```
 
-Si el repositorio ya contiene `.modai/manifest.yaml` y `.modai/lock.yaml`, usa `modai sync` en lugar de inicializar de nuevo. Conserva ambos archivos en Git para que todos los equipos compartan ID y versiones. Los permisos para escribir instrucciones o ejecutar herramientas se aprueban localmente en cada equipo. Si un paquete necesita modificar instrucciones, usa `modai sync --allow project.instructions` después de revisar ese permiso.
+Si el repositorio ya contiene `modai.yaml` y `modai.lock`, usa `modai sync` en lugar de inicializar de nuevo. Conserva ambos archivos en Git para que todos los equipos compartan proyecto y versiones. Si contiene el formato antiguo (`.modai/manifest.yaml`), conviértelo una vez con `modai migrate`. Antes de empezar, `modai ping` confirma que el servidor responde y que tu API key es válida. Los permisos para escribir instrucciones o ejecutar herramientas se aprueban localmente en cada equipo. Si un paquete necesita modificar instrucciones, usa `modai sync --allow project.instructions` después de revisar ese permiso.
 
 Con el catálogo de ejemplos cargado, activa un agente reutilizable:
 

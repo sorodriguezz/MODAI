@@ -119,7 +119,8 @@ export class LocalRegistry implements Registry {
 export class HttpRegistry implements Registry {
   readonly id: string;
   private readonly api: ApiClient;
-  constructor(readonly url: string, token?: string) { this.id = url.replace(/\/+$/, ""); this.api = new ApiClient(url, token); }
+  /** `api` reuses an authenticated client (for example the one that composed an agent). */
+  constructor(readonly url: string, token?: string, api?: ApiClient) { this.id = url.replace(/\/+$/, ""); this.api = api ?? new ApiClient(url, token); }
 
   private async records(name?: string) {
     return (await this.api.listPackages(name, true)).filter(item => !name || item.name === name);

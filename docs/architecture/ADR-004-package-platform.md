@@ -62,7 +62,7 @@ Está automatizado en [`tests/acceptance.test.ts`](../../tests/acceptance.test.t
 
 - Frontend, ciberseguridad, regresión, bases de datos, DevOps o IoT se incorporan como paquetes y contratos, no como cambios del Core.
 - El servidor central conserva catálogo, memoria compartida, panel, agentes y workers, y usa el mismo resolvedor y validador del Core.
-- Coste aceptado: dos formatos de proyecto conviven durante la transición; los comandos `modai agent` siguen requiriendo un proyecto `--legacy`.
+- Coste aceptado: dos formatos de proyecto convivieron durante la transición. Desde 0.8.0 solo se opera `modai.yaml`; `modai migrate` convierte los proyectos 0.5 y los agentes del servidor se instalan como dependencias v1.
 
 ## Plan de migración
 

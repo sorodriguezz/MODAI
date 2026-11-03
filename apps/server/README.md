@@ -9,7 +9,7 @@ La [CLI](../../packages/cli) funciona sin servidor. Lo levantas cuando quieres q
 | | |
 |---|---|
 | **Registry privado** | Paquetes versionados e inmutables con integridad SHA-256, firma Ed25519 opcional, deprecación y retiro de versiones, y resolución de dependencias por contrato. |
-| **Panel web** (`/admin`) | Catálogo con filtros por tipo, detalle, archivos y calidad de cada paquete. Desde aquí se **crean y publican paquetes** (componentes de código, harnesses, skills, conocimiento) y sus nuevas versiones. |
+| **Panel web** (`/admin`) | Catálogo paginado con filtros por tipo, detalle, archivos, calidad y **qué proyectos usan cada paquete** (y en qué versión). Desde aquí se **crean y publican paquetes** (componentes de código, harnesses, skills, conocimiento) y sus nuevas versiones, con edición de archivos y carpetas. |
 | **Conocimiento y memoria** | Documentos que los agentes consultan con búsqueda y memoria por proyecto u organización, compartida por todo el equipo. |
 | **Proyectos y accesos** | Usuarios con contraseña, roles (`reader`, `publisher`, `worker`, `admin`), API keys por persona limitadas a proyectos y namespaces, y organizaciones. |
 | **Agentes y ejecuciones** | Composición de agentes desde paquetes y una cola de tareas que procesan workers (`modai worker`). |
@@ -65,6 +65,14 @@ modai init --project <id-del-proyecto>       # el servidor pasa a ser su registr
 modai add @acme/auth --allow project.source
 ```
 
+Antes de empezar, cada persona puede comprobar que llega al servidor y que su key funciona:
+
+```bash
+modai ping
+```
+
+Los proyectos vinculados con `--project` informan qué tienen instalado al sincronizar; el panel lo muestra en la pestaña **Proyectos** de cada paquete, solo a quien tiene acceso a esos proyectos.
+
 Para publicar desde la CLI (con una key de rol `publisher` o `admin`):
 
 ```bash
@@ -113,6 +121,8 @@ MODAI_API_TOKEN=local-dev-token MODAI_ADMIN_USERNAME=admin MODAI_ADMIN_PASSWORD=
 ```
 
 La API arranca con recarga automática en <http://127.0.0.1:8787> y el panel queda en `/admin`. Para editar el panel en paralelo, ejecuta `npm run dev:admin` y recarga la página.
+
+Pruebas: `npm test` (API, Core, CLI y servidor) y `npm run test:ui` (el panel en Chromium con Playwright, contra un servidor temporal; la primera vez ejecuta `npx playwright install chromium`).
 
 ```
 src/

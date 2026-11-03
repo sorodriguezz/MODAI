@@ -11,9 +11,10 @@ import {
 } from "@modai/core";
 import { loadClientConfig } from "../cli/config.js";
 import { commaList } from "../cli/agent-commands.js";
-import { confirm, defaultLocalRegistry, memoryProvider, projectRegistry, registrySource, runSync, summarize, tokenFor } from "./runtime.js";
+import { confirm, defaultLocalRegistry, memoryProvider, projectRegistry, registrySource, requireV1Project, runSync, summarize, tokenFor } from "./runtime.js";
+import type { SyncReport } from "@modai/core";
 
-type Print = (value: unknown) => void;
+import type { Print } from "../cli/output.js";
 
 export function parseSpec(spec: string, root: string): { name: string; value: string } {
   if (spec.startsWith("file:") || spec.startsWith("./") || spec.startsWith("../") || spec.startsWith("/") || /^[A-Za-z]:[\\/]/.test(spec)) {
@@ -54,9 +55,10 @@ export async function initV1(root: string, options: { name?: string; registry?: 
   }
 }
 
-export async function addV1(root: string, specs: string[], options: { allow?: string[]; force?: boolean }, print: Print): Promise<void> {
+/** Adds packages to one project; modai.yaml changes only if the whole sync succeeds. */
+export async function addPackages(root: string, specs: string[], options: { allow?: string[]; force?: boolean; keepMine?: boolean }): Promise<{ names: string[]; report: SyncReport; needsGrant: string[] }> {
   const parsed = specs.map(spec => parseSpec(spec, root));
-  const { report, project } = await runSync(root, file => { for (const item of parsed) file.dependencies[item.name] = item.value; }, { allow: options.allow, force: options.force, update: parsed.map(item => item.name) });
+  const { report, project } = await runSync(root, file => { for (const item of parsed) file.dependencies[item.name] = item.value; }, { allow: options.allow, force: options.force, keepMine: options.keepMine, update: parsed.map(item => item.name) });
   // Like npm: an unconstrained request is recorded as a caret range of the resolved version.
   const pinned = parsed.filter(item => item.value === "*" && project.lock.packages[item.name]);
   if (pinned.length) {
@@ -64,31 +66,42 @@ export async function addV1(root: string, specs: string[], options: { allow?: st
     for (const item of pinned) file.dependencies[item.name] = `^${project.lock.packages[item.name].version}`;
     saveProjectFile(root, file);
   }
-  print(`Añadido ${parsed.map(item => item.name).join(", ")}.\n${summarize(report)}`);
-  const executable = parsed.filter(item => project.lock.packages[item.name]?.permissions.some(permission => !INSTALL_PERMISSIONS.includes(permission)));
-  if (executable.length) print(`Contiene herramientas ejecutables no autorizadas todavía. Revisa y autoriza con: ${executable.map(item => `modai grant ${item.name}`).join("; ")}`);
+  const needsGrant = parsed.filter(item => project.lock.packages[item.name]?.permissions.some(permission => !INSTALL_PERMISSIONS.includes(permission))).map(item => item.name);
+  return { names: parsed.map(item => item.name), report, needsGrant };
 }
 
-export async function removeV1(root: string, name: string, print: Print): Promise<void> {
+export async function addV1(root: string, specs: string[], options: { allow?: string[]; force?: boolean; keepMine?: boolean }, print: Print): Promise<void> {
+  const { names, report, needsGrant } = await addPackages(root, specs, options);
+  print(`Añadido ${names.join(", ")}.\n${summarize(report)}`);
+  if (needsGrant.length) print(`Contiene herramientas ejecutables no autorizadas todavía. Revisa y autoriza con: ${needsGrant.map(name => `modai grant ${name}`).join("; ")}`);
+}
+
+/** Removes a direct dependency from one project, its provider pins and its now-orphan grants. */
+export async function removePackage(root: string, name: string): Promise<SyncReport> {
   const project = loadV1Project(root);
   if (!(name in project.file.dependencies)) throw new Error(`${name} no es una dependencia directa del proyecto.`);
   const { report } = await runSync(root, file => { delete file.dependencies[name]; for (const [capability, provider] of Object.entries(file.providers)) if (provider === name) delete file.providers[capability]; });
   const grants = loadGrants(root);
   for (const grantName of Object.keys(grants.packages)) if (!report.lock.packages[grantName]) delete grants.packages[grantName];
   saveGrants(root, grants);
-  print(`Retirado ${name}.\n${summarize(report)}`);
+  return report;
 }
 
-export async function syncV1(root: string, options: { allow?: string[]; frozen?: boolean; force?: boolean }, print: Print): Promise<void> {
+export async function removeV1(root: string, name: string, print: Print): Promise<void> {
+  print(`Retirado ${name}.\n${summarize(await removePackage(root, name))}`);
+}
+
+export async function syncV1(root: string, options: { allow?: string[]; frozen?: boolean; force?: boolean; keepMine?: boolean }, print: Print): Promise<void> {
   const { report } = await runSync(root, undefined, options);
   print(`Sincronizado.\n${summarize(report)}`);
 }
 
-export async function updateV1(root: string, names: string[], print: Print): Promise<void> {
+export async function updateV1(root: string, names: string[], options: { keepMine?: boolean; force?: boolean }, print: Print): Promise<void> {
   const before = loadV1Project(root).lock.packages;
-  const { report } = await runSync(root, undefined, { update: names.length ? names : true });
-  const changed = Object.entries(report.lock.packages).filter(([name, item]) => before[name]?.version !== item.version).map(([name, item]) => `${name}: ${before[name]?.version ?? "nuevo"} -> ${item.version}`);
-  print(`${changed.length ? `Actualizados:\n${changed.join("\n")}` : "Todo está en la última versión permitida por modai.yaml."}\n${summarize(report)}`);
+  const { report } = await runSync(root, undefined, { update: names.length ? names : true, force: options.force, keepMine: options.keepMine });
+  const changed = Object.entries(report.lock.packages).filter(([name, item]) => before[name]?.version !== item.version).map(([name, item]) => ({ package: name, from: before[name]?.version ?? "nuevo", to: item.version }));
+  print(changed.length ? changed : "Todo está en la última versión permitida por modai.yaml.");
+  print(summarize(report));
 }
 
 export async function outdatedV1(root: string, print: Print): Promise<void> {
@@ -109,6 +122,7 @@ export function statusV1(root: string, print: Print): void {
   const installed = inspectWorkspace(project);
   print({
     project: project.file.name, format: API_VERSION,
+    ...(project.file.context.projectId ? { projectId: project.file.context.projectId, server: project.file.context.server } : {}),
     registries: project.file.registries.map(item => item.url ?? item.path), adapters: project.file.adapters, memory: project.file.context.memory,
     dependencies: project.file.dependencies,
     installed: installed.map(item => ({ name: item.name, version: item.version, kind: item.kind, category: item.category, verified: item.verified,
@@ -210,11 +224,7 @@ export async function migrateV1(root: string, options: { allow?: string[]; force
   }
 }
 
-function v1Project(): string {
-  const root = process.cwd();
-  if (!isV1Project(root)) throw new Error(isLegacyProject(root) ? "Este comando requiere un proyecto v1. Ejecuta 'modai migrate'." : "No es un proyecto MODAI: ejecuta 'modai init'.");
-  return root;
-}
+const v1Project = () => requireV1Project();
 
 /** Commands that only exist for v1 projects. */
 export function registerV1Commands(program: Command, print: Print): void {

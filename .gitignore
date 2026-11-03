@@ -49,3 +49,7 @@ Desktop.ini
 *.swp
 *.swo
 .vscode/*.local.json
+
+# Playwright (tests de interfaz del panel)
+test-results/
+playwright-report/

@@ -92,6 +92,40 @@ modai remember "Usamos Playwright contra staging" --kind decision
 modai recall "staging"
 ```
 
+## Muchos repositorios a la vez
+
+Desde una carpeta con varios repositorios (o un monorepo), `modai workspace` aplica la misma operación en todos los proyectos MODAI que encuentra:
+
+```console
+$ modai workspace add @equipo/harness --root ~/code --dry-run
+Añadir @equipo/harness en ~/code:
+PROJECT      RESULT       DETAIL
+api          pendiente    añadirá @equipo/harness
+billing      sin cambios  ya está instalado
+legacy-app   omitido      formato 0.5: conviértelo con modai migrate
+web          pendiente    añadirá @equipo/harness
+
+$ modai workspace add @equipo/harness --root ~/code --allow project.instructions
+```
+
+- Primero muestra el plan y pide confirmación (`--yes` en scripts; `--dry-run` no cambia nada).
+- Aplica un proyecto a la vez, con un bloqueo por proyecto, y nunca deja uno a medias: `modai.yaml` solo cambia si su sincronización termina bien.
+- Si uno falla, sigue con los demás (o se detiene con `--fail-fast`) y al final informa cada resultado. Repetir el comando es seguro: lo ya hecho aparece "sin cambios".
+- No sigue enlaces simbólicos, ignora `node_modules`, `.git`, `dist`… y limita la profundidad (`--depth`, 4 por defecto). `--filter api,web` restringe por ruta. Ctrl+C termina el proyecto en curso y se detiene.
+
+También: `modai workspace list`, `remove <paquete>`, `update [paquetes] [--keep-mine]` y `sync [--frozen]`.
+
+## Si editaste archivos instalados
+
+Los componentes y archivos que instala MODAI son tuyos: puedes modificarlos. Cuando sale una versión nueva y tú cambiaste un archivo, `modai update` se detiene y te deja elegir:
+
+```bash
+modai update --keep-mine   # conserva tu archivo y deja la versión nueva al lado: auth.service.ts.modai-new
+modai update --force       # reemplaza tu archivo por la versión nueva
+```
+
+Con `--keep-mine` la decisión queda registrada en `modai.lock`: los `sync` siguientes no vuelven a preguntar hasta que haya otra versión. `modai remove` nunca borra un archivo que modificaste.
+
 ## Conectar tu agente
 
 Según los adaptadores activos, `modai init` y `modai add` escriben la configuración de cada agente:
@@ -121,26 +155,43 @@ También puedes crear y versionar paquetes desde el **panel web** del servidor (
 
 ## Trabajar en equipo con un servidor
 
+```console
+$ modai ping https://modai.tu-equipo.cl
+   CHECK       DETAIL
+✓  Servidor    https://modai.tu-equipo.cl · ok · 42 ms
+✓  Versión     servidor 0.8.0 · CLI 0.8.0
+!  Credencial  no hay API key guardada para este servidor: modai connect https://modai.tu-equipo.cl
+```
+
 ```bash
 modai connect https://modai.tu-equipo.cl     # pide tu API key (créala en el panel → Conectar un cliente)
 modai init --project <id>                    # usa el servidor como registry y comparte la memoria del proyecto
 ```
 
+Para cambiar de servidor, `modai logout` borra el servidor y la API key guardados (conserva tus publicadores de confianza) y luego `modai connect <otra-url>`.
+
+Dentro de un proyecto, `modai ping` revisa también sus registries. Sale con código 1 si el servidor no responde, así que sirve en scripts. Los proyectos vinculados informan al servidor qué tienen instalado, y el panel muestra qué proyectos usan cada paquete (desactívalo con `MODAI_NO_USAGE_REPORT=1`).
+
+Con un proyecto vinculado también puedes usar **agentes** compuestos por el servidor: `modai agent list`, `agent activate <paquete>`, `agent run "<tarea>"` y `agent submit` para que lo procese un `modai worker`.
+
 ## Referencia de comandos
 
 | Para… | Comandos |
 |---|---|
-| Proyecto | `init`, `add`, `remove`, `update`, `outdated`, `sync [--frozen]`, `status`, `override` |
+| Proyecto | `init`, `add`, `remove`, `update [--keep-mine]`, `outdated`, `sync [--frozen]`, `status`, `override` |
+| Muchos repositorios | `workspace list/add/remove/update/sync` (`ws`) |
 | Listar | `list [tipo] [--available] [--json]` (`ls`), `capabilities`, `providers <capacidad>`, `registry list` |
 | Componentes | `component create`, `component list` |
 | Permisos y herramientas | `grant`, `revoke`, `permissions`, `tools list`, `tools run` |
 | Contexto y memoria | `search`, `context show`, `remember`, `recall`, `memories`, `forget` |
 | Agentes | `adapter list/add/remove`, `harness init/audit`, `agent …`, `worker` |
 | Autoría | `package scaffold/validate/keygen`, `publish`, `deprecate`, `yank`, `unpublish` |
-| Servidor | `connect`, `whoami`, `project list`, `admin …` |
+| Servidor | `ping`, `connect`, `logout`, `whoami`, `project list`, `admin …` |
 | La propia CLI | `upgrade [--check] [--tag next]`, `--version` |
 
-`modai <comando> --help` muestra las opciones de cada uno.
+`modai <comando> --help` muestra las opciones de cada uno. Todas las salidas son tablas legibles; añade `--json` a cualquier comando para usarlo en scripts.
+
+Los proyectos del formato 0.5 (`.modai/manifest.yaml`) se convierten una vez con `modai migrate`.
 
 ## Actualizar
 

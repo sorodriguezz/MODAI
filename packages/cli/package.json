@@ -1,5 +1,5 @@
 {
-  "version": "0.7.1",
+  "version": "0.8.0",
   "type": "module",
   "engines": {
     "node": ">=26.13.0 <27"
@@ -9,7 +9,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json && node scripts/bundle.mjs",
     "prepack": "npm run build -w @modai/contracts && npm run build -w @modai/sdk && npm run build -w @modai/core && npm run build"
   },
   "name": "@sorodriguez/modai",
@@ -42,9 +42,9 @@
     "./package-source": "./dist/cli/package-source.js"
   },
   "devDependencies": {
-    "@modai/contracts": "0.6.0",
-    "@modai/sdk": "0.6.0",
+    "@modai/contracts": "0.8.0",
+    "@modai/sdk": "0.8.0",
     "esbuild": "^0.28.2",
-    "@modai/core": "0.6.0"
+    "@modai/core": "0.8.0"
   }
 }
