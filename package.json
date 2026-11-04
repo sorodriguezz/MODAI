@@ -28,7 +28,7 @@
     "backup:docker": "sh deploy/backup.sh",
     "version:cli": "node scripts/cli-version.mjs set",
     "check:cli-version": "node scripts/cli-version.mjs check",
-    "test:ui": "npm run build -w @modai/admin -w @modai/server && playwright test",
+    "test:ui": "npm run build:cli && npm run build -w @modai/admin && npm run build -w @modai/server && playwright test",
     "version:set": "node scripts/cli-version.mjs set",
     "format": "biome format --write .",
     "lint": "biome check .",

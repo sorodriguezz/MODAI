@@ -35,6 +35,9 @@ try {
   await app.listen({ host: "127.0.0.1", port: 0 });
   const server = `http://127.0.0.1:${app.server.address().port}`,
     api = new ApiClient(server, "standalone-test");
+  const owner = await api.createOrganization("Smoke");
+  for (const namespace of ["@skills", "@agents"])
+    await api.createNamespace({ name: namespace, organizationId: owner.id });
   for (const name of ["skill-design-patterns", "agent-backend-reviewer"])
     await api.publish(loadPackageSource(resolve("examples/packages", name)));
   let chatCalls = 0;
