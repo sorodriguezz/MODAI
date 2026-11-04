@@ -2,12 +2,8 @@
 // Every database path a test uses maps to its own database on that server, created on first use.
 import { createHash } from "node:crypto";
 import { sql } from "kysely";
-import {
-  connectDatabase,
-  type Database,
-  openDatabase,
-} from "../../apps/server/src/infrastructure/database/database.js";
-import { parseDatabaseUrl } from "../../apps/server/src/infrastructure/database/database-url.js";
+import { connectDatabase, type Database, openDatabase } from "../../src/infrastructure/database/database.js";
+import { parseDatabaseUrl } from "../../src/infrastructure/database/database-url.js";
 
 const serverUrl = process.env.MODAI_TEST_DATABASE_URL?.trim();
 const created = new Set<string>();

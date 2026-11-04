@@ -17,7 +17,7 @@ import { ApiKeysService } from "../apps/server/src/modules/auth/api-keys.service
 import { AuthorizationService } from "../apps/server/src/modules/auth/authorization.service.js";
 import { RunsService } from "../apps/server/src/modules/runs/runs.service.js";
 import { type AppOptions, createApp } from "../apps/server/src/app.js";
-import { openTestDatabase, testDatabase } from "./support/test-database.js";
+import { openTestDatabase, testDatabase } from "../apps/server/test/support/test-database.js";
 import { activateAgent, deactivateAgent, loadActivation } from "../packages/cli/src/agents/activation.js";
 import { CapabilityHost } from "../packages/cli/src/agents/capabilities.js";
 import { executeAgent } from "../packages/cli/src/agents/runtime.js";

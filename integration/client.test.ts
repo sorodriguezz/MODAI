@@ -17,7 +17,7 @@ import {
 } from "../packages/cli/src/client/embeddings.js";
 import { type Hardware, recommendModels } from "../packages/cli/src/client/hardware.js";
 import { LocalOllama, localRuntimeUrl } from "../packages/cli/src/client/ollama.js";
-import { testDatabase } from "./support/test-database.js";
+import { testDatabase } from "../apps/server/test/support/test-database.js";
 
 function hardware(patch: Partial<Hardware> = {}): Hardware {
   return {

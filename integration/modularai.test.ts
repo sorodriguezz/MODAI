@@ -12,7 +12,7 @@ import { ApiClient } from "@modai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../apps/server/src/app.js";
-import { testDatabase } from "./support/test-database.js";
+import { testDatabase } from "../apps/server/test/support/test-database.js";
 import { auditHarness, createHarness } from "../packages/cli/src/authoring/harness.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-test-"));

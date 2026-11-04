@@ -83,7 +83,7 @@
   },
   "overrides": [
     {
-      "includes": ["examples/**", "scripts/**", "**/*.config.ts", "**/test/**", "e2e/**", "tests/**"],
+      "includes": ["examples/**", "scripts/**", "**/*.config.ts", "**/test/**", "e2e/**", "integration/**"],
       "linter": {
         "rules": {
           "complexity": {

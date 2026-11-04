@@ -10,7 +10,7 @@
     "start": "node --no-warnings apps/server/dist/main.js",
     "mcp": "node --no-warnings packages/cli/dist/bin/modai-mcp.js",
     "cli": "tsx packages/cli/src/bin/modai.ts",
-    "test": "node --import tsx --test tests/**/*.test.ts",
+    "test": "node --import tsx --test 'packages/*/test/**/*.test.ts' 'apps/*/test/**/*.test.ts' 'integration/**/*.test.ts'",
     "seed:examples": "tsx scripts/seed-examples.ts",
     "docker:up": "node scripts/deploy.mjs up -d --build",
     "docker:down": "node scripts/deploy.mjs down",

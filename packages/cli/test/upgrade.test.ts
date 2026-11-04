@@ -5,8 +5,8 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { noticeEnabled } from "../packages/cli/src/services/update-notice.ts";
-import { detectInstall, fetchDistTag } from "../packages/cli/src/services/upgrade.ts";
+import { noticeEnabled } from "../src/services/update-notice.ts";
+import { detectInstall, fetchDistTag } from "../src/services/upgrade.ts";
 
 const config = mkdtempSync(join(tmpdir(), "modai-upgrade-"));
 let server: Server;

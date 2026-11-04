@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { compareVersions, latestOf, nextAfter, versionProblem } from "../apps/admin/src/shared/lib/versions.js";
+import { compareVersions, latestOf, nextAfter, versionProblem } from "../src/shared/lib/versions.js";
 
 test("las versiones se comparan con la precedencia de SemVer", () => {
   assert.ok(compareVersions("1.10.0", "1.9.0") > 0);

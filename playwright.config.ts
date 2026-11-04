@@ -15,7 +15,7 @@ export const UI = {
 };
 
 export default defineConfig({
-  testDir: "tests/ui",
+  testDir: "e2e",
   testMatch: "**/*.spec.ts",
   fullyParallel: false,
   workers: 1,

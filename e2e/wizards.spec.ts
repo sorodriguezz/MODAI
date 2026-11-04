@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
-import { writeZip } from "../../packages/core/src/packages/zip.ts";
-import { UI } from "../../playwright.config.ts";
+import { writeZip } from "../packages/core/src/packages/zip.ts";
+import { UI } from "../playwright.config.ts";
 
 const auth = { authorization: `Bearer ${UI.token}` };
 

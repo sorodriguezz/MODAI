@@ -12,7 +12,7 @@ import {
   saveProjectFile,
   syncWorkspace,
 } from "@modai/core";
-import { createApp } from "../apps/server/src/app.js";
+import { createApp } from "../src/app.js";
 import { testDatabase } from "./support/test-database.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-server-v1-"));
@@ -108,7 +108,7 @@ test("el servidor central actúa como registry v1: valida contratos, resuelve ca
 });
 
 test("un proyecto vinculado informa lo que instala y el servidor lo muestra solo a quien tiene acceso", async () => {
-  const { runSync } = await import("../packages/cli/src/services/sync.js");
+  const { runSync } = await import("../../../packages/cli/src/services/sync.js");
   const { createProjectFile, saveProjectFile } = await import("@modai/core");
   const { ApiClient } = await import("@modai/sdk");
   const server = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
-import { UI } from "../../playwright.config.ts";
+import { UI } from "../playwright.config.ts";
 
 const auth = { authorization: `Bearer ${UI.token}` };
 

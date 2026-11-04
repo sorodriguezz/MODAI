@@ -6,7 +6,7 @@ COPY package.json package-lock.json tsconfig.base.json tsconfig.json ./
 COPY packages ./packages
 COPY apps ./apps
 COPY scripts ./scripts
-COPY tests ./tests
+COPY integration ./integration
 COPY examples ./examples
 RUN npm ci && npm run build && npm test
 

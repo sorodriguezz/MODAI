@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { createProjectFile, LocalRegistry, loadPackageSource, saveProjectFile } from "@modai/core";
 import YAML from "yaml";
-import { discoverProjects } from "../packages/cli/src/services/workspace.ts";
+import { discoverProjects } from "../src/services/workspace.ts";
 
 const root = mkdtempSync(join(tmpdir(), "modai-workspace-"));
 const env = {

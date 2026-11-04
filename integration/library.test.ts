@@ -7,7 +7,7 @@ import { createApp } from "../apps/server/src/app.js";
 import { applyVariables } from "../packages/cli/src/services/templates.js";
 import { sha256 } from "../packages/contracts/src/security/index.js";
 import { readZip, skillArchiveToPackage, writeZip } from "../packages/core/src/index.js";
-import { testDatabase } from "./support/test-database.js";
+import { testDatabase } from "../apps/server/test/support/test-database.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-library-"));
 const bootstrap = "library-bootstrap-secret";
