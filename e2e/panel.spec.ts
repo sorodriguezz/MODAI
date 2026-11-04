@@ -52,12 +52,10 @@ test("crea un componente en el editor: archivos, carpetas, validación y publica
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "Crear paquete" })).toBeVisible();
 
-  // Step by step: type → identity → files → options → dependencies → review.
   const next = () => dialog.getByRole("button", { name: "Siguiente" }).click();
   await expect(dialog.getByRole("button", { name: /Tipo/ })).toHaveAttribute("aria-current", "step");
   await next();
 
-  // Invalid names are rejected by the browser's validation (patterns must compile with the v flag) and block the step.
   await dialog.getByLabel("Nombre", { exact: true }).fill("Sin Scope");
   await next();
   await expect(dialog.locator(".form-error")).toBeVisible();
@@ -72,7 +70,6 @@ test("crea un componente en el editor: archivos, carpetas, validación y publica
   await next();
   await expect(dialog.locator("#fileList")).toContainText("README.md");
 
-  // A nested file, then rename and delete whole folders.
   await dialog.getByRole("button", { name: "Nuevo archivo" }).click();
   await dialog.getByLabel("Ruta").fill("component/utils/hash.ts");
   await dialog.getByLabel("Contenido").fill("export const hash = (value: string) => value;\n");
@@ -93,7 +90,6 @@ test("crea un componente en el editor: archivos, carpetas, validación y publica
   await expect(dialog.locator(".folder-row", { hasText: "component/tmp/" })).toHaveCount(0);
 
   await next();
-  // Options (flags) are optional: none here.
   await expect(dialog.getByRole("button", { name: /Opciones/ })).toHaveAttribute("aria-current", "step");
   await next();
   await dialog.getByRole("button", { name: "Añadir dependencia" }).click();
@@ -101,12 +97,10 @@ test("crea un componente en el editor: archivos, carpetas, validación y publica
   await expect(dialog.locator(".form-error")).toContainText("Elige un namespace y un paquete");
   await dialog.getByRole("button", { name: /Quitar/ }).click();
   await next();
-  // Arriving at the review validates automatically, with the score broken down by dimension.
   await expect(dialog.locator("#validation")).toContainText("Calidad estructural");
   await expect(dialog.locator("#validation .quality-dimensions")).toContainText("Documentación");
   await dialog.getByRole("button", { name: "Publicar" }).click();
 
-  // After publishing, the detail of the new package opens with content (not an empty dialog).
   await expect(dialog.getByRole("heading", { name: "@ui/users-module" })).toBeVisible();
   await expect(dialog.locator("#installCommand, .code-block").first()).toContainText("--allow project.source");
   await dialog.getByRole("tab", { name: "Archivos" }).click();
@@ -154,7 +148,6 @@ test("publica una nueva versión desde el detalle conservando manifiesto y archi
   await expect(dialog.getByLabel("Nombre", { exact: true })).toHaveAttribute("readonly", "");
   await dialog.getByRole("button", { name: "Siguiente" }).click();
   await expect(dialog.locator("#fileList")).toContainText("hash.ts");
-  // The stepper jumps straight to the review once the previous steps are valid.
   await dialog.getByRole("button", { name: /Revisión/ }).click();
   await expect(dialog.locator("#validation")).toContainText("Calidad estructural");
   await dialog.getByRole("button", { name: "Publicar" }).click();
@@ -242,7 +235,6 @@ test("Resumen, Agentes, Ejecuciones y Conectar no descargan el catálogo complet
   const fullCatalog: string[] = [];
   page.on("request", (sent) => {
     const url = new URL(sent.url());
-    // Only the paginated catalog, the summary, usage and a single package by name are allowed.
     if (url.pathname === "/api/v1/packages" && !url.searchParams.get("name"))
       fullCatalog.push(url.pathname + url.search);
   });
@@ -252,7 +244,6 @@ test("Resumen, Agentes, Ejecuciones y Conectar no descargan el catálogo complet
   await expect(page.locator(".stat-card", { hasText: "Agentes" })).toContainText("1");
   await expect(page.locator("#recentPackages")).toContainText("@ui/reviewer");
 
-  // Agentes is no longer a menu: old links land on the Agentes tab of Paquetes, and the agent opens from its detail.
   await page.goto("/admin#/agents");
   await expect(page).toHaveURL(/#\/packages\?type=agents/);
   await expect(
@@ -360,17 +351,14 @@ test("el detalle de un paquete con features arma el comando de instalación resp
   await expect(dialog.getByText("Opciones (features)")).toBeVisible();
   const command = dialog.locator("#installCommand");
   await expect(command).toHaveText("modai add @ui/health-flags@1.0.0 --allow project.source");
-  // Unchecking a default writes --no-x; checking a feature that requires it checks it back.
   await dialog.locator('[data-feature="metrics"]').uncheck();
   await expect(command).toContainText("--no-metrics");
   await dialog.locator('[data-feature="tls"]').check();
   await expect(dialog.locator('[data-feature="metrics"]')).toBeChecked();
   await expect(command).toHaveText("modai add @ui/health-flags@1.0.0 --tls --allow project.source");
-  // A conflicting feature unchecks the other one.
   await dialog.locator('[data-feature="legacy"]').check();
   await expect(dialog.locator('[data-feature="tls"]')).not.toBeChecked();
   await expect(command).toHaveText("modai add @ui/health-flags@1.0.0 --legacy --allow project.source");
-  // Unchecking a feature unchecks what needs it, so the command is always one the CLI accepts.
   await dialog.locator('[data-feature="tls"]').check();
   await expect(dialog.locator('[data-feature="legacy"]')).not.toBeChecked();
   await dialog.locator('[data-feature="metrics"]').uncheck();

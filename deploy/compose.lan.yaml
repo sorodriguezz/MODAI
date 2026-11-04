@@ -1,7 +1,6 @@
 services:
   server:
     environment:
-      # Caddy reenvía las peticiones: confía en su cabecera X-Forwarded-For y protocolo.
       MODAI_TRUST_PROXY: "true"
   caddy:
     image: caddy:2.10-alpine

@@ -1,22 +1,13 @@
-# Fly.io. Despliega desde la raíz del repositorio:
-#   fly deploy . --config deploy/fly/fly.toml --dockerfile deploy/Dockerfile --ha=false
-# (o npm run deploy:fly). Guía: docs/guides/DEPLOY.md
-#
-# MODAI usa SQLite: debe existir UNA sola máquina con UN volumen. --ha=false evita la segunda
-# máquina que Fly crea por defecto; no escales con `fly scale count` por encima de 1.
-
-app = "modai-REEMPLAZAR"          # nombre único de tu app en Fly
-primary_region = "scl"             # Santiago; cambia según tu ubicación (fly platform regions)
+app = "modai-REEMPLAZAR"
+primary_region = "scl"
 
 [env]
   MODAI_HOST = "0.0.0.0"
   MODAI_PORT = "8787"
   MODAI_DATABASE_PATH = "/app/data/modularai.db"
-  MODAI_ARTIFACT_DIR = "/app/data/artifacts"   # un solo volumen para base y artefactos
-  MODAI_TRUST_PROXY = "true"                   # el proxy de Fly termina TLS y reenvía la IP del cliente
+  MODAI_ARTIFACT_DIR = "/app/data/artifacts"
+  MODAI_TRUST_PROXY = "true"
   MODAI_SIGNATURE_POLICY = "optional"
-  # MODAI_PUBLIC_URL = "https://modai-REEMPLAZAR.fly.dev"
-  # Secretos (no aquí): fly secrets set MODAI_API_TOKEN=... MODAI_ADMIN_USERNAME=... MODAI_ADMIN_PASSWORD=...
 
 [[mounts]]
   source = "modai_data"
@@ -26,9 +17,9 @@ primary_region = "scl"             # Santiago; cambia según tu ubicación (fly 
 [http_service]
   internal_port = 8787
   force_https = true
-  auto_stop_machines = "stop"      # se detiene sin tráfico; el volumen conserva los datos
+  auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0         # usa 1 si los workers necesitan la API siempre disponible
+  min_machines_running = 0
 
   [http_service.concurrency]
     type = "requests"

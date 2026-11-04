@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const MAX_LINES = 250;
 const SOURCE = /^(apps|packages)\/[^/]+\/src\/.+\.(ts|js)$/;

@@ -13,24 +13,23 @@ import { createProjectFile, HttpRegistry, loadV1Project, saveProjectFile, syncWo
 import { ApiClient } from "@modai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { type AppOptions, createApp } from "../apps/server/src/app.js";
 import { ApiKeysService } from "../apps/server/src/modules/auth/api-keys.service.js";
 import { AuthorizationService } from "../apps/server/src/modules/auth/authorization.service.js";
 import { RunsService } from "../apps/server/src/modules/runs/runs.service.js";
-import { type AppOptions, createApp } from "../apps/server/src/app.js";
 import { openTestDatabase, testDatabase } from "../apps/server/test/support/test-database.js";
 import { activateAgent, deactivateAgent, loadActivation } from "../packages/cli/src/agents/activation.js";
 import { CapabilityHost } from "../packages/cli/src/agents/capabilities.js";
 import { executeAgent } from "../packages/cli/src/agents/runtime.js";
-import { verifyPackage } from "../packages/cli/src/services/trust.js";
 import { workOnce } from "../packages/cli/src/agents/worker.js";
 import { loadPackageSource } from "../packages/cli/src/authoring/package-source.js";
+import { verifyPackage } from "../packages/cli/src/services/trust.js";
 
 const approvalDirectory = mkdtempSync(join(tmpdir(), "modai-test-approvals-"));
 process.env.MODAI_CONFIG_DIR = approvalDirectory;
 after(() => rmSync(approvalDirectory, { recursive: true, force: true }));
 const admin = "platform-test-secret";
 const headers = { authorization: `Bearer ${admin}` };
-/** A v1 package; `spec` is merged into spec (permissions, dependencies, contributes...). */
 function input(
   name: string,
   spec: Record<string, unknown> = {},
@@ -77,7 +76,6 @@ async function publishExamples(api: ApiClient) {
   for (const name of ["skill-design-patterns", "agent-backend-reviewer"])
     await api.publish(loadPackageSource(join(process.cwd(), "examples/packages", name)));
 }
-/** A v1 project linked to server project `id`, with the server as its registry (what `modai init --project` creates). */
 async function localProject(root: string, server: string, id: string) {
   const path = join(root, "project");
   mkdirSync(path);
@@ -106,7 +104,12 @@ function installV1(server: string, project: string, dependencies: Record<string,
     trust: { policy: "optional", trustedPublishers: [] },
   });
 }
-async function fakeOllama(chat: (body: any, index: number) => unknown) {
+interface ChatRequest {
+  tools: Array<{ function: { name: string } }>;
+  messages: unknown[];
+}
+
+async function fakeOllama(chat: (body: ChatRequest, index: number) => unknown) {
   let count = 0;
   const server = createServer(async (req, res) => {
     res.setHeader("content-type", "application/json");
@@ -379,7 +382,6 @@ test("rechaza herramientas ausentes, políticas de memoria incompatibles y colis
         agents: [{ name, instructions: "Revisa", skills: [], capabilities, memory: { read: ["project"], write } }],
       },
     });
-    // Sin dependencias, un nombre que no es integrado ni servidor propio no puede resolverse nunca.
     await assert.rejects(
       () => f.api.publish(input("@agents/missing", agent("missing", ["missing"]))),
       /AGENT_CAPABILITY/,
@@ -394,7 +396,6 @@ test("rechaza herramientas ausentes, políticas de memoria incompatibles y colis
       (await f.api.composeAgent("p", "@agents/writer")).capabilities.map((c) => c.name),
       ["modai_remember"],
     );
-    // Con dependencias el servidor solo puede comprobarlo al componer, cuando sabe qué aportan.
     await f.api.publish(input("@lib/empty"));
     await f.api.publish(input("@agents/lost", { dependencies: { "@lib/empty": "*" }, ...agent("lost", ["missing"]) }));
     await assert.rejects(() => f.api.composeAgent("p", "@agents/lost"), /CAPABILITY_NOT_FOUND/);
@@ -422,7 +423,7 @@ test("ejecuta ciclo de herramientas con Ollama y el contexto autorizado del proy
     await f.api.remember({ projectId: "p", content: "Usamos UUID" });
     runtime = await fakeOllama((body, index) => {
       if (index === 0) {
-        assert.ok(body.tools.some((t: any) => t.function.name === "modai_recall"));
+        assert.ok(body.tools.some((tool) => tool.function.name === "modai_recall"));
         return {
           message: {
             role: "assistant",
@@ -623,7 +624,7 @@ test("restaura proyectos, organización, memorias y tareas sin credenciales ni l
       task: "Restore job",
     });
     await source.api.claimRun("restore");
-    const snapshot = (await source.api.exportBackup()) as any;
+    const snapshot = (await source.api.exportBackup()) as Record<string, unknown>;
     assert.ok(!JSON.stringify(snapshot).includes(admin));
     assert.equal(snapshot.apiKeys, undefined);
     await target.api.importBackup(snapshot);

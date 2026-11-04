@@ -1,9 +1,7 @@
-# Internet-facing HTTPS. DNS for MODAI_PUBLIC_HOST must point to this host, with ports 80/443 reachable.
 services:
   server:
     environment:
       MODAI_PUBLIC_URL: "https://${MODAI_PUBLIC_HOST:?Define MODAI_PUBLIC_HOST con tu dominio}"
-      # Caddy termina TLS y reenvía la IP real del cliente.
       MODAI_TRUST_PROXY: "true"
   caddy:
     image: caddy:2.10-alpine

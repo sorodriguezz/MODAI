@@ -1,7 +1,3 @@
-// Acceptance criterion from ADR-004:
-// "An external developer can create a regression-testing package, publish it, install it in a project,
-//  connect it to a compatible agent and run it without changing a single line of MODAI Core."
-// Everything here goes through the real CLI and MCP gateway; no server is running.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -47,7 +43,6 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
   const registry = join(root, "team-registry");
   mkdirSync(dev, { recursive: true });
 
-  // 1. Author two independent packages with the CLI scaffold and the v1 spec.
   await modai(
     dev,
     "package",
@@ -93,7 +88,6 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
   await modai(dev, "package", "publish", "regression", "--registry", registry);
   assert.match(await modaiFails(dev, "package", "publish", "regression", "--registry", registry), /inmutable/);
 
-  // 2. A project installs it from the shared registry. No MODAI server exists anywhere.
   const project = join(root, "shop");
   mkdirSync(project);
   await modai(
@@ -127,7 +121,6 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
   assert.equal(capabilities.tools[0].authorized, false, "instalar no equivale a autorizar");
   assert.match(await modaiFails(project, "capability", "run", "browser_run_tests"), /modai permissions grant/);
 
-  // 3. Connect to a compatible agent through MCP; authorise explicitly; run.
   await modai(project, "permissions", "grant", "@acme/fake-browser", "--yes");
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -163,7 +156,6 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
   }
   assert.match(await modai(project, "memory", "search", "sandbox pago"), /PSP/);
 
-  // 4. Reproducible on another machine/clone from modai.yaml + modai.lock alone.
   const clone = join(root, "shop-clone");
   mkdirSync(clone);
   for (const name of ["modai.yaml", "modai.lock"]) writeFileSync(join(clone, name), readFileSync(join(project, name)));
@@ -178,7 +170,6 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
     "las autorizaciones no viajan con el repositorio",
   );
 
-  // 5. Reversible.
   await modai(project, "remove", "@acme/regression");
   assert.equal(existsSync(join(project, ".agents/skills/regression")), false);
   assert.doesNotMatch(readFileSync(join(project, "AGENTS.md"), "utf8"), /@acme\/regression/);

@@ -97,7 +97,7 @@ export function saveProjectFile(root: string, file: ProjectFile): void {
   writeProjectFile(
     root,
     PROJECT_FILE,
-    `# Proyecto MODAI. Edita dependencias con 'modai add/remove'; la especificación está en docs/spec/PACKAGE-SPEC-v1.md\n${YAML.stringify(clean, { lineWidth: 0 })}`,
+    `# Proyecto MODAI. Edita dependencias con 'modai add/remove'; la especificación está en https://github.com/sorodriguezz/MODAI/blob/main/packages/contracts/README.md\n${YAML.stringify(clean, { lineWidth: 0 })}`,
   );
 }
 

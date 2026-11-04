@@ -66,7 +66,9 @@ export function loadPackageSource(directory: string): PublishPackageInput {
   if (!existsSync(manifestPath)) throw new Error(`Falta ${manifestPath}`);
   const manifest = YAML.parse(readFileSync(manifestPath, "utf8"));
   if (manifest?.apiVersion !== API_VERSION)
-    throw new Error(`${manifestPath} debe declarar apiVersion: ${API_VERSION} (ver docs/spec/PACKAGE-SPEC-v1.md).`);
+    throw new Error(
+      `${manifestPath} debe declarar apiVersion: ${API_VERSION} (ver https://github.com/sorodriguezz/MODAI/blob/main/packages/contracts/README.md).`,
+    );
   expandEntrypoints(root, manifest as RawManifestV1);
   const spec = (manifest as RawManifestV1).spec ?? {};
   return { manifest, files: readSources(root, collectSources(root, spec)) };

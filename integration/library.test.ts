@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { createApp } from "../apps/server/src/app.js";
+import { testDatabase } from "../apps/server/test/support/test-database.js";
 import { applyVariables } from "../packages/cli/src/services/templates.js";
 import { sha256 } from "../packages/contracts/src/security/index.js";
 import { readZip, skillArchiveToPackage, writeZip } from "../packages/core/src/index.js";
-import { testDatabase } from "../apps/server/test/support/test-database.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-library-"));
 const bootstrap = "library-bootstrap-secret";
@@ -222,7 +222,6 @@ test("los templates son paquetes kind: Template: se publican desde archivos o ZI
     ["nestjs-sdd/.env.example", "nestjs-sdd/package.json", "nestjs-sdd/src/main.ts"],
   );
 
-  // A template creates projects; it never installs into one, not even as a dependency.
   const install = await call(admin, "POST", "/resolve", {
     packages: [{ name: "@plantillas/nestjs-sdd", range: "^1.0.0" }],
   });
@@ -285,7 +284,6 @@ test("las categorías se registran, listan las que usan los paquetes y solo la a
     listed.some((c: { name: string; registered: boolean }) => c.name === "backend" && c.registered),
     "un servidor nuevo trae categorías base",
   );
-  // Used by a published package without being registered: listed so an admin can register it.
   assert.ok(
     listed.some((c: { name: string; registered: boolean; packages: number }) => c.name === "skill" && c.registered),
   );
@@ -451,7 +449,6 @@ test("la CLI publica un .skill y crea proyectos desde un template", async () => 
   assert.equal(readFileSync(join(root, "mi-app", "package.json"), "utf8"), '{ "name": "mi-app", "owner": "equipo" }\n');
   assert.ok(existsSync(join(root, "mi-app", "src", "mi-app.module.ts")));
   assert.ok(!existsSync(join(root, "mi-app", ".env")), "los .env no se publican");
-  // A template is verified like an installed package: an unsigned one is refused when this machine requires signatures.
   const clientConfig = join(root, "config", "client.yaml");
   mkdirSync(join(root, "config"), { recursive: true });
   writeFileSync(clientConfig, `server: ${server}\nsignaturePolicy: signed\n`);
@@ -498,7 +495,6 @@ test("un template con features se arma por capas con flags (--sdd, --no-x, --wit
     writeFileSync(path, text);
   };
 
-  // An add-on: a template meant to be layered onto others.
   const addon = join(root, "addon-sdd");
   write(join(addon, "specs", "README.md"), "# Specs de {{projectName}}\n");
   write(join(addon, "modai.template.yaml"), 'addon:\n  for: ["@cli/springboot"]\n');
@@ -551,7 +547,6 @@ test("un template con features se arma por capas con flags (--sdd, --no-x, --wit
   );
   assert.equal(published.status, 0, published.stderr);
 
-  // --help shows what this template declares (not just the fixed options).
   const help = await modai("template", "use", "@cli/springboot", "--help");
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /--sdd\s+Spec-Driven Development/);
@@ -563,7 +558,6 @@ test("un template con features se arma por capas con flags (--sdd, --no-x, --wit
   );
   assert.match((await modai("template", "use", "-h")).stdout, /--dry-run/);
 
-  // Default: the base plus the features switched on by default.
   const plain = await modai("template", "use", "@cli/springboot", "app-base");
   assert.equal(plain.status, 0, plain.stderr);
   assert.equal(readFileSync(join(root, "app-base", "AGENTS.md"), "utf8"), "base\n");
@@ -572,7 +566,6 @@ test("un template con features se arma por capas con flags (--sdd, --no-x, --wit
   assert.ok(!existsSync(join(root, "app-base", "modai.template.yaml")), "el manifiesto no se copia");
   assert.ok(!existsSync(join(root, "app-base", "features")), "las carpetas de features no se copian");
 
-  // Flags add layers; --sdd also pulls its add-on first, then the feature folder wins over the base.
   const full = await modai("template", "use", "@cli/springboot", "--sdd", "--x-lib", "app-full");
   assert.equal(full.status, 0, full.stderr);
   assert.match(full.stdout, /features: lombok, sdd, x-lib|features: sdd, x-lib, lombok/);
@@ -580,7 +573,6 @@ test("un template con features se arma por capas con flags (--sdd, --no-x, --wit
   assert.equal(readFileSync(join(root, "app-full", "docs", "sdd.md"), "utf8"), "SDD specs\n");
   assert.equal(readFileSync(join(root, "app-full", "specs", "README.md"), "utf8"), "# Specs de app-full\n");
   assert.ok(existsSync(join(root, "app-full", "src", "XLib.java")));
-  // The MODAI packages of --sdd land in the new project's modai.yaml (created, since the template has none).
   const projectYaml = readFileSync(join(root, "app-full", "modai.yaml"), "utf8");
   assert.match(projectYaml, /"@methodologies\/sdd": \^1/);
   assert.match(projectYaml, /features:\n\s+"@components\/health-module":\n\s+metrics: true/);
@@ -590,7 +582,6 @@ test("un template con features se arma por capas con flags (--sdd, --no-x, --wit
     "sin features que aporten paquetes no se crea modai.yaml",
   );
 
-  // --no-<feature> switches a default off; one that another feature requires cannot be.
   const without = await modai("template", "use", "@cli/springboot", "app-sin", "--no-lombok");
   assert.equal(without.status, 0, without.stderr);
   assert.ok(!existsSync(join(root, "app-sin", "lombok.config")));
@@ -598,7 +589,6 @@ test("un template con features se arma por capas con flags (--sdd, --no-x, --wit
   assert.notEqual(clash.status, 0);
   assert.match(clash.stderr, /no se puede quitar "lombok" porque "x-lib" la requiere/);
 
-  // An unknown flag fails with the template's own options; --with layers an add-on; --dry-run writes nothing.
   const unknown = await modai("template", "use", "@cli/springboot", "app-x", "--sdd2");
   assert.notEqual(unknown.status, 0);
   assert.match(unknown.stderr, /¿Quisiste decir --sdd\?.*Features: --sdd, --x-lib, --lombok/);
@@ -609,7 +599,6 @@ test("un template con features se arma por capas con flags (--sdd, --no-x, --wit
   assert.equal(dry.status, 0, dry.stderr);
   assert.match(dry.stdout, /src\/XLib\.java/);
   assert.ok(!existsSync(join(root, "app-dry")));
-  // The add-on only accepts the bases it was made for.
   const other = join(root, "otra-base");
   write(join(other, "a.txt"), "a");
   assert.equal(
@@ -620,7 +609,6 @@ test("un template con features se arma por capas con flags (--sdd, --no-x, --wit
   assert.notEqual(wrong.status, 0);
   assert.match(wrong.stderr, /solo para @cli\/springboot/);
 
-  // The server refuses a manifest that points at a folder that does not exist.
   const broken = join(root, "roto");
   write(join(broken, "a.txt"), "a");
   write(join(broken, "modai.template.yaml"), "features:\n  x:\n    description: falta\n    path: features/x\n");
@@ -660,7 +648,6 @@ test("la misma CLI gestiona skills, conocimiento, memoria, templates, usuarios y
   };
   const json = async (...args: string[]) => JSON.parse(await modai("--json", ...args));
 
-  // Skills: a folder with SKILL.md is published like a .skill, and exported back as one.
   const folder = join(root, "deploy-check");
   mkdirSync(join(folder, "references"), { recursive: true });
   writeFileSync(
@@ -681,7 +668,6 @@ test("la misma CLI gestiona skills, conocimiento, memoria, templates, usuarios y
   );
   await modai("package", "deprecate", "@cli-skills/deploy-check@1.0.0", "--message", "Usa la 2.x");
 
-  // Shared knowledge on the server.
   writeFileSync(join(root, "guia.md"), "# Guía de despliegue\n\nSiempre con feature flags.\n");
   const created = (
     await modai(
@@ -700,7 +686,6 @@ test("la misma CLI gestiona skills, conocimiento, memoria, templates, usuarios y
   assert.equal((await json("knowledge", "show", created)).title, "Guía de despliegues");
   await modai("knowledge", "remove", created);
 
-  // Memory of a server project, without modai.yaml.
   await call(admin, "POST", "/projects", { id: "cli-mem", name: "CLI memoria" });
   await modai("memory", "add", "Usamos PostgreSQL 17", "--kind", "decision", "--project", "cli-mem");
   writeFileSync(join(root, "memorias.md"), "# Decisiones\n\n- Las fechas van en UTC\n- Nada de ORMs mágicos\n");
@@ -709,7 +694,6 @@ test("la misma CLI gestiona skills, conocimiento, memoria, templates, usuarios y
   await modai("memory", "export", join(root, "memorias.jsonl"), "--project", "cli-mem");
   assert.equal(readFileSync(join(root, "memorias.jsonl"), "utf8").trim().split("\n").length, 3);
 
-  // Templates are packages: versions listed by `template info`, retired with `package yank`.
   const model = join(root, "modelo-2");
   mkdirSync(model, { recursive: true });
   writeFileSync(join(model, "README.md"), "# {{projectName}}\n");
@@ -720,7 +704,6 @@ test("la misma CLI gestiona skills, conocimiento, memoria, templates, usuarios y
   assert.deepEqual(info.versions, ["1.1.0 (retirada)", "1.0.0"]);
   assert.equal(info.version, "1.0.0", "la retirada deja de ser la última");
 
-  // Users, namespaces and organizations.
   const org = (await call(admin, "POST", "/organizations", { name: "CLI Org" })).body.organization.id;
   await modai("admin", "update-namespace", "@cli-skills", "--organization", org, "--restricted");
   assert.ok(
@@ -755,7 +738,6 @@ test("la misma CLI gestiona skills, conocimiento, memoria, templates, usuarios y
   );
   assert.ok(!existsSync(join(root, "no-existe")));
 
-  // Categories, package usage, projects and publishers: the same as the panel.
   assert.ok((await json("category", "list")).some((item: { name: string }) => item.name === "backend"));
   await modai("category", "create", "datos", "--description", "Bases de datos y ETL");
   assert.ok(
@@ -780,7 +762,6 @@ test("la misma CLI gestiona skills, conocimiento, memoria, templates, usuarios y
     (await json("list", "templates", "--available")).some((row: { package: string }) => row.package === "@cli/basico"),
   );
 
-  // Authoring a template's options without writing YAML.
   const fresh = join(root, "plantilla-nueva");
   await modai("template", "init", fresh);
   mkdirSync(join(fresh, "features", "sdd"), { recursive: true });

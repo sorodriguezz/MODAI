@@ -1,7 +1,3 @@
-// MODAI ships one product version: CLI, Core, contracts, SDK, server and panel move together.
-// The version lives in every workspace package.json and is repeated in a few sources.
-//   node scripts/cli-version.mjs set 0.8.0   (updates everything and refreshes package-lock.json)
-//   node scripts/cli-version.mjs check       (fails when any copy disagrees; used by CI)
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -29,7 +25,6 @@ const INTERNAL = /^@modai\//;
 const read = (file) => readFileSync(resolve(root, file), "utf8");
 const cliVersion = () => JSON.parse(read("packages/cli/package.json")).version;
 
-/** Every place that states a version, with what it currently says. */
 function copies() {
   const found = [];
   for (const file of MANIFESTS) {

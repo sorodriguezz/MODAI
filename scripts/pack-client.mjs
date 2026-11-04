@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = resolve(root, "dist/npm");
 mkdirSync(output, { recursive: true });
-// Retire artifacts from the former scoped distribution.
 for (const file of readdirSync(output))
   if (/^(modai-(contracts|sdk|cli)|moduleai)-.*\.tgz$/.test(file)) rmSync(resolve(output, file));
 const result = spawnSync(

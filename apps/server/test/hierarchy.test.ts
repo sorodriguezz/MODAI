@@ -188,7 +188,6 @@ test("los permisos que reparte una administración de organización siguen la je
     organizationIds: [orgB],
   });
 
-  // API keys are created for a user and never exceed that user.
   const forAna = (body: Record<string, unknown>) =>
     call(orgAdmin, "POST", "/admin/api-keys", {
       label: "ana ci",
@@ -291,7 +290,6 @@ test("cada persona crea sus API keys y nunca superan sus permisos, ni siquiera d
     "notebook",
     "worker",
   ]);
-  // A project created through a key belongs to its owner.
   assert.equal(
     (await call(asKey, "POST", "/projects", { id: "carla-propio", name: "Propio", organizationId: orgA })).status,
     201,
@@ -300,7 +298,6 @@ test("cada persona crea sus API keys y nunca superan sus permisos, ni siquiera d
     (await call(session, "GET", "/projects")).body.projects.some((p: { id: string }) => p.id === "carla-propio"),
   );
 
-  // Narrowing the owner narrows the keys on the next request.
   await call(admin, "PATCH", "/admin/users/" + user.id, { projectIds: [], packageScopes: [] });
   assert.equal((await call(as(narrow.token), "GET", "/memories?projectId=pa")).status, 403);
   assert.deepEqual((await call(asKey, "GET", "/session")).body.permissions.publish.namespaces, []);

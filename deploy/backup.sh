@@ -1,9 +1,4 @@
 #!/bin/sh
-# Respaldo en caliente de una instalación Docker Compose (Raspberry Pi, VPS).
-# Copia consistente de SQLite (API de backup de better-sqlite3) y de los artefactos.
-# Uso: sh deploy/backup.sh [carpeta-destino]      (por defecto ./backups)
-# Variables: COMPOSE_FILES para añadir overlays, por ejemplo
-#   COMPOSE_FILES="-f deploy/compose.yaml -f deploy/compose.raspberry.yaml" sh deploy/backup.sh
 set -eu
 cd "$(dirname "$0")/.."
 DEST="${1:-backups}"

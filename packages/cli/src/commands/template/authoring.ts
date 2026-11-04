@@ -16,7 +16,7 @@ const SKELETON: Record<string, string> = {
   [TEMPLATE_MANIFEST]: [
     "# Opciones de este template: se activan con flags al usarlo (modai template use <template> --sdd).",
     '# Añádelas con: modai feature define . sdd --description "Spec-Driven Development" --path features/sdd',
-    "# Guía completa: docs/guides/TEMPLATES.md",
+    "# Guía completa: https://github.com/sorodriguezz/MODAI/blob/main/packages/cli/README.md#templates-de-proyecto",
     "features: {}",
     "",
   ].join("\n"),

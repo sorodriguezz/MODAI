@@ -265,7 +265,6 @@ test("protege al último administrador y la propia cuenta", async () => {
       .statusCode,
     409,
   );
-  // Even an admin API key cannot remove the last active admin account.
   const lastAdmin = await app.inject({ method: "DELETE", url: `/api/v1/admin/users/${me.id}`, headers: bearer });
   assert.equal(lastAdmin.statusCode, 409);
   assert.equal(lastAdmin.json().error.code, "LAST_ADMIN");
@@ -411,7 +410,6 @@ test("las API keys Bearer siguen funcionando sin cookie ni CSRF", async () => {
     (await app.inject({ method: "GET", url: "/api/v1/auth/me", headers: auth })).json().identity.kind,
     "api-key",
   );
-  // An invalid Bearer never falls back to the cookie.
   assert.equal(
     (
       await app.inject({
@@ -461,7 +459,6 @@ test("bloquea el usuario tras varios intentos fallidos", async () => {
     payload: { username: "bloqueo", password: "clave-correcta-01" },
   });
   assert.equal(locked.statusCode, 429);
-  // The lock is per address: someone else who knows the username cannot lock its owner out.
   const elsewhere = await app.inject({
     method: "POST",
     url: "/api/v1/auth/login",
@@ -510,7 +507,6 @@ test("/health no revela el runtime sin sesión y validar o importar .skill exige
 
 test("importar un backup es todo o nada", async () => {
   const before = (await app.inject({ method: "GET", url: "/api/v1/projects", headers: bearer })).json().projects.length;
-  // The project is valid; the package fails on publish (its file hash does not match), after the project was written.
   const broken = await app.inject({
     method: "POST",
     url: "/api/v1/admin/import",

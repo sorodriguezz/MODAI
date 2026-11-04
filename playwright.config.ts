@@ -1,5 +1,3 @@
-// Panel UI tests: `npm run test:ui`. They start a real server on a throwaway database and drive
-// the compiled panel in Chromium. Run `npx playwright install chromium` once beforehand.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

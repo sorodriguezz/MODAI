@@ -10,7 +10,6 @@ COPY integration ./integration
 COPY examples ./examples
 RUN npm ci && npm run build && npm test
 
-# Optional authoring/seeding image. The HTTP server image below excludes CLI dependencies.
 FROM node:26.13.0-bookworm-slim AS client
 WORKDIR /app
 COPY --from=build --chown=node:node /app/package.json /app/package-lock.json ./
@@ -40,8 +39,6 @@ COPY --from=build --chown=node:node /app/packages/core/dist ./packages/core/dist
 COPY --from=build --chown=node:node /app/apps/server/dist ./apps/server/dist
 COPY --from=build --chown=node:node /app/apps/admin/dist ./apps/admin/dist
 RUN mkdir -p /app/data /app/artifacts && chown -R node:node /app/data /app/artifacts
-# The entrypoint starts as root only to fix ownership of platform-mounted volumes
-# (Fly.io, Railway), then drops to the unprivileged `node` user (uid 1000) before serving.
 EXPOSE 8787
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.MODAI_PORT||process.env.PORT||8787)+'/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"

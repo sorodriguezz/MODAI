@@ -87,7 +87,6 @@ test("el servidor central actúa como registry v1: valida contratos, resuelve ca
   assert.equal(rejected.statusCode, 400);
   assert.equal(rejected.json().error.code, "PERMISSION_UNDECLARED");
 
-  // The same server is consumed by the Core through HttpRegistry.
   const server = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
   const project = join(root, "project");
   mkdirSync(project);
@@ -125,7 +124,6 @@ test("un proyecto vinculado informa lo que instala y el servidor lo muestra solo
       context: { memory: "remote", server, projectId: "usage-project" },
     }),
   );
-  // As in CI: the token goes with the server it belongs to (MODAI_API_TOKEN alone never travels to a modai.yaml's registry).
   process.env.MODAI_SERVER = server;
   process.env.MODAI_API_TOKEN = "v1-secret";
   try {
@@ -223,7 +221,6 @@ test("los backups conservan qué proyecto usa qué y el resumen del panel no nec
   });
   try {
     const restoreHeaders = { authorization: "Bearer restore-secret" };
-    // A newer report already on the target server must survive an older backup.
     await restored.inject({
       method: "POST",
       url: "/api/v1/projects",
@@ -372,7 +369,6 @@ test("un proyecto se elimina con su memoria, ejecuciones e instalaciones, y sale
     403,
     "el proyecto ya no existe",
   );
-  // Re-creating the id starts empty.
   await app.inject({
     method: "POST",
     url: "/api/v1/projects",

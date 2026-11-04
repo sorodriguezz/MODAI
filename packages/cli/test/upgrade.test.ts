@@ -27,7 +27,6 @@ after(() => {
   rmSync(config, { recursive: true, force: true });
 });
 
-// Asynchronous on purpose: the fake registry runs in this same process and must keep answering.
 function cli(...args: string[]): Promise<{ status: number; stdout: string; stderr: string }> {
   return new Promise((resolve) =>
     execFile(
@@ -53,7 +52,6 @@ test("modai upgrade consulta la etiqueta de npm y no instala sobre una CLI que n
   assert.match(check.stdout, /→ 99\.0\.0\. Actualiza con: modai upgrade/);
   assert.equal(JSON.parse(readFileSync(join(config, "update-check.json"), "utf8")).latest, "99.0.0");
 
-  // Run from the repository: there is nothing global to replace, so it explains instead of installing.
   const upgrade = await cli("upgrade", "--yes");
   assert.equal(upgrade.status, 0, upgrade.stderr);
   assert.match(upgrade.stdout, /no es una instalación global[\s\S]*npm install -g @sorodriguez\/modai@99\.0\.0/);

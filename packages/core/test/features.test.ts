@@ -71,7 +71,6 @@ const artifact = (files: Record<string, string>) =>
     sha256: sha256(Buffer.from(text)),
   }));
 
-/** A component with optional parts: what the CLI test installs and the unit tests inspect. */
 const HEALTH = {
   metadata: {
     name: "@acme/health",
@@ -290,7 +289,6 @@ test("modai add con flags por paquete, modai feature y sync reproducen las featu
   const yaml = () => YAML.parse(read("modai.yaml"));
   const lock = () => YAML.parse(read("modai.lock"));
 
-  // --help shows what the package declares, also before installing it.
   const help = await ok(project, "add", "@acme/health", "--help");
   assert.match(help, /Opciones de este paquete:/);
   assert.match(help, /--metrics \/ --no-metrics\s+Métricas Prometheus \(activada por defecto; modifica health\)/);
@@ -302,7 +300,6 @@ test("modai add con flags por paquete, modai feature y sync reproducen las featu
   assert.match(await ok(project, "add", "@acme/plain", "-h"), /no declara features/);
   assert.match(await ok(project, "add", "--help"), /Cada flag se aplica al paquete escrito antes/);
 
-  // Typos and impossible combinations fail before touching the project.
   const typo = await modai(project, "add", "@acme/health", "--tsl", "--allow", "project.source");
   assert.notEqual(typo.status, 0);
   assert.match(typo.stderr, /no tiene la opción --tsl\. ¿Quisiste decir --tls\?/);
@@ -312,7 +309,6 @@ test("modai add con flags por paquete, modai feature y sync reproducen las featu
   assert.ok(!existsSync(join(project, "src")));
   assert.deepEqual(yaml().dependencies ?? {}, {}, "modai.yaml no cambia si la instalación falla");
 
-  // Flags belong to the package written before them.
   const added = await ok(project, "add", "@acme/health", "--tls", "@acme/plain", "--allow", "project.source");
   assert.match(added, /Features: @acme\/health \(metrics, tls\)/);
   assert.deepEqual(yaml().features, { "@acme/health": { tls: true } });
@@ -326,7 +322,6 @@ test("modai add con flags por paquete, modai feature y sync reproducen las featu
   assert.ok(!existsSync(join(project, "src/modules/health/legacy.ts")));
   assert.ok(!existsSync(join(project, "src/modules/health-admin")));
 
-  // modai feature: list, enable, disable (respecting requires) and reset.
   const listed = JSON.parse(await ok(project, "--json", "feature", "list", "@acme/health"));
   assert.deepEqual(
     listed.map((row: { feature: string; active: boolean; choice: string }) => [row.feature, row.active, row.choice]),
@@ -359,7 +354,6 @@ test("modai add con flags por paquete, modai feature y sync reproducen las featu
   const unknown = await modai(project, "feature", "enable", "@acme/health", "metricss");
   assert.match(unknown.stderr, /¿Quisiste decir "metrics"\?/);
 
-  // The project rebuilds exactly from modai.yaml + modai.lock.
   rmSync(join(project, "src"), { recursive: true, force: true });
   rmSync(join(project, ".modai", "store"), { recursive: true, force: true });
   await ok(project, "sync", "--frozen");
@@ -368,13 +362,11 @@ test("modai add con flags por paquete, modai feature y sync reproducen las featu
   const status = JSON.parse(await ok(project, "--json", "status"));
   assert.deepEqual(status.installed.find((item: { name: string }) => item.name === "@acme/health").features, ["admin"]);
 
-  // reset goes back to the package's defaults and cleans modai.yaml.
   assert.match(await ok(project, "feature", "reset", "@acme/health"), /Features activas: metrics/);
   assert.equal(yaml().features, undefined);
   assert.ok(existsSync(join(project, "src/modules/health/metrics.ts")));
   assert.ok(!existsSync(join(project, "src/modules/health-admin")));
 
-  // Adding again with new flags merges with what was chosen before.
   await ok(project, "add", "@acme/health", "--admin", "--no-metrics");
   assert.deepEqual(yaml().features, { "@acme/health": { admin: true, metrics: false } });
   assert.deepEqual(
@@ -383,12 +375,10 @@ test("modai add con flags por paquete, modai feature y sync reproducen las featu
     ["metrics"],
   );
 
-  // Removing the package forgets its choices too.
   await ok(project, "remove", "@acme/health");
   assert.equal(yaml().features, undefined);
   assert.ok(!existsSync(join(project, "src/modules/health")));
 
-  // modai workspace add takes the same flags and applies them in every project.
   const repos = join(root, "repos");
   for (const name of ["api", "web"]) {
     mkdirSync(join(repos, name), { recursive: true });
@@ -422,7 +412,6 @@ test("las correcciones de validación: Profiles, nombres reservados, features im
     (features: Record<string, unknown>, files: Record<string, string> = HEALTH_FILES, kind = "Package") =>
     () =>
       validatePackage({ ...base, kind, spec: { ...HEALTH.spec, features } } as never, artifact(files));
-  // A Profile cannot sneak tools in through a feature.
   assert.throws(
     () =>
       validatePackage(
@@ -445,13 +434,11 @@ test("las correcciones de validación: Profiles, nombres reservados, features im
       ),
     /Profile/,
   );
-  // Names that commands already use as options.
   for (const name of ["sync", "root", "filter", "allow"])
     assert.throws(
       check({ [name]: { description: "x", overlays: [{ component: "health", path: "features/metrics" }] } }),
       /reservado/,
     );
-  // a → b → c with a conflicting c can never be switched on.
   assert.throws(
     check({
       a: { description: "a", requires: ["b"], conflicts: ["c"] },
@@ -460,7 +447,6 @@ test("las correcciones de validación: Profiles, nombres reservados, features im
     }),
     /"a" no se puede activar nunca/,
   );
-  // A feature folder holds only that feature's files.
   assert.throws(
     check(
       {
@@ -485,7 +471,6 @@ test("las correcciones de validación: Profiles, nombres reservados, features im
     }),
     /raíz del paquete/,
   );
-  // Overlay files obey the same destinations as component files, at publish time.
   assert.throws(
     check(
       { x: { description: "x", overlays: [{ component: "health", path: "features/x" }] } },
@@ -493,7 +478,6 @@ test("las correcciones de validación: Profiles, nombres reservados, features im
     ),
     /Destino reservado|UNSAFE|carpetas ocultas/,
   );
-  // Two features needing the same package keep both constraints.
   const manifest = validatePackage(
     {
       ...base,
@@ -539,7 +523,6 @@ test("el resolvedor avisa cuando las features elegidas dejan un paquete en una v
   });
   assert.equal(kept.packages[0]!.version, "1.0.0");
   assert.match(kept.warnings.join("\n"), /Se usa @a\/b@1\.0\.0: la 2\.0\.0 no admite las features elegidas/);
-  // With no version that fits, the error is the newest one's.
   await assert.rejects(
     resolve(source, {
       roots: [{ name: "@a/b", range: "^2.0.0" }],

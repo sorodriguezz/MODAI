@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { ApiClient } from "@modai/sdk";
 import { createApp } from "../apps/server/src/app.js";
+import { testDatabase } from "../apps/server/test/support/test-database.js";
 import {
   chunkText,
   indexKnowledge,
@@ -17,7 +18,6 @@ import {
 } from "../packages/cli/src/client/embeddings.js";
 import { type Hardware, recommendModels } from "../packages/cli/src/client/hardware.js";
 import { LocalOllama, localRuntimeUrl } from "../packages/cli/src/client/ollama.js";
-import { testDatabase } from "../apps/server/test/support/test-database.js";
 
 function hardware(patch: Partial<Hardware> = {}): Hardware {
   return {

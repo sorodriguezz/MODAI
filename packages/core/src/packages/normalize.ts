@@ -8,7 +8,7 @@ export function normalizeManifest(raw: unknown): PackageManifestV1 {
     throw new AppError(
       400,
       "INVALID_MANIFEST",
-      `Manifiesto no admitido: usa apiVersion: ${API_VERSION} (docs/spec/PACKAGE-SPEC-v1.md)`,
+      `Manifiesto no admitido: usa apiVersion: ${API_VERSION} (https://github.com/sorodriguezz/MODAI/blob/main/packages/contracts/README.md)`,
     );
   const parsed = packageManifestV1Schema.safeParse(raw);
   if (!parsed.success)

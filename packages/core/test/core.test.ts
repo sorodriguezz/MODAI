@@ -301,15 +301,12 @@ test("instala, conecta, ejecuta y retira un paquete ejecutable mediante un regis
     /Entrada inválida/,
   );
 
-  // Reproducibility: same lock → same files; frozen detects drift.
   rmSync(join(project, ".modai/store"), { recursive: true });
   await sync(["project.instructions"], { frozen: true });
   assert.ok(existsSync(join(project, ".modai/store/@acme/fake-browser/files/tools/run.mjs")));
-  // The store record is MODAI's, not an npm manifest: never a package.json that tools would misread.
   assert.ok(existsSync(join(project, ".modai/store/@acme/fake-browser/modai-store.json")));
   assert.ok(!existsSync(join(project, ".modai/store/@acme/fake-browser/package.json")));
 
-  // Same version, different content in the registry is refused.
   const stored = join(root, "registry", "@acme", "fake-browser", "1.0.0.json");
   const tampered = JSON.parse(readFileSync(stored, "utf8"));
   tampered.manifest.metadata.description = "contenido alterado";
@@ -318,7 +315,6 @@ test("instala, conecta, ejecuta y retira un paquete ejecutable mediante un regis
   tampered.manifest.metadata.description = "@acme/fake-browser de prueba";
   writeFileSync(stored, JSON.stringify(tampered));
 
-  // Reversibility: user edits are preserved, managed files are removed.
   writeFileSync(join(project, ".agents/skills/regression-testing/SKILL.md"), "mi versión");
   writeFileSync(
     join(project, "AGENTS.md"),

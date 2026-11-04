@@ -1,5 +1,3 @@
-# Contexto de build para plataformas que construyen desde la raíz (Fly.io, Railway).
-# Mantener sincronizado con deploy/Dockerfile.dockerignore.
 node_modules
 dist
 .git

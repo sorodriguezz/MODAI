@@ -1,5 +1,3 @@
-// Internal workspaces are compiled into the release. Only public third-party packages remain external.
-
 import { chmodSync, copyFileSync, globSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +11,6 @@ await build({
   outdir: "dist",
   outbase: "src",
   bundle: true,
-  // Shared code (Core, contracts, SDK) goes into chunks once instead of being inlined in every entry.
   splitting: true,
   chunkNames: "internal/chunks/[name]-[hash]",
   platform: "node",
@@ -42,7 +39,6 @@ await build({
 });
 for (const file of ["dist/bin/modai.js", "dist/bin/modai-mcp.js"]) chmodSync(resolve(root, file), 0o755);
 
-// Keep the authoring export's declarations usable without installing private workspaces.
 mkdirSync(resolve(root, "dist/internal"), { recursive: true });
 for (const [from, into] of [
   ["../contracts/dist", "dist/internal/contracts"],

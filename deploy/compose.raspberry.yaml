@@ -1,8 +1,3 @@
-# Raspberry Pi (Raspberry Pi OS de 64 bits / arm64). Se usa junto a compose.yaml:
-#   docker compose -f deploy/compose.yaml -f deploy/compose.raspberry.yaml up -d --build
-#   (o npm run docker:pi). Combinable con compose.lan.yaml o compose.public.yaml.
-# Para no compilar en la Pi, define MODAI_IMAGE con una imagen multi-arquitectura ya publicada
-# y usa `pull` + `up -d --no-build` (ver docs/guides/DEPLOY.md).
 services:
   server:
     image: ${MODAI_IMAGE:-modularai:local}

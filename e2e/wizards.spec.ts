@@ -46,7 +46,6 @@ test("crea un usuario paso a paso eligiendo organización, proyectos y namespace
   await next();
   await dialog.getByRole("checkbox", { name: "UI Logística" }).check();
   await next();
-  // Only the projects of the chosen organization are offered.
   await expect(dialog.getByRole("checkbox", { name: /Rutas/ })).toBeVisible();
   await expect(dialog.getByRole("checkbox", { name: /Ajeno/ })).toBeHidden();
   await dialog.getByRole("checkbox", { name: /Rutas/ }).check();
@@ -73,7 +72,6 @@ test("importa un .skill con vista previa y lo publica", async ({ page }) => {
   await page.goto("/admin#/packages");
   await page.getByRole("button", { name: "Crear paquete" }).first().click();
   const dialog = page.getByRole("dialog");
-  // Inside "Crear paquete": type Skill, then upload instead of writing it.
   await dialog.getByRole("radio", { name: /^Skill/ }).check();
   await dialog.getByRole("radio", { name: /Subir un archivo \.skill/ }).check();
   await dialog.getByRole("button", { name: "Siguiente" }).click();
@@ -101,7 +99,6 @@ test("importa un .skill con vista previa y lo publica", async ({ page }) => {
 test("sube un template desde un .zip y muestra cómo usarlo", async ({ page, request }) => {
   await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-plantillas" } });
   await login(page);
-  // Templates live in Paquetes: "Crear paquete" on the Templates tab opens the template editor.
   await page.goto("/admin#/templates");
   await expect(page).toHaveURL(/#\/packages\?type=templates/);
   await page.getByRole("button", { name: "Crear paquete" }).first().click();
@@ -174,7 +171,6 @@ test("una persona sin rol de administración crea y revoca sus propias API keys"
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel(/Dónde se usará/).fill("Notebook");
   await dialog.getByRole("button", { name: "Siguiente" }).click();
-  // A reader can only create reader keys.
   await expect(dialog.getByRole("radio")).toHaveCount(1);
   await expect(dialog.getByRole("radio", { name: /Lectura/ })).toBeChecked();
   await dialog.getByRole("button", { name: "Siguiente" }).click();
@@ -195,7 +191,6 @@ test("crea un template desde cero en el editor del panel y publica una versión 
   await page.getByRole("button", { name: "Crear paquete" }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("radio", { name: /Crear aquí/ }).check();
-  // Starts with a minimal skeleton that can be edited, extended and trimmed.
   await expect(dialog.locator("#tplEditor")).toContainText("README.md");
   await dialog.getByRole("button", { name: "Nuevo archivo" }).click();
   await dialog.getByLabel("Ruta").fill("src/{{projectName}}.ts");
@@ -215,7 +210,6 @@ test("crea un template desde cero en el editor del panel y publica una versión 
   await dialog.getByRole("button", { name: "Publicar template" }).click();
   await expect(dialog.getByRole("heading", { name: "@ui-plantillas/desde-cero" })).toBeVisible();
 
-  // New version: the editor starts from the published files.
   await dialog.getByRole("button", { name: "Editar y publicar nueva versión" }).click();
   await expect(dialog.locator("#tplEditor")).toContainText("src/{{projectName}}.ts");
   await dialog.getByRole("button", { name: "Editar README.md" }).click();
@@ -376,7 +370,6 @@ test("las opciones (flags) se crean en el editor: un template con --sdd y un com
   ]);
   await dialog.getByRole("button", { name: "Cerrar" }).first().click();
 
-  // A component package: the option overlays a folder on the component.
   await page.goto("/admin#/packages?type=components");
   await page.getByRole("button", { name: "Crear paquete" }).first().click();
   await next();
@@ -413,7 +406,6 @@ test("la administración gestiona categorías y el editor ofrece solo las regist
   await expect(page.locator("#catResults")).toContainText("backend");
   await page.getByRole("button", { name: "Nueva categoría" }).first().click();
   const dialog = page.getByRole("dialog");
-  // The dialog focuses its first field once open: wait for it so typing does not land in the wrong field.
   await expect(dialog.locator("#catName")).toBeFocused();
   await dialog.getByLabel("Nombre").fill("observabilidad");
   await dialog.getByLabel("Descripción").fill("Métricas, trazas y logs.");
@@ -428,7 +420,6 @@ test("la administración gestiona categorías y el editor ofrece solo las regist
   await expect(dialog.getByRole("option", { name: /observabilidad/ })).toContainText("Métricas, trazas y logs.");
   await dialog.getByRole("option", { name: /observabilidad/ }).click();
   await expect(dialog.locator("#pkgCategory")).toHaveValue("observabilidad");
-  // Text that is not a registered category is not kept.
   await dialog.locator("#pkgCategoryInput").fill("inventada");
   await dialog.getByLabel("Descripción").click();
   await expect(dialog.locator("#pkgCategory")).toHaveValue("");
@@ -447,7 +438,6 @@ test("el conocimiento manual se guarda para todo el servidor o para un namespace
   await page.getByRole("button", { name: "Nuevo documento" }).first().click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.locator("#docTitle")).toBeVisible();
-  // An admin may share with the whole server (the default) or keep it in a namespace.
   await expect(dialog.locator("#docScope")).toHaveValue("Todo el servidor");
   await dialog.locator("#docScopeInput").click();
   await dialog.locator("#docScopeInput").fill("ui-docs");

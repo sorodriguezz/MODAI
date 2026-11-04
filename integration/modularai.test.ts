@@ -50,7 +50,6 @@ function payload(manifest: PackageManifest, sources: Record<string, string> = {}
   };
 }
 
-/** A v1 package manifest; `spec` extends spec (dependencies, contributes, permissions...). */
 function manifest(
   name: string,
   version: string,

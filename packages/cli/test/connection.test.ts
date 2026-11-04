@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// The client config path is fixed when the module loads: point it at a temporary folder first.
 const config = mkdtempSync(join(tmpdir(), "modai-connection-"));
 process.env.MODAI_CONFIG_DIR = config;
 const { effectiveConnection, insecureTransport } = await import("../src/services/connection.ts");
@@ -37,7 +36,6 @@ test("el token guardado va solo al servidor con el que se guardó", () => {
     assert.equal(effectiveConnection().token, "guardado");
     assert.equal(effectiveConnection("https://otro.example").token, undefined);
   });
-  // MODAI_API_TOKEN without MODAI_SERVER belongs to the configured server.
   withEnv({ MODAI_SERVER: undefined, MODAI_API_TOKEN: "de-entorno" }, () => {
     assert.equal(effectiveConnection().token, "de-entorno");
     assert.equal(effectiveConnection("https://otro.example").token, undefined);

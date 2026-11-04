@@ -90,14 +90,14 @@ test("modai workspace instala en muchos proyectos con plan previo, sin seguir en
   project("api");
   project("web");
   project("libs/shared");
-  project("api/node_modules/dep"); // never a target
+  project("api/node_modules/dep");
   const outside = join(root, "outside");
   mkdirSync(outside);
   saveProjectFile(
     outside,
     createProjectFile("outside", { registries: [{ name: "local", path: registry }], adapters: [] }),
   );
-  symlinkSync(outside, join(repos, "linked")); // a symlink cannot pull the walk outside the root
+  symlinkSync(outside, join(repos, "linked"));
 
   assert.deepEqual(
     discoverProjects(repos).map((item) => item.path),
@@ -117,7 +117,6 @@ test("modai workspace instala en muchos proyectos con plan previo, sin seguir en
   assert.notEqual(noTty.status, 0, "sin terminal exige --yes");
   assert.match(noTty.stderr, /--yes/);
 
-  // Another operation in progress on `web`: that project fails, the others are applied.
   mkdirSync(join(repos, "web/.modai"), { recursive: true });
   writeFileSync(join(repos, "web/.modai/.workspace.lock"), "99999 now\n");
   const run = await modai(repos, "--json", "workspace", "add", "@acme/guide", "--yes");
@@ -191,7 +190,6 @@ test("modai server ping informa si el servidor está arriba, su latencia y si la
       adapters: [],
     }),
   );
-  // The pre-0.9 spelling still works and says where the command lives now.
   const fromProject = await modai(project, "--json", "server", "ping");
   const checks = JSON.parse(fromProject.stdout) as Array<{ check: string; status: string }>;
   assert.ok(
