@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # crear el tag vX.Y.Z
+  contents: write # crear el tag vX.Y.Z y su Release
   id-token: write # trusted publishing y provenance
 
 concurrency:
@@ -85,3 +85,19 @@ jobs:
             git tag "$TAG" "$GITHUB_SHA"
             git push origin "$TAG"
           fi
+
+      - name: Crear el Release v${{ steps.version.outputs.version }}
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "El Release $TAG ya existe."
+            exit 0
+          fi
+          if [ "${{ steps.version.outputs.tag }}" = "next" ]; then CHANNEL=--prerelease; else CHANNEL=--latest; fi
+          node scripts/release-notes.mjs "$VERSION" > release-notes.md
+          if [ -s release-notes.md ]; then NOTES=(--notes-file release-notes.md); else NOTES=(--generate-notes); fi
+          gh release create "$TAG" --verify-tag --title "$TAG" "$CHANNEL" "${NOTES[@]}"
