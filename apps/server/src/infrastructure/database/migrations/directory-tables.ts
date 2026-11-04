@@ -26,6 +26,7 @@ export async function createDirectoryTables(db: Kysely<unknown>, t: ColumnTypes)
     .createTable("namespaces")
     .addColumn("name", t.key(200), (col) => col.primaryKey())
     .addColumn("organization_id", t.key(200))
+    .addColumn("owner_user_id", t.key(200))
     .addColumn("description", t.text, (col) => col.notNull())
     .addColumn("visibility", t.key(20), (col) => col.notNull())
     .addColumn("created_by", t.key(200), (col) => col.notNull())
@@ -33,8 +34,14 @@ export async function createDirectoryTables(db: Kysely<unknown>, t: ColumnTypes)
     .addColumn("updated_at", t.key(40), (col) => col.notNull())
     .addForeignKeyConstraint("fk_namespaces_organization", ["organization_id"], "organizations", ["id"])
     .addCheckConstraint("ck_namespaces_visibility", sql`visibility in ('internal', 'restricted')`)
+    // why: every namespace (and so every package in it) has exactly one owner, an organization or a user.
+    .addCheckConstraint(
+      "ck_namespaces_owner",
+      sql`(organization_id is not null and owner_user_id is null) or (organization_id is null and owner_user_id is not null)`,
+    )
     .execute();
   await db.schema.createIndex("idx_namespaces_org").on("namespaces").column("organization_id").execute();
+  await db.schema.createIndex("idx_namespaces_owner_user").on("namespaces").column("owner_user_id").execute();
   await db.schema
     .createTable("project_installations")
     .addColumn("project_id", t.key(200), (col) => col.notNull())

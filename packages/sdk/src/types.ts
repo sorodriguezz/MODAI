@@ -48,10 +48,18 @@ export interface CategoryRecord {
   createdAt?: string;
   updatedAt?: string;
 }
+export interface NamespaceOwner {
+  organizationId?: string | null;
+  ownerUserId?: string | null;
+}
+
 export interface NamespaceRecord {
   name: string;
+  ownerKind: "organization" | "user";
   organizationId?: string;
   organizationName?: string;
+  ownerUserId?: string;
+  ownerUsername?: string;
   description: string;
   visibility: "internal" | "restricted";
   packages: number;

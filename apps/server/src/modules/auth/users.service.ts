@@ -3,9 +3,11 @@ import { AppError, invariant } from "@modai/contracts/errors";
 import { sha256 } from "@modai/contracts/security";
 import { type DataContext, withTransaction } from "../../infrastructure/database/database.js";
 import { isUniqueViolation } from "../../infrastructure/database/sql-helpers.js";
+import { NamespacesRepository } from "../namespaces/namespaces.repository.js";
 import {
   type Identity,
   MAX_PASSWORD_LENGTH,
+  personalNamespace,
   ROLES,
   type UserInput,
   type UserRecord,
@@ -52,6 +54,7 @@ export class UsersService {
     invariant(ROLES.includes(input.role), 400, "INVALID_ROLE", "Rol inválido");
     assertPassword(input.password, username);
     const displayName = (input.displayName ?? "").trim().slice(0, 200) || username;
+    await this.assertNamespaceFree(username);
     const id = randomUUID(),
       hash = await hashPassword(input.password),
       now = new Date().toISOString();
@@ -79,6 +82,7 @@ export class UsersService {
     invariant((await this.userCount()) === 0, 409, "SETUP_COMPLETED", SETUP_DONE);
     const username = normalizeUsername(input.username);
     assertPassword(input.password, username);
+    await this.assertNamespaceFree(username);
     const id = randomUUID(),
       hash = await hashPassword(input.password),
       now = new Date().toISOString();
@@ -126,8 +130,29 @@ export class UsersService {
       throw new AppError(409, "SELF_DELETE", "No puedes eliminar tu propia cuenta");
     if (current.role === "admin" && !current.disabledAt && (await this.activeAdminCount()) <= 1)
       throw new AppError(409, "LAST_ADMIN", "Debe quedar al menos un administrador activo");
-    await this.users.deleteRevokingKeys(id, new Date().toISOString());
+    const namespaces = await this.users.ownedNamespaces(id);
+    const packages = new NamespacesRepository(this.context);
+    for (const namespace of namespaces) {
+      const published = await packages.publishedVersions(namespace);
+      if (published)
+        throw new AppError(
+          409,
+          "USER_OWNS_PACKAGES",
+          `${current.username} es dueño de ${namespace}, que tiene ${published} versión(es) publicadas. Pásalo a otro dueño o elimina sus paquetes antes.`,
+        );
+    }
+    await this.users.deleteRevokingKeys(id, new Date().toISOString(), namespaces);
     return current;
+  }
+
+  private async assertNamespaceFree(username: string): Promise<void> {
+    const namespace = personalNamespace(username);
+    if (await this.users.namespaceTaken(namespace))
+      throw new AppError(
+        409,
+        "USERNAME_TAKEN",
+        `El namespace ${namespace} ya existe y sería el namespace personal de este usuario. Elige otro nombre.`,
+      );
   }
 
   async changeOwnPassword(userId: string, currentPassword: string, newPassword: string, keepToken?: string) {

@@ -58,6 +58,7 @@ export interface ProjectsTable {
 export interface NamespacesTable {
   name: string;
   organization_id: string | null;
+  owner_user_id: string | null;
   description: string;
   visibility: string;
   created_by: string;

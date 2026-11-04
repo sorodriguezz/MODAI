@@ -118,7 +118,8 @@ MODAI_TEST_DATABASE_URL=postgres://postgres:clave@127.0.0.1:5432/postgres npm te
 | `org-admin` | Usuarios, API keys, proyectos y namespaces solo de sus organizaciones. Sin auditoría, backups, publicadores ni rol `admin`. |
 | `admin`     | Todo, incluidos organizaciones, publicadores, auditoría, backups, retención y eliminación definitiva de versiones.          |
 
-- La jerarquía es **organización → proyecto → namespace → paquete**. Un namespace `internal` es visible para cualquier identidad autenticada; uno `restricted`, solo para quien lo tiene asignado o administra su organización. Publicar exige el rol y el namespace; el primer paquete de un namespace desconocido lo registra sin organización (un template no crea namespaces).
+- **Cada paquete pertenece a su namespace** (`@namespace/nombre`) y cada namespace tiene un solo dueño: una **organización** o un **usuario**. Cada usuario recibe con su cuenta su namespace personal `@usuario`, donde publica (con rol `publisher` o más) y administra sus paquetes; los demás namespaces se crean antes de publicar en ellos: publicar en uno que no existe responde `404 NAMESPACE_NOT_FOUND`. Un usuario dueño de namespaces con paquetes no se puede eliminar (`USER_OWNS_PACKAGES`) hasta pasarlos a otro dueño. Los proyectos instalan paquetes, no son sus dueños.
+- Un namespace `internal` es visible para cualquier identidad autenticada; uno `restricted`, solo para quien lo tiene asignado, su usuario dueño o quien administra su organización. Publicar exige el rol y el namespace.
 - Toda API key pertenece a un usuario y nunca supera sus permisos: mismo rol o menor, y sus mismos accesos o una parte. Se evalúa en cada petición; desactivar a la persona apaga sus keys. Las keys sin dueño (`modai admin create-key --service`) solo sirven para automatizar la instalación.
 - Un token se muestra una sola vez; solo se guarda su SHA-256.
 - La memoria admite `scope: project|organization|session`. Compartir entre proyectos de una organización exige acceso explícito a ella. El catálogo y el conocimiento publicado se comparten entre clientes autenticados: no guardes documentos privados de un proyecto como conocimiento global.
@@ -176,16 +177,16 @@ curl -X POST http://localhost:8787/api/v1/resolve \
 
 ### Organizaciones, namespaces y proyectos
 
-| Método       | Ruta                                 | Uso                                                                                        |
-| ------------ | ------------------------------------ | ------------------------------------------------------------------------------------------ |
-| GET/POST     | `/api/v1/organizations`              | Listar con conteos / crear `{ name, description? }` (admin)                                |
-| PATCH/DELETE | `/api/v1/organizations/:id`          | Editar / eliminar una vacía con `{ confirmation: "<nombre>" }`                             |
-| GET/POST     | `/api/v1/namespaces`                 | Listar los visibles / crear `{ name, organizationId?, description?, visibility? }`         |
-| PATCH/DELETE | `/api/v1/namespaces/:name`           | Cambiar organización, descripción o visibilidad / eliminar uno sin paquetes                |
-| GET/POST     | `/api/v1/projects`                   | Proyectos autorizados (con `canDelete`) / registrar uno propio                             |
-| PATCH        | `/api/v1/projects/:id`               | Renombrar `{ name }` o mover `{ organizationId }`                                          |
-| DELETE       | `/api/v1/projects/:id`               | Eliminar con `{ confirmation: "<id>" }`; `409 PROJECT_BUSY` si un worker procesa una tarea |
-| PUT          | `/api/v1/projects/:id/installations` | La CLI informa los paquetes instalados del proyecto                                        |
+| Método       | Ruta                                 | Uso                                                                                              |
+| ------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| GET/POST     | `/api/v1/organizations`              | Listar con conteos / crear `{ name, description? }` (admin)                                      |
+| PATCH/DELETE | `/api/v1/organizations/:id`          | Editar / eliminar una vacía con `{ confirmation: "<nombre>" }`                                   |
+| GET/POST     | `/api/v1/namespaces`                 | Listar los visibles / crear `{ name, organizationId \| ownerUserId, description?, visibility? }` |
+| PATCH/DELETE | `/api/v1/namespaces/:name`           | Cambiar dueño, descripción o visibilidad / eliminar uno sin paquetes                             |
+| GET/POST     | `/api/v1/projects`                   | Proyectos autorizados (con `canDelete`) / registrar uno propio                                   |
+| PATCH        | `/api/v1/projects/:id`               | Renombrar `{ name }` o mover `{ organizationId }`                                                |
+| DELETE       | `/api/v1/projects/:id`               | Eliminar con `{ confirmation: "<id>" }`; `409 PROJECT_BUSY` si un worker procesa una tarea       |
+| PUT          | `/api/v1/projects/:id/installations` | La CLI informa los paquetes instalados del proyecto                                              |
 
 ### Paquetes
 
@@ -203,7 +204,7 @@ curl -X POST http://localhost:8787/api/v1/resolve \
 | POST         | `/api/v1/packages/import-skill`            | `.skill` → paquete `{ archive, namespace, version?, name?, dryRun? }`                                         |
 | POST         | `/api/v1/packages/import-template`         | Publicar un template `{ name, version, description, category?, keywords?, declaration?, archive? \| files? }` |
 | GET          | `/api/v1/packages/template?name=&version=` | Opciones (`features`, `addon`) y archivos de un template                                                      |
-| POST         | `/api/v1/admin/packages/deprecate`, `yank` | Deprecar o retirar una versión (admin u `org-admin` del namespace)                                            |
+| POST         | `/api/v1/admin/packages/deprecate`, `yank` | Deprecar o retirar una versión (admin, `org-admin` o usuario dueño del namespace)                             |
 | DELETE       | `/api/v1/admin/packages`                   | Eliminar definitivamente una versión retirada (admin)                                                         |
 | GET/POST     | `/api/v1/admin/publishers`                 | Publicadores / registrar `{ publicKey, label, trusted }`                                                      |
 | PATCH        | `/api/v1/admin/publishers/:fingerprint`    | Confiar o dejar de confiar                                                                                    |

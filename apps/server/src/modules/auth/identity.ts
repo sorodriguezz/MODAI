@@ -10,6 +10,7 @@ export interface Identity {
   kind?: "bootstrap" | "api-key" | "user";
   ownerId?: string;
   ownerName?: string;
+  personalOwnerId?: string;
 }
 
 export interface KeyGrants {
@@ -115,5 +116,8 @@ export function userIdentity(user: UserRecord): Identity {
     organizationIds: user.organizationIds,
     packageScopes: user.packageScopes,
     kind: "user",
+    personalOwnerId: user.id,
   };
 }
+
+export const personalNamespace = (username: string): string => `@${username}`;

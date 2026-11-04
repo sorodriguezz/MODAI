@@ -279,7 +279,7 @@ test("cada persona crea sus API keys y nunca superan sus permisos, ni siquiera d
   const asKey = as(inherited.token);
   const whoami = (await call(asKey, "GET", "/session")).body;
   assert.equal(whoami.label, "carla.pagos · notebook");
-  assert.deepEqual(whoami.permissions.publish.namespaces, ["@pagos"]);
+  assert.deepEqual(whoami.permissions.publish.namespaces, ["@carla.pagos", "@pagos"], "incluye su namespace personal");
   assert.equal(
     (await call(asKey, "POST", "/me/api-keys", { label: "otra", role: "reader" })).body.error.code,
     "SESSION_REQUIRED",
@@ -300,7 +300,7 @@ test("cada persona crea sus API keys y nunca superan sus permisos, ni siquiera d
 
   await call(admin, "PATCH", "/admin/users/" + user.id, { projectIds: [], packageScopes: [] });
   assert.equal((await call(as(narrow.token), "GET", "/memories?projectId=pa")).status, 403);
-  assert.deepEqual((await call(asKey, "GET", "/session")).body.permissions.publish.namespaces, []);
+  assert.deepEqual((await call(asKey, "GET", "/session")).body.permissions.publish.namespaces, ["@carla.pagos"]);
   await call(admin, "PATCH", "/admin/users/" + user.id, { role: "reader" });
   assert.equal(
     (await call(as(worker.token), "GET", "/session")).status,
@@ -345,8 +345,8 @@ test("los namespaces restringidos solo se ven con acceso y publicar exige el nam
   assert.equal((await call(insider, "GET", "/artifacts/" + artifact)).status, 200);
   assert.deepEqual(
     (await call(stranger, "GET", "/namespaces")).body.namespaces.map((n: { name: string }) => n.name),
-    ["@facturas", "@pagos-front"],
-    "@pagos-front es interno",
+    ["@beto.facturas", "@carla.pagos", "@dev.1", "@facturas", "@pagos-front"],
+    "@pagos-front y los namespaces personales son internos",
   );
 
   const publisher = as(
@@ -356,12 +356,16 @@ test("los namespaces restringidos solo se ven con acceso y publicar exige el nam
   assert.equal(denied.status, 403);
   assert.match(denied.body.error.message, /@pagos/);
   assert.equal((await call(orgAdmin, "POST", "/packages", manifest("@pagos/propio"))).status, 201);
-  assert.equal((await call(admin, "POST", "/packages", manifest("@nuevo/auto"))).status, 201);
-  assert.ok(
-    (await call(admin, "GET", "/namespaces")).body.namespaces.some(
-      (n: { name: string; organizationId?: string }) => n.name === "@nuevo" && !n.organizationId,
-    ),
+  const missing = await call(admin, "POST", "/packages", manifest("@nuevo/auto"));
+  assert.equal(missing.body.error.code, "NAMESPACE_NOT_FOUND", "publicar no crea namespaces sin dueño");
+  const dev = (await call(admin, "GET", "/admin/users")).body.users.find(
+    (u: { username: string }) => u.username === "dev.1",
   );
+  assert.equal(
+    (await call(admin, "POST", "/namespaces", { name: "@nuevo", ownerUserId: dev.id })).body.namespace.ownerUsername,
+    "dev.1",
+  );
+  assert.equal((await call(admin, "POST", "/packages", manifest("@nuevo/auto"))).status, 201);
 });
 
 test("la administración de una organización depreca y retira paquetes de sus namespaces, pero no los elimina", async () => {
@@ -372,7 +376,7 @@ test("la administración de una organización depreca y retira paquetes de sus n
   assert.equal((await deprecate(orgAdmin, "@pagos/propio")).body.package.status, "deprecated");
   assert.equal((await yank(orgAdmin, "@pagos/propio")).body.package.status, "yanked");
   assert.equal((await deprecate(orgAdmin, "@facturas/emision")).status, 403, "namespace de otra organización");
-  assert.equal((await yank(orgAdmin, "@nuevo/auto")).status, 403, "namespace sin organización");
+  assert.equal((await yank(orgAdmin, "@nuevo/auto")).status, 403, "namespace de un usuario");
   assert.equal(
     (
       await call(orgAdmin, "DELETE", "/admin/packages", {
@@ -404,4 +408,90 @@ test("organizaciones y namespaces con contenido no se eliminan", async () => {
   const empty = (await call(admin, "POST", "/organizations", { name: "Vacía" })).body.organization.id;
   assert.equal((await call(admin, "DELETE", "/organizations/" + empty, { confirmation: "otra" })).status, 400);
   assert.equal((await call(admin, "DELETE", "/organizations/" + empty, { confirmation: "Vacía" })).status, 204);
+});
+
+test("cada paquete pertenece a una organización o a un usuario: el namespace personal y su dueño", async () => {
+  const users = (await call(admin, "GET", "/admin/users")).body.users as Array<{ id: string; username: string }>;
+  const namespaces = (await call(admin, "GET", "/namespaces")).body.namespaces as Array<{
+    name: string;
+    ownerKind: string;
+    ownerUserId?: string;
+  }>;
+  for (const user of users)
+    assert.ok(
+      namespaces.some((n) => n.name === `@${user.username}` && n.ownerKind === "user" && n.ownerUserId === user.id),
+      `@${user.username} pertenece a su usuario`,
+    );
+  assert.ok(namespaces.every((n) => n.ownerKind === "organization" || n.ownerKind === "user"));
+
+  assert.equal((await call(admin, "POST", "/namespaces", { name: "@huerfano" })).body.error.code, "OWNER_REQUIRED");
+  assert.equal(
+    (await call(admin, "POST", "/namespaces", { name: "@doble", organizationId: orgA, ownerUserId: users[0].id })).body
+      .error.code,
+    "OWNER_REQUIRED",
+  );
+  assert.equal(
+    (await call(admin, "PATCH", "/namespaces/" + encodeURIComponent("@facturas"), { organizationId: null })).body.error
+      .code,
+    "OWNER_REQUIRED",
+    "no se le puede quitar el dueño",
+  );
+  assert.equal(
+    (await call(admin, "POST", "/admin/users", { username: "pagos", password: "una-clave-larga-1", role: "reader" }))
+      .body.error.code,
+    "USERNAME_TAKEN",
+    "@pagos ya es de una organización",
+  );
+
+  const created = (
+    await call(admin, "POST", "/admin/users", { username: "eva", password: "una-clave-larga-1", role: "publisher" })
+  ).body.user;
+  const eva = as(
+    (
+      await call(admin, "POST", "/admin/api-keys", {
+        label: "eva",
+        role: "publisher",
+        ownerId: created.id,
+        inherit: true,
+      })
+    ).body.key.token,
+  );
+  assert.equal((await call(eva, "POST", "/packages", manifest("@eva/util"))).status, 201, "publica en lo suyo");
+  assert.equal((await call(eva, "POST", "/packages", manifest("@dev.1/ajeno"))).status, 403, "no en lo de otro");
+  assert.equal(
+    (await call(eva, "POST", "/admin/packages/deprecate", { name: "@eva/util", version: "1.0.0", message: "2.x" })).body
+      .package.status,
+    "deprecated",
+    "la dueña administra sus paquetes",
+  );
+  assert.equal(
+    (await call(eva, "PATCH", "/namespaces/" + encodeURIComponent("@eva"), { visibility: "restricted" })).body.namespace
+      .visibility,
+    "restricted",
+  );
+  assert.equal(
+    (await call(eva, "PATCH", "/namespaces/" + encodeURIComponent("@eva"), { ownerUserId: users[0].id })).body.error
+      .code,
+    "OWNER_FORBIDDEN",
+  );
+  const stranger = as((await key(admin, "otro lector", "reader")).token);
+  assert.equal((await call(stranger, "GET", "/package?name=" + encodeURIComponent("@eva/util"))).status, 404);
+  assert.equal((await call(eva, "GET", "/package?name=" + encodeURIComponent("@eva/util"))).status, 200);
+
+  assert.equal(
+    (await call(admin, "DELETE", "/admin/users/" + created.id)).body.error.code,
+    "USER_OWNS_PACKAGES",
+    "sus paquetes no quedan sin dueño",
+  );
+  assert.equal(
+    (await call(admin, "PATCH", "/namespaces/" + encodeURIComponent("@eva"), { organizationId: orgA })).body.namespace
+      .organizationId,
+    orgA,
+  );
+  assert.equal((await call(admin, "DELETE", "/admin/users/" + created.id)).status, 204);
+  const after = (await call(admin, "GET", "/namespaces")).body.namespaces as Array<{ name: string }>;
+  assert.ok(
+    after.some((n) => n.name === "@eva"),
+    "el namespace transferido sigue con su nueva dueña",
+  );
 });

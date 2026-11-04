@@ -323,6 +323,7 @@ modai admin update-user <id> --disable
 modai admin create-key --label worker-ci --owner ci-bot --role worker --projects ID
 modai admin keys && modai admin revoke-key <id>
 modai admin organizations && modai admin namespaces
+modai admin create-namespace @acme-pagos --organization ORG      # o --user ana
 modai admin update-namespace @skills --organization ORG --restricted
 modai admin trust-publisher public.pem --label equipo && modai admin publishers
 modai admin audit --limit 50
@@ -330,6 +331,8 @@ modai admin export ./modai-backup.json && modai admin import ./modai-backup.json
 modai admin prune --memory-days 365 --audit-days 90 --dry-run
 modai category list && modai category create backend
 ```
+
+Cada paquete pertenece a su namespace (`@namespace/nombre`) y cada namespace tiene un solo dueño: una organización o un usuario. Cada usuario recibe con su cuenta el namespace personal `@usuario`; los demás se crean antes de publicar en ellos.
 
 Roles: `reader`, `publisher`, `worker`, `org-admin` y `admin`. Una API key pertenece a un usuario y nunca supera sus permisos; `--service` crea una sin dueño, solo para automatizar la instalación. El backup incluye paquetes, artefactos, conocimiento manual, memorias, publicadores, proyectos, organizaciones y namespaces, y excluye API keys y secretos.
 

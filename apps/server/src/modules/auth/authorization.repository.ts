@@ -9,12 +9,27 @@ export interface ProjectOwnership {
 export class AuthorizationRepository {
   constructor(private readonly context: DataContext) {}
 
-  restrictedNamespaces(): Promise<Array<{ name: string; organizationId: string | null }>> {
+  restrictedNamespaces(): Promise<Array<{ name: string; organizationId: string | null; ownerUserId: string | null }>> {
     return this.context.db
       .selectFrom("namespaces")
-      .select(["name", "organization_id as organizationId"])
+      .select(["name", "organization_id as organizationId", "owner_user_id as ownerUserId"])
       .where("visibility", "=", "restricted")
       .execute();
+  }
+
+  async namespacesOfUser(userId: string | undefined): Promise<string[]> {
+    if (!userId) return [];
+    const rows = await this.context.db
+      .selectFrom("namespaces")
+      .select("name")
+      .where("owner_user_id", "=", userId)
+      .orderBy("name")
+      .execute();
+    return rows.map((row) => row.name);
+  }
+
+  namespaceExists(name: string): Promise<{ name: string } | undefined> {
+    return this.context.db.selectFrom("namespaces").select("name").where("name", "=", name).executeTakeFirst();
   }
 
   async namespacesOfOrganizations(organizationIds: string[]): Promise<string[]> {

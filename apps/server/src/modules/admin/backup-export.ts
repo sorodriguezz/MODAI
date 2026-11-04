@@ -28,8 +28,16 @@ async function exportDirectory(context: DataContext) {
     .select(["id", "name", "description", "created_at as createdAt"])
     .execute();
   const namespaces = await context.db
-    .selectFrom("namespaces")
-    .select(["name", "organization_id as organizationId", "description", "visibility", "created_at as createdAt"])
+    .selectFrom("namespaces as n")
+    .leftJoin("users as u", "u.id", "n.owner_user_id")
+    .select([
+      "n.name",
+      "n.organization_id as organizationId",
+      "u.username as ownerUsername",
+      "n.description",
+      "n.visibility",
+      "n.created_at as createdAt",
+    ])
     .execute();
   const projects = await context.db
     .selectFrom("projects")
@@ -37,10 +45,11 @@ async function exportDirectory(context: DataContext) {
     .execute();
   return {
     organizations,
-    namespaces: namespaces.map(({ organizationId, visibility, ...item }) => ({
+    namespaces: namespaces.map(({ organizationId, ownerUsername, visibility, ...item }) => ({
       ...item,
       visibility: visibility as "internal" | "restricted",
       ...(organizationId ? { organizationId } : {}),
+      ...(ownerUsername ? { ownerUsername } : {}),
     })),
     projects: projects as Snapshot["projects"],
   };

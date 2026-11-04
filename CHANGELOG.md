@@ -1,5 +1,14 @@
 # Cambios
 
+## Sin publicar (0.11.x)
+
+- **Cada paquete tiene dueño**: el namespace de un paquete (`@namespace/nombre`) pertenece a una sola **organización** o a un solo **usuario**, nunca a nadie. Rompe el esquema: la tabla `namespaces` gana `owner_user_id` y exige exactamente un dueño; hay que recrear la base de datos (`npm run docker:down`, borrar el volumen y `docker:up` + `docker:seed`).
+  - Cada usuario recibe con su cuenta el namespace personal `@usuario`: publica y administra (deprecar, retirar, visibilidad) sus paquetes ahí con rol `publisher` o más. Un nombre de usuario que choca con un namespace existente se rechaza.
+  - **Publicar ya no crea namespaces**: un paquete o `.skill` en un namespace inexistente responde `404 NAMESPACE_NOT_FOUND`. Se crean antes con su dueño: `POST /api/v1/namespaces { name, organizationId | ownerUserId }`, `modai admin create-namespace @x --organization ORG` (o `--user ana`) o **Administración → Namespaces**, que ahora muestra y elige el dueño. Solo la administración global da un namespace a otro usuario.
+  - Un usuario dueño de namespaces con paquetes no se elimina (`USER_OWNS_PACKAGES`) hasta pasarlos a otro dueño; sus namespaces vacíos se eliminan con él.
+  - El backup guarda el dueño (`organizationId` u `ownerUsername`); al importar, los namespaces cuyo dueño no existe pasan al primer administrador.
+  - `npm run seed:examples` crea la organización _Ejemplos MODAI_ y le asigna los namespaces de `examples/packages`.
+
 ## Sin publicar (0.10.x)
 
 - **Los templates son paquetes** (`kind: Template`): se publican, versionan, deprecan y retiran como cualquier paquete, aparecen en el catálogo y heredan sus permisos. Un template no se instala (`TEMPLATE_NOT_INSTALLABLE` al resolverlo). Rutas nuevas `POST /api/v1/packages/import-template`, `GET /api/v1/packages/template` y `GET /api/v1/packages/download`; se eliminan `/api/v1/templates` y `/api/v1/template*`, la tabla `templates` y su sección del backup. `modai template publish` cambia `--stack` por `--category` (las etiquetas van a `metadata.keywords`); `template yank/restore` se reemplazan por `modai package yank`. Los templates publicados antes de este cambio hay que volver a publicarlos.

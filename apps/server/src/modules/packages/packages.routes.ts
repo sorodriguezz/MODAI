@@ -50,7 +50,7 @@ function readRoutes(app: FastifyInstance, { authz, packages }: Services): void {
   });
 }
 
-function writeRoutes(app: FastifyInstance, { authz, packages, namespaces, audit }: Services): void {
+function writeRoutes(app: FastifyInstance, { authz, packages, audit }: Services): void {
   app.post<{ Body: PublishPackageInput }>(
     "/api/v1/packages/validate",
     { bodyLimit: LARGE_BODY, config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
@@ -65,7 +65,6 @@ function writeRoutes(app: FastifyInstance, { authz, packages, namespaces, audit 
     const name = manifestIdentity(input.manifest).name;
     await authz.requirePublish(identityOf(request), name);
     const published = await packages.publish(input);
-    await namespaces.ensureNamespace(name, identityOf(request)!);
     await audit.fromRequest(request, "package.publish", `${published.name}@${published.version}`, {
       signed: Boolean(request.body.signature),
       quality: published.quality?.score,

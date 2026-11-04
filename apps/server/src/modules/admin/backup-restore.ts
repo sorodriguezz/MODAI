@@ -18,14 +18,54 @@ export interface RestoreServices {
 
 const ADMIN = "restored-admin";
 
+type NamespaceOwner = { organization_id: string | null; owner_user_id: string | null };
+
+// why: users are not part of the backup; namespaces whose owner is missing go to the oldest active admin.
+async function fallbackOwner(context: DataContext): Promise<NamespaceOwner> {
+  const admin = await context.db
+    .selectFrom("users")
+    .select("id")
+    .where("role", "=", "admin")
+    .where("disabled_at", "is", null)
+    .orderBy("created_at")
+    .executeTakeFirst();
+  if (!admin)
+    throw new AppError(
+      409,
+      "ADMIN_REQUIRED",
+      "Crea un usuario administrador antes de importar: será dueño de los namespaces sin dueño",
+    );
+  return { organization_id: null, owner_user_id: admin.id };
+}
+
+async function namespaceOwner(
+  context: DataContext,
+  item: NonNullable<Snapshot["namespaces"]>[number],
+): Promise<NamespaceOwner> {
+  if (item.organizationId) {
+    const organization = await context.db
+      .selectFrom("organizations")
+      .select("id")
+      .where("id", "=", item.organizationId)
+      .executeTakeFirst();
+    if (organization) return { organization_id: organization.id, owner_user_id: null };
+  }
+  if (item.ownerUsername) {
+    const user = await context.db
+      .selectFrom("users")
+      .select("id")
+      .where("username", "=", item.ownerUsername)
+      .executeTakeFirst();
+    if (user) return { organization_id: null, owner_user_id: user.id };
+  }
+  return fallbackOwner(context);
+}
+
 async function restoreNamespace(context: DataContext, item: NonNullable<Snapshot["namespaces"]>[number]) {
-  const ownerExists = item.organizationId
-    ? await context.db.selectFrom("organizations").select("id").where("id", "=", item.organizationId).executeTakeFirst()
-    : undefined;
   const visibility = item.visibility === "restricted" ? "restricted" : "internal";
   const row = {
     name: item.name,
-    organization_id: ownerExists ? item.organizationId! : null,
+    ...(await namespaceOwner(context, item)),
     description: item.description ?? "",
     visibility,
   };
@@ -35,6 +75,27 @@ async function restoreNamespace(context: DataContext, item: NonNullable<Snapshot
     { ...row, created_by: ADMIN, created_at: item.createdAt, updated_at: item.createdAt },
     ["name"],
   );
+}
+
+async function ensurePackageNamespaces(context: DataContext, snapshot: Snapshot): Promise<void> {
+  const names = new Set(snapshot.packages.map((item) => manifestIdentity(item.manifest).name.split("/")[0]));
+  for (const name of names) {
+    const exists = await context.db.selectFrom("namespaces").select("name").where("name", "=", name).executeTakeFirst();
+    if (exists) continue;
+    const now = new Date().toISOString();
+    await context.db
+      .insertInto("namespaces")
+      .values({
+        name,
+        ...(await fallbackOwner(context)),
+        description: "",
+        visibility: "internal",
+        created_by: ADMIN,
+        created_at: now,
+        updated_at: now,
+      })
+      .execute();
+  }
 }
 
 async function restoreDirectory(context: DataContext, snapshot: Snapshot): Promise<void> {
@@ -156,6 +217,7 @@ export async function restoreSnapshot(
   for (const item of snapshot.publishers ?? [])
     await publishers.register(item.fingerprint, item.publicKey, item.label ?? "restored", item.trusted);
   await restoreDirectory(context, snapshot);
+  await ensurePackageNamespaces(context, snapshot);
   const { imported, skipped } = await restorePackages(services.packages, snapshot);
   for (const item of snapshot.knowledge ?? []) await services.knowledge.add(item);
   await restoreMemories(context, services.memory, snapshot);

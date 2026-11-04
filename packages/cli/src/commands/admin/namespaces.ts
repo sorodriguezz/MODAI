@@ -2,11 +2,21 @@ import type { Command } from "commander";
 import { serverApi } from "../../services/connection.js";
 import type { Print } from "../../terminal/output.js";
 
-type UpdateOptions = { organization?: string; restricted?: boolean; internal?: boolean; description?: string };
+type OwnerOptions = { organization?: string; user?: string };
+type UpdateOptions = OwnerOptions & { restricted?: boolean; internal?: boolean; description?: string };
 
-function namespaceChanges(options: UpdateOptions) {
+async function namespaceOwner(options: OwnerOptions) {
+  if (options.organization && options.user) throw new Error("Usa --organization o --user, no ambos");
+  if (options.organization) return { organizationId: options.organization, ownerUserId: null };
+  if (!options.user) return {};
+  const user = (await serverApi().users()).find((item) => item.username === options.user || item.id === options.user);
+  if (!user) throw new Error(`No existe el usuario ${options.user}`);
+  return { organizationId: null, ownerUserId: user.id };
+}
+
+async function namespaceChanges(options: UpdateOptions) {
   return {
-    ...(options.organization ? { organizationId: options.organization === "none" ? null : options.organization } : {}),
+    ...(await namespaceOwner(options)),
     ...(options.restricted
       ? { visibility: "restricted" as const }
       : options.internal
@@ -19,12 +29,12 @@ function namespaceChanges(options: UpdateOptions) {
 export function registerAdminNamespaces(admin: Command, print: Print): void {
   admin
     .command("namespaces")
-    .description("Namespaces de paquetes, su organización y visibilidad")
+    .description("Namespaces de paquetes, su dueño (organización o usuario) y visibilidad")
     .action(async () =>
       print(
         (await serverApi().namespaces()).map((ns) => ({
           name: ns.name,
-          organization: ns.organizationName ?? "—",
+          owner: ns.ownerKind === "organization" ? `org:${ns.organizationName}` : `user:${ns.ownerUsername}`,
           visibility: ns.visibility,
           packages: ns.packages,
           publish: ns.canPublish,
@@ -36,33 +46,37 @@ export function registerAdminNamespaces(admin: Command, print: Print): void {
 export function registerAdminCreateNamespace(admin: Command, print: Print): void {
   admin
     .command("create-namespace")
+    .description("Crea un namespace con su dueño: una organización o un usuario")
     .argument("<name>", "Por ejemplo @acme-pagos")
     .option("--organization <id>", "Organización dueña")
+    .option("--user <username>", "Usuario dueño")
     .option("--restricted", "Solo quien tenga el namespace asignado ve sus paquetes")
     .option("--description <text>", "Descripción")
-    .action(async (name: string, options: { organization?: string; restricted?: boolean; description?: string }) =>
+    .action(async (name: string, options: OwnerOptions & { restricted?: boolean; description?: string }) => {
+      if (!options.organization && !options.user) throw new Error("Indica el dueño con --organization o --user");
       print(
         await serverApi().createNamespace({
           name,
-          organizationId: options.organization,
+          ...(await namespaceOwner(options)),
           visibility: options.restricted ? "restricted" : "internal",
           description: options.description,
         }),
-      ),
-    );
+      );
+    });
 }
 
 export function registerAdminUpdateNamespace(admin: Command, print: Print): void {
   admin
     .command("update-namespace")
-    .description("Cambia organización, visibilidad o descripción de un namespace")
+    .description("Cambia dueño, visibilidad o descripción de un namespace")
     .argument("<name>")
-    .option("--organization <id>", 'Organización dueña ("none" para quitarla)')
+    .option("--organization <id>", "Pasa el namespace a esta organización")
+    .option("--user <username>", "Pasa el namespace a este usuario")
     .option("--restricted", "Solo quien lo tenga asignado ve sus paquetes")
     .option("--internal", "Cualquier identidad autenticada ve sus paquetes")
     .option("--description <text>")
     .action(async (name: string, options: UpdateOptions) =>
-      print(await serverApi().updateNamespace(name, namespaceChanges(options))),
+      print(await serverApi().updateNamespace(name, await namespaceChanges(options))),
     );
 }
 

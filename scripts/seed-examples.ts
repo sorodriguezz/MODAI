@@ -7,9 +7,30 @@ import { loadPackageSource } from "@sorodriguez/modai/package-source";
 const server = process.env.MODAI_SERVER ?? "http://localhost:8787";
 const api = new ApiClient(server, process.env.MODAI_API_TOKEN);
 const root = resolve("examples/packages");
+const EXAMPLES_ORGANIZATION = "Ejemplos MODAI";
 
-for (const entry of readdirSync(root, { withFileTypes: true }).filter((item) => item.isDirectory())) {
-  const input = loadPackageSource(join(root, entry.name));
+const sources = readdirSync(root, { withFileTypes: true })
+  .filter((item) => item.isDirectory())
+  .map((entry) => loadPackageSource(join(root, entry.name)));
+
+// why: every package lives in a namespace with an owner; the examples' namespaces belong to one organization.
+async function ensureNamespaces(): Promise<void> {
+  const existing = new Set((await api.namespaces()).map((item) => item.name));
+  const missing = [...new Set(sources.map((input) => manifestIdentity(input.manifest).name.split("/")[0]))].filter(
+    (name) => !existing.has(name),
+  );
+  if (!missing.length) return;
+  const organization =
+    (await api.organizations()).find((item) => item.name === EXAMPLES_ORGANIZATION) ??
+    (await api.createOrganization(EXAMPLES_ORGANIZATION, "Dueña de los paquetes de ejemplo"));
+  for (const name of missing) {
+    await api.createNamespace({ name, organizationId: organization.id });
+    process.stdout.write(`Namespace ${name} creado (${EXAMPLES_ORGANIZATION})\n`);
+  }
+}
+
+await ensureNamespaces();
+for (const input of sources) {
   try {
     const item = await api.publish(input);
     process.stdout.write(`Publicado ${item.name}@${item.version}\n`);

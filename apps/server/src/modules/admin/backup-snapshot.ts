@@ -17,6 +17,7 @@ export interface Snapshot {
   namespaces?: Array<{
     name: string;
     organizationId?: string;
+    ownerUsername?: string;
     description?: string;
     visibility?: "internal" | "restricted";
     createdAt: string;

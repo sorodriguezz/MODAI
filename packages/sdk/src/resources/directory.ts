@@ -1,4 +1,4 @@
-import type { NamespaceRecord, OrganizationRecord } from "../types.js";
+import type { NamespaceOwner, NamespaceRecord, OrganizationRecord } from "../types.js";
 import { ProjectsApi } from "./projects.js";
 
 export class DirectoryApi extends ProjectsApi {
@@ -35,12 +35,9 @@ export class DirectoryApi extends ProjectsApi {
     return (await this.request<{ namespaces: NamespaceRecord[] }>("/api/v1/namespaces")).namespaces;
   }
 
-  async createNamespace(input: {
-    name: string;
-    organizationId?: string;
-    description?: string;
-    visibility?: "internal" | "restricted";
-  }): Promise<NamespaceRecord> {
+  async createNamespace(
+    input: NamespaceOwner & { name: string; description?: string; visibility?: "internal" | "restricted" },
+  ): Promise<NamespaceRecord> {
     return (
       await this.request<{ namespace: NamespaceRecord }>("/api/v1/namespaces", {
         method: "POST",
@@ -51,7 +48,7 @@ export class DirectoryApi extends ProjectsApi {
 
   async updateNamespace(
     name: string,
-    input: { organizationId?: string | null; description?: string; visibility?: "internal" | "restricted" },
+    input: NamespaceOwner & { description?: string; visibility?: "internal" | "restricted" },
   ): Promise<NamespaceRecord> {
     return (
       await this.request<{ namespace: NamespaceRecord }>(`/api/v1/namespaces/${encodeURIComponent(name)}`, {

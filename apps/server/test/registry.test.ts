@@ -13,6 +13,7 @@ import {
   syncWorkspace,
 } from "@modai/core";
 import { createApp } from "../src/app.js";
+import { createNamespaces, exampleNamespaces } from "./support/namespaces.js";
 import { testDatabase } from "./support/test-database.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-server-v1-"));
@@ -24,6 +25,7 @@ const app = await createApp({
   apiToken: "v1-secret",
 });
 const auth = { authorization: "Bearer v1-secret" };
+await createNamespaces(app, "v1-secret", [...exampleNamespaces(), "@modai", "@skills", "@testing"]);
 const examples = join(process.cwd(), "examples", "packages");
 before(async () => {
   await app.listen({ host: "127.0.0.1", port: 0 });

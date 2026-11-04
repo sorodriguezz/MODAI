@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 import { UI } from "../playwright.config.ts";
+import { ensureNamespace } from "./support.ts";
 
 const auth = { authorization: `Bearer ${UI.token}` };
 
@@ -45,7 +46,7 @@ async function login(page: Page) {
 test.describe.configure({ mode: "serial" });
 
 test("crea un componente en el editor: archivos, carpetas, validación y publicación", async ({ page, request }) => {
-  await request.post("/api/v1/namespaces", { headers: { authorization: `Bearer ${UI.token}` }, data: { name: "@ui" } });
+  await ensureNamespace(request, "@ui");
   await login(page);
   await page.goto("/admin#/packages");
   await page.getByRole("button", { name: "Crear paquete" }).first().click();
@@ -284,7 +285,7 @@ test("la versión de un paquete nuevo no puede repetir ni ser menor que la últi
   page,
   request,
 }) => {
-  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui" } });
+  await ensureNamespace(request, "@ui");
   await publish(request, "@ui/ver-check", "1.2.0");
   await login(page);
   await page.goto("/admin#/packages");
@@ -312,7 +313,7 @@ test("el detalle de un paquete con features arma el comando de instalación resp
   page,
   request,
 }) => {
-  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui" } });
+  await ensureNamespace(request, "@ui");
   await publish(
     request,
     "@ui/health-flags",

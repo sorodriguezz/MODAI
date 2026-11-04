@@ -45,7 +45,7 @@ function convertTemplate({ archive, files, ...options }: TemplateBody): PublishP
   }
 }
 
-function skillRoute(app: FastifyInstance, { authz, packages, namespaces, audit }: Services): void {
+function skillRoute(app: FastifyInstance, { authz, packages, audit }: Services): void {
   app.post<{ Body: SkillBody }>(
     "/api/v1/packages/import-skill",
     {
@@ -67,7 +67,6 @@ function skillRoute(app: FastifyInstance, { authz, packages, namespaces, audit }
         };
       await authz.requirePublish(identityOf(request), name);
       const published = await packages.publish(validatedPackage(input));
-      await namespaces.ensureNamespace(name, identityOf(request)!);
       await audit.fromRequest(request, "package.publish", `${published.name}@${published.version}`, {
         source: "skill",
         quality: published.quality?.score,
@@ -77,13 +76,12 @@ function skillRoute(app: FastifyInstance, { authz, packages, namespaces, audit }
   );
 }
 
-function templateRoute(app: FastifyInstance, { authz, packages, namespaces, audit }: Services): void {
+function templateRoute(app: FastifyInstance, { authz, packages, audit }: Services): void {
   app.post<{ Body: TemplateBody }>(
     "/api/v1/packages/import-template",
     { bodyLimit: LARGE_BODY, schema: { body: importTemplateBody } },
     async (request, reply) => {
       await authz.requirePublish(identityOf(request), request.body.name);
-      await namespaces.requireNamespaceExists(request.body.name);
       const published = await packages.publish(validatedPackage(convertTemplate(request.body)));
       await audit.fromRequest(request, "package.publish", `${published.name}@${published.version}`, {
         source: "template",

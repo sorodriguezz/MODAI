@@ -12,6 +12,7 @@ import { ApiClient } from "@modai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../apps/server/src/app.js";
+import { createNamespaces, exampleNamespaces } from "../apps/server/test/support/namespaces.js";
 import { testDatabase } from "../apps/server/test/support/test-database.js";
 import { auditHarness, createHarness } from "../packages/cli/src/authoring/harness.js";
 
@@ -23,6 +24,15 @@ const app = await createApp({
   logger: false,
   apiToken: "test-secret",
 });
+await createNamespaces(app, "test-secret", [
+  ...exampleNamespaces(),
+  "@auth",
+  "@modai",
+  "@modelcontextprotocol",
+  "@override",
+  "@signed",
+  "@test",
+]);
 
 before(async () => {
   await app.listen({ host: "127.0.0.1", port: 0 });
@@ -303,6 +313,7 @@ test("protege la administración y emite API keys con roles", async () => {
     apiToken: "bootstrap-secret",
     logger: false,
   });
+  await createNamespaces(secured, "bootstrap-secret", ["@auth"]);
   const denied = await secured.inject({ method: "GET", url: "/api/v1/packages" });
   assert.equal(denied.statusCode, 401);
   const created = await secured.inject({

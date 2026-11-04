@@ -2,7 +2,6 @@ import type { Insertable, Updateable } from "kysely";
 import { type DataContext, withTransaction } from "../../infrastructure/database/database.js";
 import type { NamespacesTable } from "../../infrastructure/database/schema.js";
 import { escapeLike, likeLower } from "../../infrastructure/database/sql-helpers.js";
-import { insertIgnore } from "../../infrastructure/database/upsert.js";
 import { removeGrant } from "../auth/grants.repository.js";
 
 export class NamespacesRepository {
@@ -12,10 +11,13 @@ export class NamespacesRepository {
     return this.context.db
       .selectFrom("namespaces as n")
       .leftJoin("organizations as o", "o.id", "n.organization_id")
+      .leftJoin("users as u", "u.id", "n.owner_user_id")
       .select([
         "n.name",
         "n.organization_id",
         "o.name as organization_name",
+        "n.owner_user_id",
+        "u.username as owner_username",
         "n.description",
         "n.visibility",
         "n.created_at",
@@ -54,8 +56,8 @@ export class NamespacesRepository {
     await this.context.db.insertInto("namespaces").values(row).execute();
   }
 
-  async insertIfMissing(row: Insertable<NamespacesTable>): Promise<void> {
-    await insertIgnore(this.context, "namespaces", row, ["name"]);
+  async userExists(id: string): Promise<boolean> {
+    return Boolean(await this.context.db.selectFrom("users").select("id").where("id", "=", id).executeTakeFirst());
   }
 
   async update(name: string, fields: Updateable<NamespacesTable>): Promise<void> {

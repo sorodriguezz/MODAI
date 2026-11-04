@@ -2,7 +2,8 @@ import type { Insertable, Selectable, Updateable } from "kysely";
 import { type DataContext, withTransaction } from "../../infrastructure/database/database.js";
 import type { UsersTable } from "../../infrastructure/database/schema.js";
 import { toNumber } from "../../infrastructure/database/sql-helpers.js";
-import type { Role, UserRecord } from "./identity.js";
+import { removeGrant } from "./grants.repository.js";
+import { personalNamespace, type Role, type UserRecord } from "./identity.js";
 
 export type UserRow = Selectable<UsersTable>;
 
@@ -54,7 +55,35 @@ export class UsersRepository {
   }
 
   async insert(row: Insertable<UsersTable>, context: DataContext = this.context): Promise<void> {
-    await context.db.insertInto("users").values(row).execute();
+    await withTransaction(context, async (trx) => {
+      await trx.db.insertInto("users").values(row).execute();
+      await trx.db
+        .insertInto("namespaces")
+        .values({
+          name: personalNamespace(row.username),
+          organization_id: null,
+          owner_user_id: row.id,
+          description: `Namespace personal de ${row.username}`,
+          visibility: "internal",
+          created_by: row.id,
+          created_at: row.created_at,
+          updated_at: row.created_at,
+        })
+        .execute();
+    });
+  }
+
+  namespaceTaken(name: string, context: DataContext = this.context): Promise<{ name: string } | undefined> {
+    return context.db.selectFrom("namespaces").select("name").where("name", "=", name).executeTakeFirst();
+  }
+
+  async ownedNamespaces(id: string): Promise<string[]> {
+    const rows = await this.context.db
+      .selectFrom("namespaces")
+      .select("name")
+      .where("owner_user_id", "=", id)
+      .execute();
+    return rows.map((row) => row.name);
   }
 
   async update(id: string, fields: Updateable<UsersTable>): Promise<void> {
@@ -65,7 +94,7 @@ export class UsersRepository {
     await this.context.db.updateTable("users").set({ last_login_at: at }).where("id", "=", id).execute();
   }
 
-  async deleteRevokingKeys(id: string, at: string): Promise<void> {
+  async deleteRevokingKeys(id: string, at: string, namespaces: string[]): Promise<void> {
     await withTransaction(this.context, async (trx) => {
       await trx.db
         .updateTable("api_keys")
@@ -73,6 +102,8 @@ export class UsersRepository {
         .where("owner_user_id", "=", id)
         .where("revoked_at", "is", null)
         .execute();
+      for (const namespace of namespaces) await removeGrant(trx, "package_scopes_json", namespace);
+      await trx.db.deleteFrom("namespaces").where("owner_user_id", "=", id).execute();
       await trx.db.deleteFrom("users").where("id", "=", id).execute();
     });
   }

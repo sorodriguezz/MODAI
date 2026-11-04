@@ -17,6 +17,7 @@ import { type AppOptions, createApp } from "../apps/server/src/app.js";
 import { ApiKeysService } from "../apps/server/src/modules/auth/api-keys.service.js";
 import { AuthorizationService } from "../apps/server/src/modules/auth/authorization.service.js";
 import { RunsService } from "../apps/server/src/modules/runs/runs.service.js";
+import { createNamespaces, exampleNamespaces } from "../apps/server/test/support/namespaces.js";
 import { openTestDatabase, testDatabase } from "../apps/server/test/support/test-database.js";
 import { activateAgent, deactivateAgent, loadActivation } from "../packages/cli/src/agents/activation.js";
 import { CapabilityHost } from "../packages/cli/src/agents/capabilities.js";
@@ -58,6 +59,13 @@ async function fixture(overrides: Partial<AppOptions> = {}) {
     logger: false,
     ...overrides,
   });
+  // why: creating the namespaces would use up the tiny request budget of the rate-limit fixture.
+  if (!overrides.rateLimitMax)
+    await createNamespaces(app, admin, [
+      ...exampleNamespaces(),
+      ...["@agents", "@allowed", "@lib", "@mcp", "@modai", "@modelcontextprotocol", "@other", "@paths", "@quota"],
+      ...["@signed", "@skills"],
+    ]);
   await app.listen({ host: "127.0.0.1", port: 0 });
   const server = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`,
     api = new ApiClient(server, admin);

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { createApp } from "../src/app.js";
+import { createNamespaces } from "./support/namespaces.js";
 import { testDatabase } from "./support/test-database.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-admin-auth-"));
@@ -18,6 +19,7 @@ const app = await createApp({
   loginDelayMs: 0,
   loginRateLimitMax: 1000,
 });
+await createNamespaces(app, bootstrap, ["@cli"]);
 after(async () => {
   await app.close();
   rmSync(root, { recursive: true, force: true });

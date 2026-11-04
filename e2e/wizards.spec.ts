@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { writeZip } from "../packages/core/src/packages/zip.ts";
 import { UI } from "../playwright.config.ts";
+import { ensureNamespace } from "./support.ts";
 
 const auth = { authorization: `Bearer ${UI.token}` };
 
@@ -67,7 +68,8 @@ test("crea un usuario paso a paso eligiendo organización, proyectos y namespace
   });
 });
 
-test("importa un .skill con vista previa y lo publica", async ({ page }) => {
+test("importa un .skill con vista previa y lo publica", async ({ page, request }) => {
+  await ensureNamespace(request, "@ui-skills");
   await login(page);
   await page.goto("/admin#/packages");
   await page.getByRole("button", { name: "Crear paquete" }).first().click();
@@ -97,7 +99,7 @@ test("importa un .skill con vista previa y lo publica", async ({ page }) => {
 });
 
 test("sube un template desde un .zip y muestra cómo usarlo", async ({ page, request }) => {
-  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-plantillas" } });
+  await ensureNamespace(request, "@ui-plantillas");
   await login(page);
   await page.goto("/admin#/templates");
   await expect(page).toHaveURL(/#\/packages\?type=templates/);
@@ -237,6 +239,7 @@ test("una administración de organización ve Deprecar y Retirar solo en sus nam
     await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Pagos" } })).json()
   ).organization;
   await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-pagos", organizationId: org.id } });
+  await ensureNamespace(request, "@ui-otro");
   for (const name of ["@ui-pagos/cobro", "@ui-otro/cosa"]) {
     const content = "# Guía\n";
     await request.post("/api/v1/packages", {
@@ -299,7 +302,7 @@ test("un modal solo se cierra con sus botones: ni el fondo ni Escape descartan l
 });
 
 test("el detalle de un template con features las lista y arma el comando al marcarlas", async ({ page, request }) => {
-  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-plantillas" } });
+  await ensureNamespace(request, "@ui-plantillas");
   const yaml =
     "features:\n  sdd:\n    description: Spec-Driven Development\n    path: features/sdd\n  lombok:\n    description: Lombok\n    path: features/lombok\n    default: true\n";
   const archive = writeZip([
@@ -432,7 +435,7 @@ test("la administración gestiona categorías y el editor ofrece solo las regist
 });
 
 test("el conocimiento manual se guarda para todo el servidor o para un namespace", async ({ page, request }) => {
-  await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-docs" } });
+  await ensureNamespace(request, "@ui-docs");
   await login(page);
   await page.goto("/admin#/knowledge");
   await page.getByRole("button", { name: "Nuevo documento" }).first().click();
@@ -451,4 +454,29 @@ test("el conocimiento manual se guarda para todo el servidor o para un namespace
   expect(docs.find((doc: { title: string }) => doc.title === "Guía de despliegue del equipo").packageName).toBe(
     "@ui-docs/guias",
   );
+});
+
+test("cada namespace muestra su dueño y al crearlo se elige una organización o un usuario", async ({
+  page,
+  request,
+}) => {
+  await login(page);
+  await page.goto("/admin#/namespaces");
+  await expect(page.getByRole("columnheader", { name: "Dueño" })).toBeVisible();
+  await expect(page.getByRole("row", { name: new RegExp(`@${UI.username}\\b`) })).toContainText(UI.username);
+
+  await page.getByRole("button", { name: "Nuevo namespace" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Nombre").fill("@ui-personal");
+  await dialog.getByRole("button", { name: "Crear namespace" }).click();
+  await expect(dialog.locator(".form-error")).toBeVisible();
+  await dialog.getByLabel("Dueño").selectOption({ label: UI.username });
+  await dialog.getByRole("button", { name: "Crear namespace" }).click();
+  await expect(page.getByRole("row", { name: /@ui-personal/ })).toContainText(UI.username);
+
+  const { namespaces } = await (await request.get("/api/v1/namespaces", { headers: auth })).json();
+  expect(namespaces.find((n: { name: string }) => n.name === "@ui-personal")).toMatchObject({
+    ownerKind: "user",
+    ownerUsername: UI.username,
+  });
 });

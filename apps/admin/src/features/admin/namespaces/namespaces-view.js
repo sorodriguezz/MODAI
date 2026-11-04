@@ -1,5 +1,5 @@
-import { can, store } from "../../../app/state.js";
-import { del, patch, post } from "../../../shared/lib/api.js";
+import { can, state, store } from "../../../app/state.js";
+import { del, get, patch, post } from "../../../shared/lib/api.js";
 import { delegate, html, mount } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
 import { closeDialog, confirmDialog, openDialog } from "../../../shared/ui/dialog.js";
@@ -15,28 +15,54 @@ const visibilityHints = {
   restricted: "Solo quien tenga este namespace asignado (o administre su organización) ve sus paquetes.",
 };
 
+// why: only global administration gives a namespace to another user; the rest choose their organizations or themselves.
 async function ownerOptions() {
-  const organizations = await store.organizations();
-  return organizations.filter((o) => o.canManage);
+  const organizations = (await store.organizations()).filter((o) => o.canManage);
+  const users = can.admin()
+    ? (await get("/admin/users")).users.filter((u) => !u.disabledAt)
+    : state.user
+      ? [state.user]
+      : [];
+  return { organizations, users };
 }
 
-function organizationSelect(id, organizations, selected, { allowNone = can.admin() } = {}) {
-  return html`<select id="${id}" ${allowNone ? "" : "required"}>
-    ${allowNone ? html`<option value="">Sin organización (solo administración global)</option>` : html`<option value="" disabled ${selected ? "" : "selected"}>Elige una organización…</option>`}
-    ${organizations.map((o) => html`<option value="${o.id}" ${o.id === selected ? "selected" : ""}>${o.name}</option>`)}
+const ownerValue = (namespace) =>
+  namespace?.organizationId
+    ? `org:${namespace.organizationId}`
+    : namespace?.ownerUserId
+      ? `user:${namespace.ownerUserId}`
+      : "";
+
+function ownerSelect(id, { organizations, users }, selected) {
+  return html`<select id="${id}" required>
+    <option value="" disabled ${selected ? "" : "selected"}>Elige el dueño…</option>
+    ${organizations.length ? html`<optgroup label="Organizaciones">${organizations.map((o) => html`<option value="org:${o.id}" ${`org:${o.id}` === selected ? "selected" : ""}>${o.name}</option>`)}</optgroup>` : ""}
+    ${users.length ? html`<optgroup label="Usuarios">${users.map((u) => html`<option value="user:${u.id}" ${`user:${u.id}` === selected ? "selected" : ""}>${u.username}</option>`)}</optgroup>` : ""}
   </select>`;
 }
+
+function ownerPayload(value) {
+  const [kind, ...rest] = value.split(":");
+  const id = rest.join(":");
+  return kind === "org" ? { organizationId: id, ownerUserId: null } : { organizationId: null, ownerUserId: id };
+}
+
+const ownerLabel = (n) =>
+  n.ownerKind === "organization"
+    ? html`<span title="Organización">${icon("users", 14)} ${n.organizationName}</span>`
+    : html`<span title="Usuario">${icon("user", 14)} ${n.ownerUsername}</span>`;
+
 async function namespaceForm(namespace, onSaved) {
   const editing = Boolean(namespace);
   const owners = await ownerOptions();
   const body = openDialog({
     title: editing ? `Namespace ${namespace.name}` : "Nuevo namespace",
     description:
-      "Un namespace es el prefijo de los paquetes (@equipo/paquete). Pertenece a una organización, que decide quién publica en él.",
+      "Un namespace es el prefijo de los paquetes (@equipo/paquete). Tiene un solo dueño, una organización o un usuario, y sus paquetes le pertenecen.",
     size: "md",
     body: html`<form class="stack" novalidate>
       <div class="field"><label for="nsName">Nombre</label><input id="nsName" required maxlength="65" pattern="@[a-z0-9][a-z0-9._\\-]{0,63}" spellcheck="false" autocapitalize="off" value="${namespace?.name || "@"}" ${editing ? "disabled" : ""}><p class="hint">Empieza con @, en minúsculas. No se puede renombrar después.</p></div>
-      <div class="field"><label for="nsOrganization">Organización dueña</label>${organizationSelect("nsOrganization", owners, namespace?.organizationId)}</div>
+      <div class="field"><label for="nsOwner">Dueño</label>${ownerSelect("nsOwner", owners, ownerValue(namespace))}<p class="hint">La organización o el usuario al que pertenecen sus paquetes.</p></div>
       <fieldset class="field"><legend>Visibilidad</legend><div class="role-options">${Object.entries(visibilityLabels).map(([value, label]) => html`<label class="role-option"><input type="radio" name="nsVisibility" value="${value}" ${value === (namespace?.visibility || "internal") ? "checked" : ""}><span><b>${label}</b><span class="muted small">${visibilityHints[value]}</span></span></label>`)}</div></fieldset>
       <div class="field"><label for="nsDescription">Descripción (opcional)</label><textarea id="nsDescription" rows="2" maxlength="1000">${namespace?.description || ""}</textarea></div>
       <div class="form-error" role="alert" hidden></div>
@@ -46,18 +72,14 @@ async function namespaceForm(namespace, onSaved) {
   const form = body.querySelector("form");
   form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   bindForm(form, async () => {
+    if (!form.nsOwner.value) throw new Error("Elige el dueño del namespace");
     const payload = {
-      organizationId: form.nsOrganization.value || null,
+      ...(editing && form.nsOwner.value === ownerValue(namespace) ? {} : ownerPayload(form.nsOwner.value)),
       visibility: form.querySelector('input[name="nsVisibility"]:checked').value,
       description: form.nsDescription.value.trim(),
     };
     if (editing) await patch(`/namespaces/${encodeURIComponent(namespace.name)}`, payload);
-    else
-      await post("/namespaces", {
-        ...payload,
-        name: form.nsName.value.trim().toLowerCase(),
-        organizationId: payload.organizationId || undefined,
-      });
+    else await post("/namespaces", { ...payload, name: form.nsName.value.trim().toLowerCase() });
     closeDialog();
     toast(editing ? "Namespace actualizado" : "Namespace creado");
     await onSaved();
@@ -66,7 +88,7 @@ async function namespaceForm(namespace, onSaved) {
 function namespaceRow(n) {
   return html`<tr>
             <td><code>${n.name}</code>${n.description ? html`<div class="muted small">${n.description}</div>` : ""}</td>
-            <td>${n.organizationName || html`<span class="muted">Sin organización</span>`}</td>
+            <td>${ownerLabel(n)}</td>
             <td><span class="badge ${n.visibility === "restricted" ? "tone-warning" : ""}" title="${visibilityHints[n.visibility]}">${visibilityLabels[n.visibility]}</span></td>
             <td class="hide-sm"><a href="#/packages?q=${encodeURIComponent(`${n.name}/`)}">${n.packages}</a></td>
             <td class="hide-sm">${n.canPublish ? "Sí" : html`<span class="muted">No</span>`}</td>
@@ -85,14 +107,14 @@ export const namespacesView = {
   icon: "package",
   title: "Namespaces",
   subtitle:
-    "El prefijo @equipo/ de paquetes y templates. Cada uno pertenece a una organización, que decide quién publica en él.",
+    "El prefijo @equipo/ de paquetes y templates. Cada uno tiene un dueño, una organización o un usuario, al que pertenecen sus paquetes.",
   visible: () => can.manageOrganizations(),
   async render(root, { actions, isCurrent }) {
     mount(
       root,
       html`
-      <div class="callout tone-info">${icon("info")}<span>Un <b>namespace</b> debe existir antes de publicar en él: no se crea al publicar un paquete o template. Créalo aquí y asígnalo a una organización.</span></div>
-      <div class="toolbar"><div class="search-field">${icon("search")}<label class="sr-only" for="nsSearch">Buscar namespaces</label><input id="nsSearch" type="search" placeholder="Buscar por nombre u organización…"></div></div>
+      <div class="callout tone-info">${icon("info")}<span>Un <b>namespace</b> debe existir antes de publicar en él: no se crea al publicar un paquete o template. Créalo aquí con su dueño: una organización o un usuario. Cada usuario ya tiene su namespace personal <code>@usuario</code>.</span></div>
+      <div class="toolbar"><div class="search-field">${icon("search")}<label class="sr-only" for="nsSearch">Buscar namespaces</label><input id="nsSearch" type="search" placeholder="Buscar por nombre o dueño…"></div></div>
       <div class="panel" id="nsResults">${skeletonRows(4, 4)}</div>`,
     );
     let namespaces = [];
@@ -104,13 +126,14 @@ export const namespacesView = {
     const drawNamespaces = () => {
       const q = root.querySelector("#nsSearch").value.trim().toLocaleLowerCase();
       const list = namespaces.filter(
-        (n) => !q || [n.name, n.organizationName, n.description].join(" ").toLocaleLowerCase().includes(q),
+        (n) =>
+          !q || [n.name, n.organizationName, n.ownerUsername, n.description].join(" ").toLocaleLowerCase().includes(q),
       );
       mount(
         root.querySelector("#nsResults"),
         list.length
           ? html`<div class="table-wrap"><table class="table">
-          <thead><tr><th scope="col">Namespace</th><th scope="col">Organización</th><th scope="col">Visibilidad</th><th scope="col" class="hide-sm">Paquetes</th><th scope="col" class="hide-sm">Puedes publicar</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+          <thead><tr><th scope="col">Namespace</th><th scope="col">Dueño</th><th scope="col">Visibilidad</th><th scope="col" class="hide-sm">Paquetes</th><th scope="col" class="hide-sm">Puedes publicar</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
           <tbody>${list.map(namespaceRow)}</tbody></table></div>`
           : namespaces.length
             ? emptyState({ iconName: "search", title: "Sin coincidencias" })

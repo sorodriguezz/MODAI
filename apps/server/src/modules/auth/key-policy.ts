@@ -19,7 +19,7 @@ async function ownerCeiling(authz: AuthorizationService, owner: Identity): Promi
     return { all: true, projects: new Set(), organizations: new Set(), scopes: new Set(), anyScope: true };
   const rows = await authz.repository.projectOwnerships();
   const projects = new Set(rows.filter((row) => authz.seesProject(owner, row)).map((row) => row.id));
-  const managed = owner.role === "org-admin" ? (await authz.managedNamespaces(owner)).namespaces : [];
+  const managed = (await authz.managedNamespaces(owner)).namespaces;
   return {
     all: false,
     projects,
@@ -45,6 +45,7 @@ export async function boundToOwner(
   if (ceiling.all) return { ...owner, role, ...grants };
   return {
     ...owner,
+    personalOwnerId: undefined,
     role,
     projectIds: grants.projectIds.filter((id) => ceiling.projects.has(id)),
     organizationIds: grants.organizationIds.filter((id) => ceiling.organizations.has(id)),

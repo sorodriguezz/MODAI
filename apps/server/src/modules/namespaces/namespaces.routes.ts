@@ -1,10 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { identityOf } from "../../infrastructure/http/identity-hooks.js";
 import type { ModuleOptions } from "../module-options.js";
-import type { NamespaceVisibility } from "./namespaces.service.js";
+import type { NamespaceOwner, NamespaceVisibility } from "./namespaces.service.js";
+
+type NamespaceBody = NamespaceOwner & { description?: string; visibility?: NamespaceVisibility };
 
 const namespaceBody = {
   organizationId: { type: ["string", "null"], minLength: 1, maxLength: 200 },
+  ownerUserId: { type: ["string", "null"], minLength: 1, maxLength: 200 },
   description: { type: "string", maxLength: 1000 },
   visibility: { type: "string", enum: ["internal", "restricted"] },
 };
@@ -14,7 +17,7 @@ export async function namespacesRoutes(app: FastifyInstance, { services }: Modul
   app.get("/api/v1/namespaces", async (request) => ({
     namespaces: await namespaces.listNamespaces(identityOf(request)),
   }));
-  app.post<{ Body: { name: string; organizationId?: string; description?: string; visibility?: NamespaceVisibility } }>(
+  app.post<{ Body: NamespaceBody & { name: string } }>(
     "/api/v1/namespaces",
     {
       schema: {
@@ -27,12 +30,10 @@ export async function namespacesRoutes(app: FastifyInstance, { services }: Modul
       },
     },
     async (request, reply) => {
-      const namespace = await namespaces.createNamespace(identityOf(request), {
-        ...request.body,
-        organizationId: request.body.organizationId ?? undefined,
-      });
+      const namespace = await namespaces.createNamespace(identityOf(request), request.body);
       await audit.fromRequest(request, "namespace.create", namespace.name, {
         organizationId: namespace.organizationId,
+        ownerUserId: namespace.ownerUserId,
         visibility: namespace.visibility,
       });
       return reply.code(201).send({ namespace });
@@ -40,7 +41,7 @@ export async function namespacesRoutes(app: FastifyInstance, { services }: Modul
   );
   app.patch<{
     Params: { name: string };
-    Body: { organizationId?: string | null; description?: string; visibility?: NamespaceVisibility };
+    Body: NamespaceBody;
   }>(
     "/api/v1/namespaces/:name",
     { schema: { body: { type: "object", additionalProperties: false, properties: namespaceBody } } },

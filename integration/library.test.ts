@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { createApp } from "../apps/server/src/app.js";
+import { createNamespaces } from "../apps/server/test/support/namespaces.js";
 import { testDatabase } from "../apps/server/test/support/test-database.js";
 import { applyVariables } from "../packages/cli/src/services/templates.js";
 import { sha256 } from "../packages/contracts/src/security/index.js";
@@ -19,6 +20,9 @@ const app = await createApp({
   adminDirectory: false,
   initialAdmin: false,
 });
+const testOrg = await createNamespaces(app, bootstrap, [
+  ...["@skills", "@equipo-a", "@secreto", "@cli", "@methodologies", "@components"],
+]);
 after(async () => {
   await app.close();
   rmSync(root, { recursive: true, force: true });
@@ -148,7 +152,10 @@ test("los templates son paquetes kind: Template: se publican desde archivos o ZI
   });
   assert.equal(missing.status, 404);
   assert.equal(missing.body.error.code, "NAMESPACE_NOT_FOUND");
-  assert.equal((await call(admin, "POST", "/namespaces", { name: "@plantillas" })).status, 201);
+  assert.equal(
+    (await call(admin, "POST", "/namespaces", { name: "@plantillas", organizationId: testOrg })).status,
+    201,
+  );
   const first = await call(admin, "POST", "/packages/import-template", {
     name: "@plantillas/nestjs-sdd",
     version: "1.0.0",
@@ -244,7 +251,16 @@ test("los templates son paquetes kind: Template: se publican desde archivos o ZI
     "retirada no es la última",
   );
 
-  assert.equal((await call(admin, "POST", "/namespaces", { name: "@privado", visibility: "restricted" })).status, 201);
+  assert.equal(
+    (
+      await call(admin, "POST", "/namespaces", {
+        name: "@privado",
+        organizationId: testOrg,
+        visibility: "restricted",
+      })
+    ).status,
+    201,
+  );
   assert.equal(
     (
       await call(admin, "POST", "/packages/import-template", {
@@ -656,6 +672,7 @@ test("la misma CLI gestiona skills, conocimiento, memoria, templates, usuarios y
   );
   writeFileSync(join(folder, "references", "pasos.md"), "# Pasos\n");
   assert.match(await modai("skill", "publish", folder, "--namespace", "@cli-skills", "--dry-run"), /deploy-check/);
+  await modai("admin", "create-namespace", "@cli-skills", "--organization", testOrg);
   assert.match(
     await modai("skill", "publish", folder, "--namespace", "@cli-skills"),
     /@cli-skills\/deploy-check@1\.0\.0/,

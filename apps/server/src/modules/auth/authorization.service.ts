@@ -69,15 +69,14 @@ export class AuthorizationService {
   async packageReader(identity: Identity | undefined): Promise<PackageReader> {
     const actor = this.require(identity, "reader");
     if (actor.role === "admin" || actor.packageScopes.includes("*")) return () => true;
-    const restricted = new Map(
-      (await this.repository.restrictedNamespaces()).map((row) => [row.name, row.organizationId]),
-    );
+    const restricted = new Map((await this.repository.restrictedNamespaces()).map((row) => [row.name, row]));
     return (packageName) => {
-      const scope = namespaceOf(packageName);
-      if (!restricted.has(scope)) return true;
+      const owner = restricted.get(namespaceOf(packageName));
+      if (!owner) return true;
       return (
-        actor.packageScopes.includes(scope) ||
-        (actor.role === "org-admin" && this.administers(actor, restricted.get(scope)))
+        actor.packageScopes.includes(owner.name) ||
+        (Boolean(owner.ownerUserId) && owner.ownerUserId === actor.personalOwnerId) ||
+        (actor.role === "org-admin" && Boolean(owner.organizationId) && this.administers(actor, owner.organizationId))
       );
     };
   }
@@ -90,19 +89,22 @@ export class AuthorizationService {
   async publishableNamespaces(actor: Identity): Promise<NamespaceScope> {
     if (!this.satisfies(actor.role, "publisher")) return { all: false, namespaces: [] };
     if (actor.role === "admin" || actor.packageScopes.includes("*")) return { all: true, namespaces: [] };
-    const owned =
-      actor.role === "org-admin" ? await this.repository.namespacesOfOrganizations(actor.organizationIds) : [];
+    const owned = (await this.managedNamespaces(actor)).namespaces;
     return { all: false, namespaces: [...new Set([...actor.packageScopes, ...owned])].sort() };
   }
 
   async managedNamespaces(actor: Identity): Promise<NamespaceScope> {
     if (actor.role === "admin") return { all: true, namespaces: [] };
-    if (actor.role !== "org-admin" || !actor.organizationIds.length) return { all: false, namespaces: [] };
-    return { all: false, namespaces: await this.repository.namespacesOfOrganizations(actor.organizationIds) };
+    const personal = this.satisfies(actor.role, "publisher")
+      ? await this.repository.namespacesOfUser(actor.personalOwnerId)
+      : [];
+    const organization =
+      actor.role === "org-admin" ? await this.repository.namespacesOfOrganizations(actor.organizationIds) : [];
+    return { all: false, namespaces: [...new Set([...personal, ...organization])].sort() };
   }
 
   async requireManagePackage(identity: Identity | undefined, packageName: string): Promise<Identity> {
-    const actor = this.requireManager(identity);
+    const actor = this.require(identity, "publisher");
     const managed = await this.managedNamespaces(actor);
     if (!managed.all && !managed.namespaces.includes(namespaceOf(packageName)))
       throw new AppError(403, "PACKAGE_FORBIDDEN", `No administras el namespace ${namespaceOf(packageName)}`);
@@ -113,6 +115,12 @@ export class AuthorizationService {
     const actor = this.require(identity, "publisher");
     const allowed = await this.publishableNamespaces(actor);
     const scope = namespaceOf(packageName);
+    if (!(await this.repository.namespaceExists(scope)))
+      throw new AppError(
+        404,
+        "NAMESPACE_NOT_FOUND",
+        `El namespace ${scope} no existe. Créalo antes con su organización o usuario dueño (menú Namespaces o POST /api/v1/namespaces).`,
+      );
     if (!allowed.all && !allowed.namespaces.includes(scope))
       throw new AppError(
         403,
