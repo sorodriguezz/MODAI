@@ -1,0 +1,210 @@
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  padding-right: 38px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 19px) calc(50% + 1px),
+    calc(100% - 14px) calc(50% + 1px);
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+}
+select:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+select:focus {
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--primary) 50%),
+    linear-gradient(135deg, var(--primary) 50%, transparent 50%);
+}
+select::-ms-expand {
+  display: none;
+}
+select option {
+  color: var(--text);
+  background-color: var(--surface);
+}
+.hint {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.input-group {
+  display: flex;
+  position: relative;
+}
+.input-group input {
+  padding-right: 44px;
+}
+.input-addon {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.input-addon:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.form-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-weight: 550;
+  font-size: 13px;
+}
+.checkbox {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+.check-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 14px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.role-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+.role-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 12px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.role-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.role-option:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.role-option:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.role-option:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.strength {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 16px;
+}
+.stack > .strength {
+  margin-top: -8px;
+}
+.field > .btn {
+  align-self: flex-start;
+}
+.strength .bar {
+  height: 4px;
+  flex: 1;
+  max-width: 64px;
+  border-radius: 2px;
+  background: var(--surface-3);
+}
+.strength-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 6px;
+}
+.strength[data-level="0"] .bar:nth-child(1) {
+  background: var(--danger);
+}
+.strength[data-level="1"] .bar:nth-child(-n + 1) {
+  background: var(--warning);
+}
+.strength[data-level="2"] .bar:nth-child(-n + 2) {
+  background: var(--success);
+}
+.strength[data-level="3"] .bar {
+  background: var(--success);
+}
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  cursor: pointer;
+}
+.switch-track {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  position: relative;
+  transition: background 0.15s;
+  flex: none;
+}
+.switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s;
+}
+.switch input:checked + .switch-track {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.switch input:checked + .switch-track::after {
+  transform: translateX(16px);
+  background: #fff;
+}
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

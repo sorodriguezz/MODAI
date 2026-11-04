@@ -3,11 +3,13 @@
 Aplicación privada del monorepo, en JavaScript sin dependencias de runtime. El servidor la sirve en `/admin`, en el mismo origen que la API; la sesión usa una cookie `HttpOnly` (ver [docs/guides/ADMIN-PANEL.md](../../docs/guides/ADMIN-PANEL.md)).
 
 - `src/index.html`: estructura base (pantalla de acceso, barra lateral, barra superior, diálogo y notificaciones).
-- `src/main.js`: arranque, inicio de sesión/instalación, navegación por hash (`#/paquetes…`) y menú del usuario.
-- `src/views/`: una sección por archivo (`dashboard`, `packages`, `agents`, `knowledge`, `projects`, `memories`, `runs`, `connect`, `users`, `access`, `audit`) más `auth` y `account`.
-- `src/lib/`: `api.js` (fetch con cabecera CSRF), `html.js` (plantillas que escapan todo por defecto), `ui.js` (diálogos, confirmaciones, toasts, formularios, esqueletos) e `icons.js`.
-- `src/state.js`: identidad actual, caché de datos, permisos por rol y normalización de manifiestos `modai.dev/v1`.
-- `styles.css` y `theme.js`: tokens de color, tema claro/oscuro/sistema y diseño responsive.
+- `src/main.js`: solo el arranque; enlaza los módulos de `src/app/`.
+- `src/app/`: `router.js` (registro de vistas y navegación por hash), `shell.js` (navegación, cabecera, estado del servidor), `session.js` (inicio de sesión/instalación), `user-menu.js`, `sidebar.js`, `state.js` (identidad, caché y permisos) y `theme.js`.
+- `src/shared/ui/`: diálogos, toasts, formularios, contraseñas, pestañas, esqueletos, estados vacíos, bloques de código y editor de archivos.
+- `src/shared/pickers/`: combobox de namespaces y categorías, selector de dependencias, editor y selector de opciones (features).
+- `src/shared/lib/`: `api.js` (fetch con cabecera CSRF), `html.js` (plantillas que escapan todo por defecto), iconos, archivos, versiones, asistentes paso a paso, calidad y manifiestos `modai.dev/v1`.
+- `src/features/`: una carpeta por área (`packages/` con catálogo, detalle, editor, templates, agentes e importación de skills; `knowledge`, `memories`, `projects`, `runs`, `connect`, `keys`, `account`, `auth`, `dashboard` y `admin/` con usuarios, accesos, organizaciones, namespaces, categorías y auditoría). Cada vista exporta un objeto con nombre (por ejemplo `packagesView`) que se registra en `app/router.js`.
+- `src/styles/`: CSS dividido en `base/`, `layout/`, `components/` y `features/`; `index.css` los importa en orden y el build los empaqueta en un único `styles.css`.
 
 La CSP es estricta (`script-src 'self'`): no uses scripts ni manejadores en línea; enlaza eventos con `addEventListener` o `delegate()` y construye HTML solo con la plantilla `html\`\``.
 

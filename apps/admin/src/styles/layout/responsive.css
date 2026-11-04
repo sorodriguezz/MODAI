@@ -1,0 +1,172 @@
+@media (max-width: 1100px) {
+  .user-text {
+    display: none;
+  }
+  .user-button {
+    padding: 4px;
+  }
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-lg);
+    width: min(300px, 86vw);
+  }
+  body.menu-open .sidebar {
+    transform: none;
+  }
+  body.menu-open .backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgb(10 12 20 / 45%);
+  }
+  body.menu-open {
+    overflow: hidden;
+  }
+  .sidebar-close,
+  .menu-toggle {
+    display: inline-grid;
+  }
+  .main-column {
+    margin-left: 0;
+  }
+  .topbar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .content {
+    padding: 20px 16px 48px;
+  }
+  .auth-layout {
+    grid-template-columns: 1fr;
+  }
+  .auth-aside {
+    display: none;
+  }
+  .mobile-only {
+    display: inline-grid;
+  }
+}
+
+@media (max-width: 640px) {
+  h1 {
+    font-size: 21px;
+  }
+  .crumb-section,
+  .crumb-sep {
+    display: none;
+  }
+  .theme-select {
+    min-width: 0;
+    max-width: 120px;
+  }
+  .hide-sm {
+    display: none !important;
+  }
+  .page-head {
+    align-items: stretch;
+  }
+  .page-actions-inner {
+    width: 100%;
+  }
+  .page-actions-inner .btn {
+    flex: 1;
+  }
+  .toolbar select,
+  .toolbar select.grow {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .table thead {
+    display: none;
+  }
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+  .table tr {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .table tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .table td {
+    padding: 3px 0;
+    border: 0 !important;
+  }
+  .table td.actions {
+    text-align: left;
+    white-space: normal;
+    padding-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .table td.actions > * + * {
+    margin-left: 0;
+  }
+  .table td.truncate {
+    max-width: none;
+    white-space: normal;
+  }
+  .auth-card {
+    padding: 24px 20px;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  .auth-main {
+    justify-content: flex-start;
+    padding-top: 64px;
+  }
+  .dialog {
+    max-height: calc(100vh - 16px);
+  }
+  .dialog-body {
+    padding: 16px;
+  }
+  .dialog-actions .btn {
+    flex: 1;
+  }
+  .code-block pre {
+    padding-right: 14px;
+    padding-bottom: 46px;
+  }
+  .copy-button {
+    top: auto;
+    bottom: 6px;
+  }
+  .toasts {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .btn,
+  .badge,
+  .nav a.active {
+    border: 1px solid CanvasText;
+  }
+}

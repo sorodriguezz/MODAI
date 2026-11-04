@@ -1,0 +1,13 @@
+html:has(dialog[open]),
+body:has(dialog[open]) {
+  overflow: hidden;
+}
+.dialog {
+  overscroll-behavior: contain;
+}
+.dialog-body {
+  overscroll-behavior: contain;
+}
+.hint.invalid {
+  color: var(--danger);
+}

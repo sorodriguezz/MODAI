@@ -1,0 +1,79 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+fieldset.field > legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+.field label,
+fieldset.field > legend {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  min-height: 38px;
+  padding: 8px 11px;
+  width: 100%;
+  min-width: 0;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+textarea {
+  resize: vertical;
+  min-height: 96px;
+  line-height: 1.5;
+}
+textarea.mono {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+input:disabled,
+select:disabled {
+  background-color: var(--surface-2);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  accent-color: var(--primary);
+  flex: none;
+  margin: 2px 0 0;
+}

@@ -1,0 +1,21 @@
+.dep-row {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.dep-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+}
+.dep-row .hint {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .dep-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

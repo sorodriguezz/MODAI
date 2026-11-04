@@ -1,0 +1,126 @@
+.auth-screen {
+  min-height: 100vh;
+}
+.auth-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) 1.1fr;
+  min-height: 100vh;
+}
+.auth-layout.single {
+  grid-template-columns: 1fr;
+}
+.auth-aside {
+  position: relative;
+  overflow: hidden;
+  padding: 40px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background:
+    radial-gradient(1200px 600px at -10% -10%, #6366f1 0%, transparent 55%),
+    radial-gradient(900px 500px at 120% 110%, #7c3aed 0%, transparent 55%), #14123a;
+  color: #eef0ff;
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+.auth-brand .logo-mark {
+  background: rgb(255 255 255 / 14%);
+  border: 1px solid rgb(255 255 255 / 25%);
+}
+.auth-pitch h2 {
+  color: #fff;
+  font-size: 30px;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  max-width: 420px;
+}
+.auth-pitch p {
+  margin-top: 14px;
+  color: #d5d7f7;
+  max-width: 420px;
+  font-size: 15px;
+}
+.auth-points {
+  list-style: none;
+  padding: 0;
+  margin: 28px 0 0;
+  display: grid;
+  gap: 12px;
+}
+.auth-points li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: #e4e6ff;
+}
+.auth-points .icon {
+  color: #b9bcff;
+}
+.auth-foot {
+  color: #b9bce8;
+  font-size: 12.5px;
+}
+.auth-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 76px 20px 32px;
+  gap: 18px;
+  position: relative;
+}
+.auth-top {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 32px;
+}
+.auth-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.auth-card-head .badge {
+  align-self: flex-start;
+}
+.auth-card-head p {
+  color: var(--muted);
+}
+.auth-card .callout {
+  margin-bottom: 16px;
+}
+.auth-help {
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.auth-help summary {
+  cursor: pointer;
+  font-weight: 550;
+  color: var(--text-2);
+}
+.auth-help p {
+  margin-top: 8px;
+}
+.auth-legal {
+  color: var(--muted);
+  font-size: 12px;
+}
+.mobile-only {
+  display: none;
+}

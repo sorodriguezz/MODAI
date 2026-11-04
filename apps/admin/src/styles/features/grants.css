@@ -1,0 +1,51 @@
+.grant-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.grant-steps legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.step-number.small {
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+}
+.grant-group + .grant-group {
+  margin-top: 10px;
+}
+.grant-group[hidden] {
+  display: none;
+}
+.grant-group-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3, var(--text-2));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.explainer > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+.explainer > summary::-webkit-details-marker {
+  display: none;
+}
+.explainer[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+.explainer ol {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
