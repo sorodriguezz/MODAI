@@ -7,7 +7,7 @@ export async function systemRoutes(app: FastifyInstance, { services, config }: M
   app.get("/health", async (request) => ({
     status: "ok",
     service: "modularai",
-    version: "0.10.0",
+    version: "0.11.0",
     apiVersion: 1,
     signaturePolicy: config.signaturePolicy,
     publicUrl: config.publicUrl,
