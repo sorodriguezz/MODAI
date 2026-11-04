@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { createProjectFile, LocalRegistry, loadPackageSource, saveProjectFile } from "@modai/core";
 import YAML from "yaml";
-import { discoverProjects } from "../packages/cli/src/v1/workspace.ts";
+import { discoverProjects } from "../packages/cli/src/services/workspace.ts";
 
 const root = mkdtempSync(join(tmpdir(), "modai-workspace-"));
 const env = {
@@ -43,7 +43,7 @@ function modai(cwd: string, ...args: string[]): Promise<{ status: number; stdout
       process.execPath,
       [
         join(process.cwd(), "node_modules/tsx/dist/cli.mjs"),
-        join(process.cwd(), "packages/cli/src/cli/index.ts"),
+        join(process.cwd(), "packages/cli/src/bin/modai.ts"),
         ...args,
       ],
       { cwd, env, encoding: "utf8" },

@@ -7,7 +7,7 @@ import { test } from "node:test";
 // The client config path is fixed when the module loads: point it at a temporary folder first.
 const config = mkdtempSync(join(tmpdir(), "modai-connection-"));
 process.env.MODAI_CONFIG_DIR = config;
-const { effectiveConnection, insecureTransport } = await import("../packages/cli/src/cli/connection.ts");
+const { effectiveConnection, insecureTransport } = await import("../packages/cli/src/services/connection.ts");
 
 const withEnv = (vars: Record<string, string | undefined>, run: () => void) => {
   const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]));

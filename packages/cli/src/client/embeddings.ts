@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ApiClient } from "@modai/sdk";
-import { readYaml, writeYaml } from "../cli/config.js";
+import { readYaml, writeYaml } from "../services/config.js";
 import { LocalOllama, localRuntimeUrl } from "./ollama.js";
 
 export const localModelsPath = join(homedir(), ".modai", "local-models.yaml");
@@ -35,19 +35,11 @@ export function saveLocalModels(config: LocalModelsConfig): void {
   writeYaml(localModelsPath, config);
 }
 
-// Incluye digest y versión de preprocesado: un cambio de pesos nunca mezcla espacios vectoriales.
 export function vectorSpace(config: LocalModelsConfig): string {
-  return (
-    "client-v1:" +
-    createHash("sha256")
-      .update(config.embeddingModel + "@" + config.digest)
-      .digest("hex")
-  );
+  return `client-v1:${createHash("sha256").update(`${config.embeddingModel}@${config.digest}`).digest("hex")}`;
 }
 export function sourceHash(doc: { title: string; content: string }): string {
-  return createHash("sha256")
-    .update(doc.title + "\n" + doc.content)
-    .digest("hex");
+  return createHash("sha256").update(`${doc.title}\n${doc.content}`).digest("hex");
 }
 
 export function chunkText(text: string, size = 1200, overlap = 150): string[] {
@@ -63,9 +55,9 @@ export function chunkText(text: string, size = 1200, overlap = 150): string[] {
 }
 function prefix(model: string, text: string, query: boolean): string {
   if (model.startsWith("embeddinggemma"))
-    return query ? "task: search result | query: " + text : "title: document | text: " + text;
+    return query ? `task: search result | query: ${text}` : `title: document | text: ${text}`;
   if (model.startsWith("qwen3-embedding") && query)
-    return "Instruct: Retrieve relevant technical documentation for the query\nQuery: " + text;
+    return `Instruct: Retrieve relevant technical documentation for the query\nQuery: ${text}`;
   return text;
 }
 
@@ -88,6 +80,20 @@ export async function checkedRuntime(config: LocalModelsConfig): Promise<LocalOl
   return runtime;
 }
 
+async function embedChunks(runtime: LocalOllama, config: LocalModelsConfig, chunks: string[]): Promise<number[][]> {
+  const vectors: number[][] = [];
+  for (let i = 0; i < chunks.length; i += config.batchSize) {
+    const batch = chunks.slice(i, i + config.batchSize).map((c) => prefix(config.embeddingModel, c, false));
+    try {
+      vectors.push(...(await runtime.embed(config.embeddingModel, batch)));
+    } catch (error) {
+      if (batch.length === 1) throw error;
+      for (const text of batch) vectors.push(...(await runtime.embed(config.embeddingModel, [text])));
+    }
+  }
+  return vectors;
+}
+
 export async function indexKnowledge(
   api: ApiClient,
   config: LocalModelsConfig,
@@ -105,20 +111,10 @@ export async function indexKnowledge(
         skipped++;
         continue;
       }
-      const chunks = chunkText(doc.title + "\n" + doc.content);
+      const chunks = chunkText(`${doc.title}\n${doc.content}`);
       if (chunks.length > 1000)
         throw new Error(`Documento demasiado grande: ${doc.title}. Divídelo en documentos más pequeños.`);
-      const vectors: number[][] = [];
-      for (let i = 0; i < chunks.length; i += config.batchSize) {
-        const batch = chunks.slice(i, i + config.batchSize).map((c) => prefix(config.embeddingModel, c, false));
-        try {
-          vectors.push(...(await runtime.embed(config.embeddingModel, batch)));
-        } catch (error) {
-          if (batch.length === 1) throw error;
-          // Reintenta por fragmento ante presión de memoria, sin cambiar modelo ni truncar contenido.
-          for (const text of batch) vectors.push(...(await runtime.embed(config.embeddingModel, [text])));
-        }
-      }
+      const vectors = await embedChunks(runtime, config, chunks);
       await api.saveVector(doc.id, vectorSpace(config), centroid(vectors), sourceHash(doc));
       indexed++;
       progress(`Indexado ${indexed}: ${doc.title} (${chunks.length} fragmentos, cálculo local)`);

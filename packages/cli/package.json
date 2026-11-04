@@ -34,14 +34,14 @@
     "zod": "^4.6.7"
   },
   "bin": {
-    "modai": "dist/cli/index.js",
-    "modai-mcp": "dist/mcp.js"
+    "modai": "dist/bin/modai.js",
+    "modai-mcp": "dist/bin/modai-mcp.js"
   },
   "publishConfig": {
     "access": "public"
   },
   "exports": {
-    "./package-source": "./dist/cli/package-source.js"
+    "./package-source": "./dist/authoring/package-source.js"
   },
   "devDependencies": {
     "@modai/contracts": "0.10.0",

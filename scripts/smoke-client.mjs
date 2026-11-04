@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../apps/server/dist/http/app.js";
-import { loadPackageSource } from "../packages/cli/dist/cli/package-source.js";
+import { loadPackageSource } from "../packages/cli/dist/authoring/package-source.js";
 import { ApiClient } from "../packages/sdk/dist/index.js";
 
 const exec = promisify(execFile),
@@ -67,7 +67,7 @@ try {
   const project = join(root, "project");
   mkdirSync(project);
   const env = { ...process.env, MODAI_API_TOKEN: clientToken, MODAI_CONFIG_DIR: join(root, "config") };
-  const cli = join(root, "node_modules", packageName, "dist/cli/index.js");
+  const cli = join(root, "node_modules", packageName, "dist/bin/modai.js");
   const call = async (args, token = clientToken) =>
     (
       await exec(process.execPath, [cli, ...args], {
@@ -114,7 +114,12 @@ try {
     (
       await exec(process.execPath, [cli, ...args], {
         cwd: clone,
-        env: { ...env, MODAI_CONFIG_DIR: join(root, "config-b"), MODAI_API_TOKEN: teammateKey.token },
+        env: {
+          ...env,
+          MODAI_CONFIG_DIR: join(root, "config-b"),
+          MODAI_API_TOKEN: teammateKey.token,
+          MODAI_SERVER: server,
+        },
         timeout: 30000,
       })
     ).stdout;
@@ -149,7 +154,7 @@ try {
   assert.equal((await api.run(submitted.id)).status, "completed");
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [join(root, "node_modules", packageName, "dist/mcp.js"), "--project", project],
+    args: [join(root, "node_modules", packageName, "dist/bin/modai-mcp.js"), "--project", project],
     cwd: project,
     env: {
       ...getDefaultEnvironment(),

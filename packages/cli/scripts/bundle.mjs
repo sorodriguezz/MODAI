@@ -40,7 +40,7 @@ await build({
     ),
   },
 });
-for (const file of ["dist/cli/index.js", "dist/mcp.js"]) chmodSync(resolve(root, file), 0o755);
+for (const file of ["dist/bin/modai.js", "dist/bin/modai-mcp.js"]) chmodSync(resolve(root, file), 0o755);
 
 // Keep the authoring export's declarations usable without installing private workspaces.
 mkdirSync(resolve(root, "dist/internal"), { recursive: true });

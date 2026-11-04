@@ -17,12 +17,12 @@ import { AuthService } from "../apps/server/src/core/auth-service.js";
 import { Database } from "../apps/server/src/core/database.js";
 import { RunService } from "../apps/server/src/core/run-service.js";
 import { type AppOptions, createApp } from "../apps/server/src/http/app.js";
-import { activateAgent, deactivateAgent, loadActivation } from "../packages/cli/src/agent/activation.js";
-import { CapabilityHost } from "../packages/cli/src/agent/capabilities.js";
-import { executeAgent } from "../packages/cli/src/agent/runtime.js";
-import { verifyPackage } from "../packages/cli/src/agent/trust.js";
-import { workOnce } from "../packages/cli/src/agent/worker.js";
-import { loadPackageSource } from "../packages/cli/src/cli/package-source.js";
+import { activateAgent, deactivateAgent, loadActivation } from "../packages/cli/src/agents/activation.js";
+import { CapabilityHost } from "../packages/cli/src/agents/capabilities.js";
+import { executeAgent } from "../packages/cli/src/agents/runtime.js";
+import { verifyPackage } from "../packages/cli/src/services/trust.js";
+import { workOnce } from "../packages/cli/src/agents/worker.js";
+import { loadPackageSource } from "../packages/cli/src/authoring/package-source.js";
 
 const approvalDirectory = mkdtempSync(join(tmpdir(), "modai-test-approvals-"));
 process.env.MODAI_CONFIG_DIR = approvalDirectory;
@@ -556,7 +556,7 @@ test("MCP descubre herramientas de un proceso aprobado y aplica la política del
     assert.deepEqual(loadActivation(copied).allowedMcp, []);
     const transport = new StdioClientTransport({
       command: process.execPath,
-      args: [join(process.cwd(), "packages/cli/dist/mcp.js"), "--project", project],
+      args: [join(process.cwd(), "packages/cli/dist/bin/modai-mcp.js"), "--project", project],
       cwd: project,
       env: {
         ...getDefaultEnvironment(),

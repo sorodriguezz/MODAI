@@ -5,7 +5,8 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { detectInstall, fetchDistTag, noticeEnabled } from "../packages/cli/src/cli/upgrade.ts";
+import { noticeEnabled } from "../packages/cli/src/services/update-notice.ts";
+import { detectInstall, fetchDistTag } from "../packages/cli/src/services/upgrade.ts";
 
 const config = mkdtempSync(join(tmpdir(), "modai-upgrade-"));
 let server: Server;
@@ -31,7 +32,7 @@ function cli(...args: string[]): Promise<{ status: number; stdout: string; stder
   return new Promise((resolve) =>
     execFile(
       process.execPath,
-      ["--import", "tsx", "packages/cli/src/cli/index.ts", ...args],
+      ["--import", "tsx", "packages/cli/src/bin/modai.ts", ...args],
       {
         encoding: "utf8",
         env: { ...process.env, MODAI_NPM_REGISTRY: registry, MODAI_CONFIG_DIR: config, MODAI_NO_UPDATE_NOTIFIER: "1" },
@@ -59,7 +60,7 @@ test("modai upgrade consulta la etiqueta de npm y no instala sobre una CLI que n
 });
 
 test("detecta cómo se instaló la CLI para usar el gestor correcto", () => {
-  const entry = (prefix: string) => `${prefix}/node_modules/@sorodriguez/modai/dist/cli/index.js`;
+  const entry = (prefix: string) => `${prefix}/node_modules/@sorodriguez/modai/dist/bin/modai.js`;
   const npmRoot = () => "/usr/local/lib/node_modules";
   assert.deepEqual(detectInstall(entry("/usr/local/lib"), npmRoot), { kind: "npm", command: ["npm", "install", "-g"] });
   assert.equal(detectInstall(entry("/home/u/.npm/_npx/abc"), npmRoot).kind, "npx");
@@ -67,7 +68,7 @@ test("detecta cómo se instaló la CLI para usar el gestor correcto", () => {
   assert.equal(detectInstall(entry("/home/u/.bun/install/global"), npmRoot).kind, "bun");
   assert.equal(detectInstall(entry("/home/u/proyecto"), npmRoot).kind, "source", "dependencia de un proyecto");
   assert.equal(
-    detectInstall("/home/u/MODAI/packages/cli/dist/cli/index.js", npmRoot).kind,
+    detectInstall("/home/u/MODAI/packages/cli/dist/bin/modai.js", npmRoot).kind,
     "source",
     "npm link desde el repositorio",
   );

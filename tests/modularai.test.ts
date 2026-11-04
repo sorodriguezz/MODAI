@@ -12,7 +12,7 @@ import { ApiClient } from "@modai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../apps/server/src/http/app.js";
-import { auditHarness, createHarness } from "../packages/cli/src/cli/harness-tools.js";
+import { auditHarness, createHarness } from "../packages/cli/src/authoring/harness.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-test-"));
 process.env.MODAI_CONFIG_DIR = join(root, "config");
@@ -418,7 +418,7 @@ test("expone conocimiento y estado mediante un servidor MCP stdio real", async (
     command: process.execPath,
     args: [
       join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"),
-      join(process.cwd(), "packages", "cli", "src", "mcp.ts"),
+      join(process.cwd(), "packages", "cli", "src", "bin", "modai-mcp.ts"),
     ],
     cwd: projectRoot,
     env: {

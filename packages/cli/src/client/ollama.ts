@@ -1,4 +1,3 @@
-// Este módulo se usa exclusivamente desde CLI/MCP en el equipo cliente.
 export interface LocalModel {
   name: string;
   digest: string;
@@ -83,8 +82,7 @@ export class LocalOllama {
 
   async pull(model: string, progress?: (message: string) => void): Promise<void> {
     assertLocalModelName(model);
-    // Streaming mantiene visible el progreso de descargas largas sin buffering completo.
-    const response = await fetch(this.url + "/api/pull", {
+    const response = await fetch(`${this.url}/api/pull`, {
       method: "POST",
       redirect: "error",
       headers: { "content-type": "application/json" },

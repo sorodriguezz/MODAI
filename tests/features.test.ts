@@ -38,7 +38,7 @@ function modai(cwd: string, ...args: string[]): Promise<{ status: number; stdout
       process.execPath,
       [
         join(process.cwd(), "node_modules/tsx/dist/cli.mjs"),
-        join(process.cwd(), "packages/cli/src/cli/index.ts"),
+        join(process.cwd(), "packages/cli/src/bin/modai.ts"),
         ...args,
       ],
       { cwd, env, encoding: "utf8" },

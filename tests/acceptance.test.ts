@@ -26,7 +26,7 @@ const env = {
 after(() => rmSync(root, { recursive: true, force: true }));
 
 async function modai(cwd: string, ...args: string[]): Promise<string> {
-  const { stdout } = await exec(process.execPath, [tsx, join(repo, "packages/cli/src/cli/index.ts"), ...args], {
+  const { stdout } = await exec(process.execPath, [tsx, join(repo, "packages/cli/src/bin/modai.ts"), ...args], {
     cwd,
     env,
     timeout: 60_000,
@@ -131,7 +131,7 @@ test("un desarrollador externo publica, instala, conecta y ejecuta un paquete de
   await modai(project, "permissions", "grant", "@acme/fake-browser", "--yes");
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [tsx, join(repo, "packages/cli/src/mcp.ts"), "--project", project],
+    args: [tsx, join(repo, "packages/cli/src/bin/modai-mcp.ts"), "--project", project],
     cwd: project,
     env,
     stderr: "pipe",

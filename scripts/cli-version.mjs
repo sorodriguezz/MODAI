@@ -19,8 +19,8 @@ const MANIFESTS = [
   "apps/admin/package.json",
 ];
 const SOURCES = [
-  { file: "packages/cli/src/cli/index.ts", pattern: /(\.version\(")([^"]+)("\))/ },
-  { file: "packages/cli/src/agent/capabilities.ts", pattern: /(name: "modai-capabilities", version: ")([^"]+)(")/ },
+  { file: "packages/cli/src/bin/modai.ts", pattern: /(\.version\(")([^"]+)("\))/ },
+  { file: "packages/cli/src/agents/capabilities.ts", pattern: /(name: "modai-capabilities", version: ")([^"]+)(")/ },
   { file: "packages/core/src/resolution/version.ts", pattern: /(CORE_VERSION = ")([^"]+)(")/ },
   { file: "apps/server/src/http/app.ts", pattern: /(service: "modularai", version: ")([^"]+)(")/ },
 ];

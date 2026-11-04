@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { createApp } from "../apps/server/src/http/app.js";
-import { applyVariables } from "../packages/cli/src/cli/commands/template.js";
+import { applyVariables } from "../packages/cli/src/services/templates.js";
 import { sha256 } from "../packages/contracts/src/security/index.js";
 import { readZip, skillArchiveToPackage, writeZip } from "../packages/core/src/index.js";
 
@@ -415,7 +415,7 @@ test("la CLI publica un .skill y crea proyectos desde un template", async () => 
         process.execPath,
         [
           join(process.cwd(), "node_modules/tsx/dist/cli.mjs"),
-          join(process.cwd(), "packages/cli/src/cli/index.ts"),
+          join(process.cwd(), "packages/cli/src/bin/modai.ts"),
           ...args,
         ],
         { cwd: root, env, encoding: "utf8" },
@@ -485,7 +485,7 @@ test("un template con features se arma por capas con flags (--sdd, --no-x, --wit
         process.execPath,
         [
           join(process.cwd(), "node_modules/tsx/dist/cli.mjs"),
-          join(process.cwd(), "packages/cli/src/cli/index.ts"),
+          join(process.cwd(), "packages/cli/src/bin/modai.ts"),
           ...args,
         ],
         { cwd: root, env },
@@ -647,7 +647,7 @@ test("la misma CLI gestiona skills, conocimiento, memoria, templates, usuarios y
         process.execPath,
         [
           join(process.cwd(), "node_modules/tsx/dist/cli.mjs"),
-          join(process.cwd(), "packages/cli/src/cli/index.ts"),
+          join(process.cwd(), "packages/cli/src/bin/modai.ts"),
           ...args,
         ],
         { cwd: root, env, encoding: "utf8" },

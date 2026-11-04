@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { loadPackageSource, normalizeManifest, validatePackage } from "@modai/core";
-import { createComponentPackage, formatTable, listRows } from "../packages/cli/src/v1/list.ts";
+import { createComponentPackage } from "../packages/cli/src/authoring/component-package.ts";
+import { listRows } from "../packages/cli/src/services/catalog.ts";
+import { formatTable } from "../packages/cli/src/terminal/output.ts";
 
 const root = mkdtempSync(join(tmpdir(), "modai-list-"));
 after(() => rmSync(root, { recursive: true, force: true }));
