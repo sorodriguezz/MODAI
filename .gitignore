@@ -53,3 +53,4 @@ Desktop.ini
 # Playwright (tests de interfaz del panel)
 test-results/
 playwright-report/
+.claude/worktrees/
