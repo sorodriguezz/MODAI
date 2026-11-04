@@ -1,5 +1,5 @@
-app = "modai-REEMPLAZAR"
-primary_region = "scl"
+app = "modai"
+primary_region = "gru"
 
 [env]
   MODAI_HOST = "0.0.0.0"

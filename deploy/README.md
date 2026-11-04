@@ -83,7 +83,7 @@ Si el paquete de GHCR es privado, ejecuta antes `docker login ghcr.io` con un to
 
 ```sh
 fly apps create modai-tu-nombre                      # y escribe el nombre en deploy/fly/fly.toml
-fly volumes create modai_data --app modai-tu-nombre --region scl --size 1
+fly volumes create modai_data --app modai-tu-nombre --region gru --size 1
 fly secrets set --app modai-tu-nombre \
   MODAI_API_TOKEN="$(openssl rand -hex 32)" \
   MODAI_ADMIN_USERNAME=admin MODAI_ADMIN_PASSWORD='una frase larga y difícil' \
