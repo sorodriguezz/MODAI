@@ -92,8 +92,30 @@ modai package publish ./mi-paquete
 | `MODAI_SIGNATURE_POLICY`                       | `optional`                               | `optional`, `signed` (exige firma) o `trusted` (solo publicadores de confianza). `signed` comprueba integridad, pero acepta cualquier clave, incluida una recién generada: solo `trusted` garantiza **quién** publica. |
 | `MODAI_ARTIFACT_QUOTA_BYTES`                   | `1073741824`                             | Espacio máximo para artefactos de paquetes (1 GiB).                                                                                                                                                                    |
 | `MODAI_DATABASE_PATH`, `MODAI_ARTIFACT_DIR`    | `var/data/modularai.db`, `var/artifacts` | Dónde se guardan los datos. En Docker son volúmenes.                                                                                                                                                                   |
+| `MODAI_DATABASE_URL`                           | —                                        | Base de datos a usar. Si no se define, SQLite en `MODAI_DATABASE_PATH`. Ver [Base de datos](#base-de-datos).                                                                                                           |
 
-Todos los datos están en una base SQLite y una carpeta de artefactos. Para respaldarlos usa `deploy/backup.sh` (en caliente, con Compose) o `modai admin export backup.json`. Para restaurarlos usa `modai admin import backup.json`.
+Por defecto todos los datos están en una base SQLite y una carpeta de artefactos. Para respaldarlos usa `deploy/backup.sh` (en caliente, con Compose) o `modai admin export backup.json`. Para restaurarlos usa `modai admin import backup.json`.
+
+## Base de datos
+
+El servidor usa [Kysely](https://kysely.dev) y funciona con SQLite (por defecto), PostgreSQL, MySQL y SQL Server. Se elige con `MODAI_DATABASE_URL`:
+
+| Motor      | `MODAI_DATABASE_URL`                                                                                       | Driver (`optionalDependencies`) |
+| ---------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| SQLite     | `sqlite:///ruta/absoluta/modai.db` o `sqlite:ruta/relativa.db` (o sin definir)                             | `better-sqlite3` (incluido)     |
+| PostgreSQL | `postgres://usuario:clave@host:5432/modai` (también `postgresql://`)                                       | `pg`                            |
+| MySQL 8    | `mysql://usuario:clave@host:3306/modai`                                                                    | `mysql2`                        |
+| SQL Server | `sqlserver://usuario:clave@host:1433/modai?encrypt=true&trustServerCertificate=false` (también `mssql://`) | `tedious` y `tarn`              |
+
+La base de datos debe existir; el esquema se crea y se actualiza solo al arrancar (migraciones de Kysely). Los drivers se cargan únicamente cuando se usa su motor; si falta uno, el servidor lo indica al arrancar (`npm install pg -w @modai/server`, por ejemplo).
+
+La búsqueda de conocimiento y memoria usa FTS5 en SQLite y `tsvector` con índice GIN en PostgreSQL. En MySQL y SQL Server usa una búsqueda `LIKE` sin índice: los resultados son correctos, el orden es más simple.
+
+Para ejecutar las pruebas contra otro motor, define `MODAI_TEST_DATABASE_URL` con un usuario que pueda crear bases de datos; cada prueba crea la suya:
+
+```bash
+MODAI_TEST_DATABASE_URL=postgres://postgres:clave@127.0.0.1:5432/postgres npm test
+```
 
 ## Despliegue
 
@@ -126,10 +148,11 @@ Pruebas: `npm test` (API, Core, CLI y servidor) y `npm run test:ui` (el panel en
 
 ```
 src/
-  server.ts          proceso y variables de entorno
-  http/app.ts        rutas de la API (/api/v1/…)
-  http/auth-routes.ts  inicio de sesión del panel
-  core/              servicios: paquetes, autenticación, contexto, agentes, ejecuciones, backups, auditoría
+  main.ts            proceso y variables de entorno (config.ts)
+  app.ts             crea Fastify y registra la infraestructura y los módulos
+  infrastructure/    base de datos (Kysely, dialectos, migraciones, búsqueda), artefactos y HTTP (errores, seguridad, sesión)
+  modules/           un módulo por dominio: auth, organizations, namespaces, projects, packages, categories,
+                     knowledge, memory, agents, runs y admin; cada uno con routes, service, repository y schemas
 ```
 
 El panel es una aplicación aparte ([`apps/admin`](../admin)) que el servidor sirve ya compilada. La referencia de la API está en [docs/guides/API.md](../../docs/guides/API.md) y la del panel en [docs/guides/ADMIN-PANEL.md](../../docs/guides/ADMIN-PANEL.md).

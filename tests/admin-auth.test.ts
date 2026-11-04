@@ -3,12 +3,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { createApp } from "../apps/server/src/http/app.js";
+import { createApp } from "../apps/server/src/app.js";
+import { testDatabase } from "./support/test-database.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-admin-auth-"));
 const bootstrap = "admin-auth-bootstrap-secret";
 const app = await createApp({
-  databasePath: join(root, "db.sqlite"),
+  ...(await testDatabase(join(root, "db.sqlite"))),
   artifactDirectory: join(root, "artifacts"),
   apiToken: bootstrap,
   logger: false,
@@ -541,7 +542,7 @@ test("siembra el administrador inicial desde la configuraciÃ³n y exige contraseÃ
   const dir = mkdtempSync(join(tmpdir(), "modai-admin-seed-"));
   try {
     const base = {
-      databasePath: join(dir, "db.sqlite"),
+      ...(await testDatabase(join(dir, "db.sqlite"))),
       artifactDirectory: join(dir, "artifacts"),
       logger: false,
       adminDirectory: false as const,
@@ -579,7 +580,7 @@ test("siembra el administrador inicial desde la configuraciÃ³n y exige contraseÃ
 test("la cookie es Secure cuando la URL pÃºblica es HTTPS", async () => {
   const dir = mkdtempSync(join(tmpdir(), "modai-admin-https-"));
   const secure = await createApp({
-    databasePath: join(dir, "db.sqlite"),
+    ...(await testDatabase(join(dir, "db.sqlite"))),
     artifactDirectory: join(dir, "artifacts"),
     logger: false,
     adminDirectory: false,

@@ -13,10 +13,11 @@ import { createProjectFile, HttpRegistry, loadV1Project, saveProjectFile, syncWo
 import { ApiClient } from "@modai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { AuthService } from "../apps/server/src/core/auth-service.js";
-import { Database } from "../apps/server/src/core/database.js";
-import { RunService } from "../apps/server/src/core/run-service.js";
-import { type AppOptions, createApp } from "../apps/server/src/http/app.js";
+import { ApiKeysService } from "../apps/server/src/modules/auth/api-keys.service.js";
+import { AuthorizationService } from "../apps/server/src/modules/auth/authorization.service.js";
+import { RunsService } from "../apps/server/src/modules/runs/runs.service.js";
+import { type AppOptions, createApp } from "../apps/server/src/app.js";
+import { openTestDatabase, testDatabase } from "./support/test-database.js";
 import { activateAgent, deactivateAgent, loadActivation } from "../packages/cli/src/agents/activation.js";
 import { CapabilityHost } from "../packages/cli/src/agents/capabilities.js";
 import { executeAgent } from "../packages/cli/src/agents/runtime.js";
@@ -52,7 +53,7 @@ function input(
 async function fixture(overrides: Partial<AppOptions> = {}) {
   const root = mkdtempSync(join(tmpdir(), "modai-platform-"));
   const app = await createApp({
-    databasePath: join(root, "db.sqlite"),
+    ...(await testDatabase(join(root, "db.sqlite"))),
     artifactDirectory: join(root, "artifacts"),
     apiToken: admin,
     logger: false,
@@ -130,12 +131,15 @@ async function fakeOllama(chat: (body: any, index: number) => unknown) {
 test("rechaza arranque sin credenciales y no reactiva administración al revocar la última clave", async () => {
   const root = mkdtempSync(join(tmpdir(), "modai-auth-"));
   try {
-    const opts = { databasePath: join(root, "db.sqlite"), artifactDirectory: join(root, "artifacts"), logger: false };
+    const opts = {
+      ...(await testDatabase(join(root, "db.sqlite"))),
+      artifactDirectory: join(root, "artifacts"),
+      logger: false,
+    };
     await assert.rejects(() => createApp(opts), /Configura MODAI_API_TOKEN/);
-    const db = new Database(opts.databasePath),
-      auth = new AuthService(db),
-      key = auth.createKey("admin", "admin");
-    db.close();
+    const db = await openTestDatabase(join(root, "db.sqlite"));
+    const key = await new ApiKeysService(db, new AuthorizationService(db)).createKey("admin", "admin");
+    await db.close();
     const app = await createApp(opts);
     try {
       const remote = await app.inject({ method: "GET", url: "/api/v1/session", remoteAddress: "192.0.2.4" });
@@ -491,9 +495,9 @@ test("worker procesa cola, congela versiones y rechaza finalizar con un lease vi
     const next = await f.api.submitRun({ projectId: "p", name: "@agents/backend-reviewer", task: "Another" });
     const first = await worker.claimRun("p");
     assert.equal(first!.run.id, next.id);
-    const db = new Database(join(f.root, "db.sqlite"));
-    db.connection.prepare("UPDATE runs SET lease_expires_at = '2000-01-01' WHERE id = ?").run(next.id);
-    db.close();
+    const db = await openTestDatabase(join(f.root, "db.sqlite"));
+    await db.db.updateTable("runs").set({ lease_expires_at: "2000-01-01" }).where("id", "=", next.id).execute();
+    await db.close();
     const second = await worker.claimRun("p");
     assert.equal(second!.run.id, next.id);
     assert.notEqual(second!.leaseToken, first!.leaseToken);
@@ -638,22 +642,42 @@ test("restaura proyectos, organización, memorias y tareas sin credenciales ni l
 test("la búsqueda vectorial limita candidatos y mantiene disponible la API después del rechazo", async () => {
   const f = await fixture();
   try {
-    const db = new Database(join(f.root, "db.sqlite"));
-    db.connection.transaction(() => {
-      const doc = db.connection.prepare(
-        "INSERT INTO knowledge_documents (id,title,content,tags_json,created_at,updated_at) VALUES (?, 'doc', 'content', '[]', '2026-01-01', '2026-01-01')",
-      );
-      const vector = db.connection.prepare(
-        "INSERT INTO knowledge_vectors (document_id,model,dimensions,embedding_blob,updated_at) VALUES (?, 'large', 1, ?, '2026-01-01')",
-      );
-      const blob = Buffer.alloc(4);
-      blob.writeFloatLE(1);
-      for (let i = 0; i < 2001; i++) {
-        doc.run(String(i));
-        vector.run(String(i), blob);
+    const db = await openTestDatabase(join(f.root, "db.sqlite"));
+    const blob = Buffer.alloc(4);
+    blob.writeFloatLE(1);
+    const ids = Array.from({ length: 2001 }, (_, i) => String(i));
+    await db.transaction(async ({ db: trx }) => {
+      for (let start = 0; start < ids.length; start += 100) {
+        const chunk = ids.slice(start, start + 100);
+        const at = "2026-01-01";
+        await trx
+          .insertInto("knowledge_documents")
+          .values(
+            chunk.map((id) => ({
+              id,
+              title: "doc",
+              content: "content",
+              tags_json: "[]",
+              created_at: at,
+              updated_at: at,
+            })),
+          )
+          .execute();
+        await trx
+          .insertInto("knowledge_vectors")
+          .values(
+            chunk.map((id) => ({
+              document_id: id,
+              model: "large",
+              dimensions: 1,
+              embedding_blob: blob,
+              updated_at: at,
+            })),
+          )
+          .execute();
       }
-    })();
-    db.close();
+    });
+    await db.close();
     await assert.rejects(() => f.api.vectorSearch("large", [1]), /VECTOR_CANDIDATE_LIMIT/);
     assert.equal((await f.api.health()).status, "ok");
     const empty = await f.api.vectorSearch("large", [1], []);
@@ -669,15 +693,15 @@ test("la cola abandona una tarea después de tres workers vencidos", async () =>
     await publishExamples(f.api);
     await f.api.createProject({ id: "p", name: "p" });
     const run = await f.api.submitRun({ projectId: "p", name: "@agents/backend-reviewer", task: "retry" });
-    const db = new Database(join(f.root, "db.sqlite")),
-      runs = new RunService(db);
+    const db = await openTestDatabase(join(f.root, "db.sqlite")),
+      runs = new RunsService(db);
     for (let i = 0; i < 3; i++) {
-      assert.ok(runs.claim("p", "worker"));
-      db.connection.prepare("UPDATE runs SET lease_expires_at = '2000-01-01' WHERE id = ?").run(run.id);
+      assert.ok(await runs.claim("p", "worker"));
+      await db.db.updateTable("runs").set({ lease_expires_at: "2000-01-01" }).where("id", "=", run.id).execute();
     }
-    assert.equal(runs.claim("p", "worker"), undefined);
-    assert.equal(runs.get(run.id).status, "failed");
-    db.close();
+    assert.equal(await runs.claim("p", "worker"), undefined);
+    assert.equal((await runs.get(run.id)).status, "failed");
+    await db.close();
   } finally {
     await f.close();
   }

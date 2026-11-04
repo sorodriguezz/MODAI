@@ -11,13 +11,14 @@ import { createProjectFile, HttpRegistry, loadV1Project, saveProjectFile, syncWo
 import { ApiClient } from "@modai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { createApp } from "../apps/server/src/http/app.js";
+import { createApp } from "../apps/server/src/app.js";
+import { testDatabase } from "./support/test-database.js";
 import { auditHarness, createHarness } from "../packages/cli/src/authoring/harness.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-test-"));
 process.env.MODAI_CONFIG_DIR = join(root, "config");
 const app = await createApp({
-  databasePath: join(root, "modularai.db"),
+  ...(await testDatabase(join(root, "modularai.db"))),
   artifactDirectory: join(root, "artifacts"),
   logger: false,
   apiToken: "test-secret",
@@ -298,7 +299,7 @@ test("actualiza y elimina memoria mediante API", async () => {
 test("protege la administración y emite API keys con roles", async () => {
   const authRoot = mkdtempSync(join(root, "auth-"));
   const secured = await createApp({
-    databasePath: join(authRoot, "db.sqlite"),
+    ...(await testDatabase(join(authRoot, "db.sqlite"))),
     artifactDirectory: join(authRoot, "artifacts"),
     apiToken: "bootstrap-secret",
     logger: false,

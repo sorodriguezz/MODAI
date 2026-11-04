@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { createApp } from "../apps/server/dist/http/app.js";
+import { createApp } from "../apps/server/dist/app.js";
 import { loadPackageSource } from "../packages/cli/dist/authoring/package-source.js";
 import { ApiClient } from "../packages/sdk/dist/index.js";
 

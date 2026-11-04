@@ -24,7 +24,7 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
   use: { baseURL: UI.url, trace: "retain-on-failure", ...devices["Desktop Chrome"] },
   webServer: {
-    command: "node --no-warnings apps/server/dist/server.js",
+    command: "node --no-warnings apps/server/dist/main.js",
     url: `${UI.url}/health`,
     reuseExistingServer: false,
     timeout: 30_000,

@@ -12,12 +12,13 @@ import {
   saveProjectFile,
   syncWorkspace,
 } from "@modai/core";
-import { createApp } from "../apps/server/src/http/app.js";
+import { createApp } from "../apps/server/src/app.js";
+import { testDatabase } from "./support/test-database.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-server-v1-"));
 process.env.MODAI_CONFIG_DIR = join(root, "config");
 const app = await createApp({
-  databasePath: join(root, "db.sqlite"),
+  ...(await testDatabase(join(root, "db.sqlite"))),
   artifactDirectory: join(root, "artifacts"),
   logger: false,
   apiToken: "v1-secret",
@@ -215,7 +216,7 @@ test("los backups conservan qué proyecto usa qué y el resumen del panel no nec
 
   const restoredRoot = mkdtempSync(join(tmpdir(), "modai-restore-"));
   const restored = await createApp({
-    databasePath: join(restoredRoot, "db.sqlite"),
+    ...(await testDatabase(join(restoredRoot, "db.sqlite"))),
     artifactDirectory: join(restoredRoot, "artifacts"),
     logger: false,
     apiToken: "restore-secret",

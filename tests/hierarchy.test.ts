@@ -3,12 +3,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { createApp } from "../apps/server/src/http/app.js";
+import { createApp } from "../apps/server/src/app.js";
+import { testDatabase } from "./support/test-database.js";
 
 const root = mkdtempSync(join(tmpdir(), "modai-hierarchy-"));
 const bootstrap = "hierarchy-bootstrap-secret";
 const app = await createApp({
-  databasePath: join(root, "db.sqlite"),
+  ...(await testDatabase(join(root, "db.sqlite"))),
   artifactDirectory: join(root, "artifacts"),
   apiToken: bootstrap,
   logger: false,

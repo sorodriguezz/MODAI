@@ -1,6 +1,3 @@
-// Container entrypoint. Platforms such as Fly.io and Railway mount volumes owned by root.
-// When started as root, prepare the data directories, hand them to the unprivileged user
-// and drop privileges before loading the server. Started as any other user, it does nothing.
 import { chownSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
@@ -20,7 +17,6 @@ if (process.getuid?.() === 0 && process.env.MODAI_RUN_AS_ROOT !== "true") {
   ];
   for (const directory of directories) {
     mkdirSync(directory, { recursive: true });
-    // Only walk the tree when ownership is wrong, so restarts stay fast.
     const info = lstatSync(directory);
     if (info.uid !== uid || info.gid !== gid) chownTree(directory, uid, gid);
   }
@@ -29,4 +25,4 @@ if (process.getuid?.() === 0 && process.env.MODAI_RUN_AS_ROOT !== "true") {
   process.setuid!(uid);
 }
 
-await import("./server.js");
+await import("./main.js");

@@ -20,6 +20,7 @@ services:
       MODAI_SIGNATURE_POLICY: "${MODAI_SIGNATURE_POLICY:-optional}"
       MODAI_ARTIFACT_QUOTA_BYTES: "${MODAI_ARTIFACT_QUOTA_BYTES:-1073741824}"
       MODAI_DATABASE_PATH: /app/data/modularai.db
+      MODAI_DATABASE_URL: "${MODAI_DATABASE_URL:-}"
       MODAI_ARTIFACT_DIR: /app/artifacts
     volumes:
       - modai-data:/app/data

@@ -6,9 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { ApiClient } from "@modai/sdk";
-import { ContextService } from "../apps/server/src/core/context-service.js";
-import { Database } from "../apps/server/src/core/database.js";
-import { createApp } from "../apps/server/src/http/app.js";
+import { createApp } from "../apps/server/src/app.js";
 import {
   chunkText,
   indexKnowledge,
@@ -19,6 +17,7 @@ import {
 } from "../packages/cli/src/client/embeddings.js";
 import { type Hardware, recommendModels } from "../packages/cli/src/client/hardware.js";
 import { LocalOllama, localRuntimeUrl } from "../packages/cli/src/client/ollama.js";
+import { testDatabase } from "./support/test-database.js";
 
 function hardware(patch: Partial<Hardware> = {}): Hardware {
   return {
@@ -88,7 +87,7 @@ test("limita el runtime a loopback y conserva todos los caracteres al fragmentar
 test("cliente calcula embeddings con runtime local y servidor solo almacena vectores", async () => {
   const root = mkdtempSync(join(tmpdir(), "modai-client-"));
   const app = await createApp({
-    databasePath: join(root, "db.sqlite"),
+    ...(await testDatabase(join(root, "db.sqlite"))),
     artifactDirectory: join(root, "artifacts"),
     apiToken: "test-secret",
     logger: false,

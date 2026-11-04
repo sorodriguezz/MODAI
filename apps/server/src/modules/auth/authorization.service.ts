@@ -1,0 +1,134 @@
+import { AppError } from "@modai/contracts/errors";
+import type { DataContext } from "../../infrastructure/database/database.js";
+import { AuthorizationRepository } from "./authorization.repository.js";
+import { type Grantee, type Identity, type NamespaceScope, namespaceOf, type Role } from "./identity.js";
+
+export type PackageReader = (packageName: string) => boolean;
+
+export class AuthorizationService {
+  readonly repository: AuthorizationRepository;
+
+  constructor(context: DataContext) {
+    this.repository = new AuthorizationRepository(context);
+  }
+
+  require(identity: Identity | undefined, minimum: Role): Identity {
+    if (!identity) throw new AppError(401, "UNAUTHORIZED", "Token inválido o ausente");
+    if (!this.satisfies(identity.role, minimum)) throw new AppError(403, "FORBIDDEN", `Se requiere rol ${minimum}`);
+    return identity;
+  }
+
+  satisfies(role: Role, minimum: Role): boolean {
+    if (role === "admin" || minimum === "reader" || role === minimum) return true;
+    return role === "org-admin" && minimum === "publisher";
+  }
+
+  managedOrganizations(actor: Identity): string[] | undefined {
+    if (actor.role === "admin") return undefined;
+    return actor.role === "org-admin" ? actor.organizationIds : [];
+  }
+
+  administers(actor: Identity, organizationId: string | null | undefined): boolean {
+    const managed = this.managedOrganizations(actor);
+    return managed === undefined || (Boolean(organizationId) && managed.includes(organizationId!));
+  }
+
+  requireManager(identity: Identity | undefined): Identity {
+    const actor = this.require(identity, "reader");
+    if (actor.role !== "admin" && actor.role !== "org-admin")
+      throw new AppError(403, "FORBIDDEN", "Se requiere administración global o de organización");
+    return actor;
+  }
+
+  canManageGrantee(actor: Identity, target: Grantee): boolean {
+    const managed = this.managedOrganizations(actor);
+    if (managed === undefined) return true;
+    return (
+      target.role !== "admin" &&
+      target.organizationIds.length > 0 &&
+      target.organizationIds.every((id) => managed.includes(id))
+    );
+  }
+
+  seesProject(actor: Identity, row: { id: string; organizationId?: string | null; createdBy: string }): boolean {
+    return (
+      actor.role === "admin" ||
+      row.createdBy === actor.id ||
+      (Boolean(actor.ownerId) && row.createdBy === actor.ownerId) ||
+      actor.projectIds.includes(row.id) ||
+      (actor.role === "org-admin" && this.administers(actor, row.organizationId))
+    );
+  }
+
+  requireOrganization(identity: Identity | undefined, organizationId?: string): void {
+    const actor = this.require(identity, "reader");
+    if (!organizationId || (actor.role !== "admin" && !actor.organizationIds.includes(organizationId)))
+      throw new AppError(403, "ORGANIZATION_FORBIDDEN", "La clave no tiene acceso a esta organización");
+  }
+
+  async packageReader(identity: Identity | undefined): Promise<PackageReader> {
+    const actor = this.require(identity, "reader");
+    if (actor.role === "admin" || actor.packageScopes.includes("*")) return () => true;
+    const restricted = new Map(
+      (await this.repository.restrictedNamespaces()).map((row) => [row.name, row.organizationId]),
+    );
+    return (packageName) => {
+      const scope = namespaceOf(packageName);
+      if (!restricted.has(scope)) return true;
+      return (
+        actor.packageScopes.includes(scope) ||
+        (actor.role === "org-admin" && this.administers(actor, restricted.get(scope)))
+      );
+    };
+  }
+
+  async requireReadPackage(identity: Identity | undefined, packageName: string): Promise<void> {
+    if (!(await this.packageReader(identity))(packageName))
+      throw new AppError(404, "PACKAGE_NOT_FOUND", `No existe ${packageName}`);
+  }
+
+  async publishableNamespaces(actor: Identity): Promise<NamespaceScope> {
+    if (!this.satisfies(actor.role, "publisher")) return { all: false, namespaces: [] };
+    if (actor.role === "admin" || actor.packageScopes.includes("*")) return { all: true, namespaces: [] };
+    const owned =
+      actor.role === "org-admin" ? await this.repository.namespacesOfOrganizations(actor.organizationIds) : [];
+    return { all: false, namespaces: [...new Set([...actor.packageScopes, ...owned])].sort() };
+  }
+
+  async managedNamespaces(actor: Identity): Promise<NamespaceScope> {
+    if (actor.role === "admin") return { all: true, namespaces: [] };
+    if (actor.role !== "org-admin" || !actor.organizationIds.length) return { all: false, namespaces: [] };
+    return { all: false, namespaces: await this.repository.namespacesOfOrganizations(actor.organizationIds) };
+  }
+
+  async requireManagePackage(identity: Identity | undefined, packageName: string): Promise<Identity> {
+    const actor = this.requireManager(identity);
+    const managed = await this.managedNamespaces(actor);
+    if (!managed.all && !managed.namespaces.includes(namespaceOf(packageName)))
+      throw new AppError(403, "PACKAGE_FORBIDDEN", `No administras el namespace ${namespaceOf(packageName)}`);
+    return actor;
+  }
+
+  async requirePublish(identity: Identity | undefined, packageName: string): Promise<void> {
+    const actor = this.require(identity, "publisher");
+    const allowed = await this.publishableNamespaces(actor);
+    const scope = namespaceOf(packageName);
+    if (!allowed.all && !allowed.namespaces.includes(scope))
+      throw new AppError(
+        403,
+        "PACKAGE_FORBIDDEN",
+        `La clave no puede publicar en el namespace ${scope}. Pide acceso a la administración de su organización.`,
+      );
+  }
+
+  async requireWriteKnowledge(identity: Identity | undefined, packageName?: string | null): Promise<void> {
+    if (packageName) return this.requirePublish(identity, packageName);
+    const actor = this.require(identity, "publisher");
+    if (!(await this.publishableNamespaces(actor)).all)
+      throw new AppError(
+        403,
+        "KNOWLEDGE_FORBIDDEN",
+        "El conocimiento compartido con todo el servidor lo escribe la administración global. Asócialo a un paquete de tu namespace con packageName.",
+      );
+  }
+}
