@@ -2,10 +2,14 @@ import type { KnowledgeDocument } from "../types.js";
 import { TemplatesApi } from "./templates.js";
 
 export class KnowledgeApi extends TemplatesApi {
-  async searchKnowledge(query: string, packageNames?: string[]): Promise<unknown[]> {
+  async searchKnowledge(
+    query: string,
+    packageNames?: string[],
+    packageVersions?: Array<{ name: string; version: string }>,
+  ): Promise<unknown[]> {
     const response = await this.request<{ results: unknown[] }>("/api/v1/knowledge/search", {
       method: "POST",
-      body: JSON.stringify({ query, packageNames }),
+      body: JSON.stringify({ query, packageNames, packageVersions }),
     });
     return response.results;
   }

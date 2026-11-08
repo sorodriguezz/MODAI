@@ -1,4 +1,6 @@
 import type { DataContext } from "../../infrastructure/database/database.js";
+import type { Identity } from "./identity.js";
+import { packageVisibilityFilter, readableNamespaces } from "./namespace-access.js";
 
 export interface ProjectOwnership {
   id: string;
@@ -9,12 +11,12 @@ export interface ProjectOwnership {
 export class AuthorizationRepository {
   constructor(private readonly context: DataContext) {}
 
-  restrictedNamespaces(): Promise<Array<{ name: string; organizationId: string | null; ownerUserId: string | null }>> {
-    return this.context.db
-      .selectFrom("namespaces")
-      .select(["name", "organization_id as organizationId", "owner_user_id as ownerUserId"])
-      .where("visibility", "=", "restricted")
-      .execute();
+  readableNamespaces(actor: Identity) {
+    return readableNamespaces(this.context.db, actor).execute();
+  }
+
+  packageVisibility(actor: Identity) {
+    return packageVisibilityFilter(this.context.dialect, actor);
   }
 
   async namespacesOfUser(userId: string | undefined): Promise<string[]> {

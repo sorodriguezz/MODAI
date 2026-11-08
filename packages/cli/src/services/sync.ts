@@ -12,6 +12,7 @@ import {
 } from "@modai/core";
 import { ApiClient } from "@modai/sdk";
 import { tokenFor } from "./connection.js";
+import { withMaterializedProfile } from "./profile.js";
 import { requireProject } from "./project.js";
 import { trustPolicy } from "./trust.js";
 
@@ -35,18 +36,24 @@ export async function runSync(
   const grants = loadGrants(project.root);
   const install = [...new Set([...grants.install, ...(options.allow ?? [])])];
   const next = { ...project, file };
-  const report = await syncWorkspace(next, {
-    registries: options.registries ?? createRegistries(project.root, file.registries, tokenFor),
-    grants: install,
-    trust: trustPolicy(file),
-    update: options.update,
-    frozen: options.frozen,
-    force: options.force,
-    keepMine: options.keepMine,
-  });
+  const configuredRegistries = options.registries ?? createRegistries(project.root, file.registries, tokenFor);
+  const effective = await withMaterializedProfile(file, configuredRegistries);
+  const report = await syncWorkspace(
+    { ...next, file: effective.file },
+    {
+      registries: effective.registries,
+      profileDigest: effective.profileDigest,
+      grants: install,
+      trust: trustPolicy(file),
+      update: options.update,
+      frozen: options.frozen,
+      force: options.force,
+      keepMine: options.keepMine,
+    },
+  );
   if (change) saveProjectFile(project.root, file);
   if (options.allow?.length) saveGrants(project.root, { ...loadGrants(project.root), install });
-  if (!options.frozen) await reportInstallations(file, report);
+  if (!options.frozen) await reportInstallations(effective.file, report);
   return { report, project: { ...next, lock: report.lock } };
 }
 

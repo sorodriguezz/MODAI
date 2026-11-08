@@ -1,3 +1,4 @@
+import { invariant } from "@modai/contracts/errors";
 import type { Insertable } from "kysely";
 import { type DataContext, withTransaction } from "../../infrastructure/database/database.js";
 import type { ProjectsTable } from "../../infrastructure/database/schema.js";
@@ -52,12 +53,42 @@ export class ProjectsRepository {
     await this.context.db.insertInto("projects").values(row).execute();
   }
 
-  async update(id: string, name: string, organizationId: string | null): Promise<void> {
-    await this.context.db
-      .updateTable("projects")
-      .set({ name, organization_id: organizationId })
-      .where("id", "=", id)
-      .execute();
+  async rename(id: string, name: string): Promise<void> {
+    await this.context.db.updateTable("projects").set({ name }).where("id", "=", id).execute();
+  }
+
+  async transfer(id: string, name: string, previous: string | null, destination: string | null, creator: string) {
+    await withTransaction(this.context, async (trx) => {
+      const { db } = trx;
+      const changed = await db
+        .updateTable("projects")
+        .set({ name, organization_id: destination, created_by: creator })
+        .where("id", "=", id)
+        .where("organization_id", previous === null ? "is" : "=", previous)
+        .executeTakeFirst();
+      invariant(affectedRows(changed), 409, "PROJECT_CHANGED", "La organización del proyecto cambió");
+      const related = [
+        "runs",
+        "memories",
+        "project_installations",
+        "capability_bindings",
+        "project_execution_policies",
+      ] as const;
+      for (const table of related) {
+        const existing = await db
+          .selectFrom(table)
+          .select("project_id")
+          .where("project_id", "=", id)
+          .executeTakeFirst();
+        invariant(
+          !existing,
+          409,
+          "PROJECT_HAS_CONTEXT",
+          "Solo se pueden transferir proyectos sin memoria, tareas, instalaciones ni políticas",
+        );
+      }
+      await removeGrant(trx, "project_ids_json", id);
+    });
   }
 
   async liveRuns(id: string, now: string): Promise<number> {

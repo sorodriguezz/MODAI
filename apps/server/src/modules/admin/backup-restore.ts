@@ -4,10 +4,13 @@ import type { DataContext } from "../../infrastructure/database/database.js";
 import { insertIgnore } from "../../infrastructure/database/upsert.js";
 import type { KnowledgeService } from "../knowledge/knowledge.service.js";
 import type { MemoryService } from "../memory/memory.service.js";
+import { namespaceVisibilityFields } from "../namespaces/namespaces.service.js";
 import type { PackagesService } from "../packages/packages.service.js";
 import { PublishersRepository } from "../packages/publishers.repository.js";
 import { UsageRepository } from "../packages/usage.repository.js";
+import { ProjectsRepository } from "../projects/projects.repository.js";
 import { RunsRepository } from "../runs/runs.repository.js";
+import { restoreProfiles } from "./backup-profiles.js";
 import type { ImportResult, Snapshot } from "./backup-snapshot.js";
 
 export interface RestoreServices {
@@ -62,12 +65,11 @@ async function namespaceOwner(
 }
 
 async function restoreNamespace(context: DataContext, item: NonNullable<Snapshot["namespaces"]>[number]) {
-  const visibility = item.visibility === "restricted" ? "restricted" : "internal";
   const row = {
     name: item.name,
     ...(await namespaceOwner(context, item)),
     description: item.description ?? "",
-    visibility,
+    ...namespaceVisibilityFields(item.visibility),
   };
   await insertIgnore(
     context,
@@ -89,7 +91,7 @@ async function ensurePackageNamespaces(context: DataContext, snapshot: Snapshot)
         name,
         ...(await fallbackOwner(context)),
         description: "",
-        visibility: "internal",
+        ...namespaceVisibilityFields(),
         created_by: ADMIN,
         created_at: now,
         updated_at: now,
@@ -149,7 +151,10 @@ async function restorePackages(
     skipped = 0;
   for (const item of snapshot.packages) {
     try {
-      await packages.publish({ manifest: item.manifest, files: item.files, signature: item.signature });
+      await packages.publish(
+        { manifest: item.manifest, files: item.files, signature: item.signature },
+        item.artifactId,
+      );
       const { name, version } = manifestIdentity(item.manifest);
       if (item.status === "deprecated")
         await packages.deprecate(name, version, item.deprecatedMessage ?? "Versión deprecada");
@@ -164,19 +169,17 @@ async function restorePackages(
 }
 
 async function restoreMemories(context: DataContext, memory: MemoryService, snapshot: Snapshot): Promise<void> {
+  const projects = new ProjectsRepository(context);
   for (const item of snapshot.memories ?? []) {
-    const project = await context.db
-      .selectFrom("projects")
-      .select("organization_id as organizationId")
-      .where("id", "=", item.projectId)
-      .executeTakeFirstOrThrow();
-    invariant(
-      item.scope !== "organization" || project.organizationId,
-      400,
-      "INVALID_BACKUP",
-      "Falta la organización de la memoria",
-    );
-    await memory.remember(item, ADMIN, project.organizationId ?? undefined);
+    const organizationId =
+      item.organizationId ?? (await projects.findById(item.projectId))?.organizationId ?? undefined;
+    if (item.scope === "organization" && !organizationId)
+      throw new AppError(400, "INVALID_BACKUP", "Falta la organización de la memoria");
+    await memory.remember(item, item.createdBy ?? ADMIN, organizationId, {
+      approval: item.approval,
+      reviewedBy: item.reviewedBy,
+      reviewAt: item.reviewAt,
+    });
   }
 }
 
@@ -201,7 +204,7 @@ async function restoreRuns(context: DataContext, snapshot: Snapshot): Promise<vo
       result: run.result ?? null,
       error: run.error ?? null,
       attempts: running ? 0 : run.attempts,
-      created_by: ADMIN,
+      created_by: run.requestedBy ?? ADMIN,
       created_at: run.createdAt,
       updated_at: run.updatedAt,
     });
@@ -219,6 +222,7 @@ export async function restoreSnapshot(
   await restoreDirectory(context, snapshot);
   await ensurePackageNamespaces(context, snapshot);
   const { imported, skipped } = await restorePackages(services.packages, snapshot);
+  await restoreProfiles(context, snapshot);
   for (const item of snapshot.knowledge ?? []) await services.knowledge.add(item);
   await restoreMemories(context, services.memory, snapshot);
   await restoreRuns(context, snapshot);

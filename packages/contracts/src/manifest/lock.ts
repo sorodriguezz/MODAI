@@ -56,6 +56,10 @@ export type LockedPackageV1 = z.output<typeof lockedPackageSchema>;
 export const lockFileSchema = z
   .object({
     lockfileVersion: z.literal(1),
+    profileDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     packages: z.record(z.string(), lockedPackageSchema).default({}),
     capabilities: z.record(z.string(), z.object({ provider: z.string(), version: z.string() }).strict()).default({}),
     managed: z.array(managedEntrySchema).default([]),

@@ -119,10 +119,21 @@ MODAI_TEST_DATABASE_URL=postgres://postgres:clave@127.0.0.1:5432/postgres npm te
 | `admin`     | Todo, incluidos organizaciones, publicadores, auditoría, backups, retención y eliminación definitiva de versiones.          |
 
 - **Cada paquete pertenece a su namespace** (`@namespace/nombre`) y cada namespace tiene un solo dueño: una **organización** o un **usuario**. Cada usuario recibe con su cuenta su namespace personal `@usuario`, donde publica (con rol `publisher` o más) y administra sus paquetes; los demás namespaces se crean antes de publicar en ellos: publicar en uno que no existe responde `404 NAMESPACE_NOT_FOUND`. Un usuario dueño de namespaces con paquetes no se puede eliminar (`USER_OWNS_PACKAGES`) hasta pasarlos a otro dueño. Los proyectos instalan paquetes, no son sus dueños.
-- Un namespace `internal` es visible para cualquier identidad autenticada; uno `restricted`, solo para quien lo tiene asignado, su usuario dueño o quien administra su organización. Publicar exige el rol y el namespace.
+- Un namespace `internal` es visible para los miembros de su organización o para su dueño personal. `restricted` exige una asignación explícita, ser el dueño personal o administrar la organización propietaria. `shared` permite lectura a cualquier identidad autenticada. Publicar exige el rol y acceso de publicación al namespace.
 - Toda API key pertenece a un usuario y nunca supera sus permisos: mismo rol o menor, y sus mismos accesos o una parte. Se evalúa en cada petición; desactivar a la persona apaga sus keys. Las keys sin dueño (`modai admin create-key --service`) solo sirven para automatizar la instalación.
 - Un token se muestra una sola vez; solo se guarda su SHA-256.
-- La memoria admite `scope: project|organization|session`. Compartir entre proyectos de una organización exige acceso explícito a ella. El catálogo y el conocimiento publicado se comparten entre clientes autenticados: no guardes documentos privados de un proyecto como conocimiento global.
+- La memoria admite `scope: project|organization|session|user`. Los ámbitos `session` y `user` verifican el propietario y el proyecto. Las propuestas de organización aparecen en la recuperación después de aprobarse y hasta su fecha de revisión, si la tienen. El conocimiento ligado a paquetes hereda la visibilidad del namespace. El conocimiento global está disponible para las identidades autenticadas.
+
+### Perfiles y ejecución por proyecto
+
+Las migraciones se aplican al iniciar. Los namespaces existentes con visibilidad `internal` pasan a usar el ámbito de su propietario. Para conservar un catálogo de instancia, cambia sus namespaces a `shared` explícitamente.
+
+- `GET /api/v1/projects/:id/effective-profile` resuelve las asignaciones del proyecto, su organización y los equipos de la identidad. Devuelve versiones, IDs de artefacto y el digest del perfil.
+- Las rutas `/api/v1/{organizations|teams|projects}/:id/bindings` administran asignaciones. El proyecto puede especializar una asignación opcional de su organización o equipo con el mismo `slot`, un motivo y una fecha de revisión. Las asignaciones obligatorias incompatibles producen un error.
+- `POST /api/v1/projects/:id/knowledge/search` busca en las versiones del perfil vigente. La búsqueda y los candidatos vectoriales del catálogo aplican los permisos en la base de datos.
+- `/api/v1/projects/:id/execution-policy` admite listas de modelos locales y capacidades. Las tareas conservan una copia de la política y del perfil. Los workers necesitan un proyecto explícito en su credencial y acceso a los paquetes de la tarea.
+- Los workers extraen temporalmente los artefactos MCP verificados que requiere la ejecución. Las aprobaciones locales de procesos y variables de entorno siguen aplicándose.
+- Las transferencias de proyectos entre organizaciones requieren que el proyecto esté vacío de memoria, ejecuciones, instalaciones y políticas. Al transferir un proyecto o namespace se retiran sus asignaciones de acceso anteriores.
 
 ## Seguridad
 

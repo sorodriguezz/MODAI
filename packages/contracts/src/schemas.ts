@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { AppError } from "./errors.js";
 import { packageManifestV1Schema } from "./manifest/package.js";
-import { packageNameSchema } from "./manifest/shared.js";
+import { packageNameSchema, semverSchema } from "./manifest/shared.js";
 
 export { agentDefinitionSchema } from "./manifest/agent-definition.js";
 export { packageNameSchema, signaturePolicySchema } from "./manifest/shared.js";
@@ -33,6 +33,53 @@ export const projectSchema = z
     organizationId: z.string().min(1).max(200).optional(),
   })
   .strict();
+export const bindingSlotSchema = z
+  .string()
+  .min(1)
+  .max(214)
+  .regex(/^[a-z0-9@][a-z0-9._@/-]*$/);
+export const capabilityBindingSchema = z
+  .object({
+    slot: bindingSlotSchema.optional(),
+    packageName: packageNameSchema.max(214),
+    range: z.string().trim().min(1).max(100),
+    required: z.boolean().optional(),
+    exception: z
+      .object({ reason: z.string().trim().min(1).max(2000), reviewAt: z.iso.datetime() })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export const profilePlatformSchema = z.enum(["linux", "darwin", "win32"]).optional();
+const capabilityName = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/);
+const modelName = z.string().trim().min(1).max(200);
+export const executionPolicySchema = z
+  .object({
+    allowedModels: z.array(modelName).max(100).optional(),
+    allowedCapabilities: z.array(capabilityName).max(100).optional(),
+  })
+  .strict();
+export const workerClaimSchema = z
+  .object({
+    projectId: z.string().min(1).max(200),
+    model: modelName.optional(),
+    mcp: z.array(capabilityName).max(100).optional(),
+  })
+  .strict();
+export const profileKnowledgeSchema = z
+  .object({
+    query: z.string().min(1).max(2000),
+    limit: z.number().int().min(1).max(50).optional(),
+    packageNames: z.array(packageNameSchema.max(214)).max(200).optional(),
+    platform: profilePlatformSchema,
+  })
+  .strict();
+export const knowledgeQuerySchema = profileKnowledgeSchema.omit({ platform: true }).extend({
+  packageVersions: z
+    .array(z.object({ name: packageNameSchema.max(214), version: semverSchema }).strict())
+    .max(200)
+    .optional(),
+});
 export const keySchema = z
   .object({
     label: z.string().min(1).max(200),
@@ -52,7 +99,7 @@ export const memorySchema = z
     projectId: z.string().min(1).max(200),
     content: z.string().min(1).max(100_000),
     kind: z.string().min(1).max(100).optional(),
-    scope: z.enum(["project", "organization", "session"]).optional(),
+    scope: z.enum(["project", "organization", "session", "user"]).optional(),
     sessionId: z.string().min(1).max(200).optional(),
     metadata: z
       .record(z.string(), z.unknown())
@@ -66,7 +113,15 @@ export const memoryQuerySchema = z
     query: z.string().min(1).max(2000),
     limit: z.number().int().min(1).max(50).optional(),
     includeOrganization: z.boolean().optional(),
+    includePersonal: z.boolean().optional(),
+    includeProject: z.boolean().optional(),
     sessionId: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+export const memoryReviewSchema = z
+  .object({
+    approve: z.boolean(),
+    reviewAt: z.iso.datetime().optional(),
   })
   .strict();
 export const composeSchema = z

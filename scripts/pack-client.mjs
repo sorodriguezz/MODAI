@@ -8,9 +8,19 @@ const output = resolve(root, "dist/npm");
 mkdirSync(output, { recursive: true });
 for (const file of readdirSync(output))
   if (/^(modai-(contracts|sdk|cli)|moduleai)-.*\.tgz$/.test(file)) rmSync(resolve(output, file));
+const npmCli = process.env.npm_execpath;
 const result = spawnSync(
-  "npm",
-  ["pack", "--workspace", "@sorodriguez/modai", "--pack-destination", output, "--ignore-scripts", "--json"],
+  npmCli ? process.execPath : "npm",
+  [
+    ...(npmCli ? [npmCli] : []),
+    "pack",
+    "--workspace",
+    "@sorodriguez/modai",
+    "--pack-destination",
+    output,
+    "--ignore-scripts",
+    "--json",
+  ],
   { cwd: root, encoding: "utf8", shell: false },
 );
 if (result.status !== 0) {

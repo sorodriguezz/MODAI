@@ -20,6 +20,7 @@ export interface SyncOptions {
   registries: Registry[];
   grants: string[];
   trust: TrustPolicy;
+  profileDigest?: string;
   update?: boolean | string[];
   frozen?: boolean;
   force?: boolean;
@@ -40,6 +41,7 @@ export interface SyncReport {
 
 function lockComparable(lock: LockFile) {
   return JSON.stringify({
+    profileDigest: lock.profileDigest,
     packages: Object.fromEntries(Object.entries(lock.packages).sort(([a], [b]) => a.localeCompare(b))),
     capabilities: Object.fromEntries(Object.entries(lock.capabilities).sort(([a], [b]) => a.localeCompare(b))),
   });
@@ -86,6 +88,7 @@ export async function syncWorkspace(project: V1Project, options: SyncOptions): P
   const set = await collectInstallSet(resolution, { registry, lock: project.lock, trust: options.trust });
   const nextLock: LockFile = {
     lockfileVersion: 1,
+    ...(options.profileDigest ? { profileDigest: options.profileDigest } : {}),
     packages: set.lockedPackages,
     capabilities: resolution?.capabilities ?? {},
     managed: project.lock.managed,

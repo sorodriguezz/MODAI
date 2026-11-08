@@ -1,19 +1,22 @@
 import type { PackageManifestV1 } from "@modai/contracts/manifest";
 import { sha256 } from "@modai/contracts/security";
-import type { AgentBundle } from "@modai/contracts/types";
-import { agentDefinitionOf, normalizeManifest, resolveAgentCapabilities } from "@modai/core";
+import type { AgentBundle, ArtifactFile } from "@modai/contracts/types";
+import {
+  agentDefinitionOf,
+  effectiveManifest,
+  normalizeManifest,
+  resolveAgentCapabilities,
+  selectPackageFeatures,
+} from "@modai/core";
 import type { ApiClient } from "@modai/sdk";
 import { type InstallationPolicy, verifyPackage } from "../services/trust.js";
 
 type Manifests = Map<string, PackageManifestV1>;
 
-async function verifiedSources(
-  api: ApiClient,
-  bundle: AgentBundle,
-  normalized: Manifests,
-  policy: InstallationPolicy,
-): Promise<Map<string, string>> {
+async function verifiedSources(api: ApiClient, bundle: AgentBundle, normalized: Manifests, policy: InstallationPolicy) {
   const sources = new Map<string, string>();
+  const toolPackages = new Map<string, ArtifactFile[]>();
+  const providers = new Set(bundle.capabilities.flatMap((item) => (item.kind === "mcp" ? [item.package] : [])));
   const names = new Set<string>();
   for (const item of bundle.packages) {
     const manifest = normalized.get(item.name)!;
@@ -27,10 +30,29 @@ async function verifiedSources(
     names.add(item.name);
     const artifact = await api.artifact(item.artifactId);
     verifyPackage(item, artifact, policy.policy, policy.trustedPublishers);
+    if (providers.has(item.name)) toolPackages.set(item.name, artifact.files);
     for (const file of artifact.files)
       sources.set(`${item.name}:${file.path}`, Buffer.from(file.content, "base64").toString("utf8"));
   }
-  return sources;
+  return { sources, toolPackages };
+}
+
+function assertProfile(bundle: AgentBundle): void {
+  const profile = bundle.effectiveProfile;
+  if (!profile) return;
+  const { digest, ...payload } = profile;
+  if (
+    profile.projectId !== bundle.projectId ||
+    profile.organizationId !== bundle.organizationId ||
+    sha256(JSON.stringify(payload)) !== digest
+  )
+    throw new Error("El perfil efectivo del agente está corrupto");
+  const pins = new Map(profile.packages.map((item) => [item.name, item]));
+  for (const item of bundle.packages) {
+    const pin = pins.get(item.name);
+    if (pin && (pin.version !== item.version || pin.artifactId !== item.artifactId))
+      throw new Error(`El paquete ${item.name} no coincide con el perfil efectivo`);
+  }
 }
 
 function assertOnlyAgentPackages(bundle: AgentBundle, normalized: Manifests, rootName: string): void {
@@ -43,6 +65,7 @@ function assertOnlyAgentPackages(bundle: AgentBundle, normalized: Manifests, roo
     for (const dependency of Object.keys(normalized.get(item.name)!.spec.dependencies)) visit(dependency);
   };
   visit(rootName);
+  for (const item of bundle.effectiveProfile?.bindings ?? []) if (item.required) visit(item.packageName);
   if (visited.size !== bundle.packages.length) throw new Error("El bundle contiene paquetes ajenos al agente");
 }
 
@@ -64,17 +87,37 @@ async function assertDefinition(bundle: AgentBundle, normalized: Manifests, sour
       throw new Error("Las instrucciones no corresponden al artefacto");
 }
 
-export async function verifyBundle(api: ApiClient, bundle: AgentBundle, policy: InstallationPolicy): Promise<void> {
+export async function verifyBundle(api: ApiClient, bundle: AgentBundle, policy: InstallationPolicy) {
   const { digest, ...payload } = bundle;
   if (sha256(JSON.stringify(payload)) !== digest) throw new Error("El bundle del agente está corrupto");
-  const normalized: Manifests = new Map(bundle.packages.map((item) => [item.name, normalizeManifest(item.manifest)]));
-  const sources = await verifiedSources(api, bundle, normalized, policy);
+  assertProfile(bundle);
+  const normalized: Manifests = new Map(
+    bundle.packages.map((item) => {
+      const manifest = normalizeManifest(item.manifest);
+      return [
+        item.name,
+        bundle.manifestFormat === "published" ? effectiveManifest(manifest, selectPackageFeatures(manifest)) : manifest,
+      ];
+    }),
+  );
+  const { sources, toolPackages } = await verifiedSources(api, bundle, normalized, policy);
   await assertDefinition(bundle, normalized, sources);
   if (
-    JSON.stringify(resolveAgentCapabilities(bundle.agent.definition, bundle.packages)) !==
-    JSON.stringify(bundle.capabilities)
+    JSON.stringify(
+      resolveAgentCapabilities(
+        bundle.agent.definition,
+        bundle.packages.map((item) => ({
+          name: item.name,
+          manifest: normalized.get(item.name)!,
+        })),
+      ),
+    ) !== JSON.stringify(bundle.capabilities)
   )
     throw new Error("Las capacidades no corresponden a los paquetes");
+  const allowed = bundle.executionPolicy?.allowedCapabilities;
+  if (allowed && bundle.capabilities.some((item) => !allowed.includes(item.name)))
+    throw new Error("El bundle contiene herramientas fuera de la política del proyecto");
+  return toolPackages;
 }
 
 export function agentInstructions(bundle: AgentBundle): string {

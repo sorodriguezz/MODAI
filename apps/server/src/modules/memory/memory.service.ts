@@ -8,13 +8,20 @@ import { assertContentBudget } from "../knowledge/content-budget.js";
 import { MemoryRepository } from "./memory.repository.js";
 
 type MemoryUpdate = { content?: string; kind?: string; scope?: string; metadata?: Record<string, unknown> };
+type ReviewState = { approval?: number; reviewedBy?: string | null; reviewAt?: string | null };
 
-const withMetadata = <T extends { metadataJson: string }>(
-  item: T,
-): Omit<T, "metadataJson"> & { metadata: Record<string, unknown> } => ({
+const approvalState = (approval: number) => (approval === 1 ? "approved" : approval === 0 ? "pending" : "rejected");
+const withMetadata = <T extends { metadataJson: string; personal: number; scope: string; approval: number }>({
+  metadataJson,
+  personal,
+  scope,
+  approval,
+  ...item
+}: T) => ({
   ...item,
-  metadata: JSON.parse(item.metadataJson),
-  metadataJson: undefined,
+  scope: personal ? "user" : scope,
+  status: approvalState(approval),
+  metadata: JSON.parse(metadataJson) as Record<string, unknown>,
 });
 
 export class MemoryService {
@@ -28,7 +35,12 @@ export class MemoryService {
     return new MemoryService(context);
   }
 
-  async remember(input: MemoryInput, createdBy?: string, organizationId?: string): Promise<Record<string, unknown>> {
+  async remember(
+    input: MemoryInput,
+    createdBy?: string,
+    organizationId?: string,
+    review: ReviewState = {},
+  ): Promise<Record<string, unknown>> {
     invariant(
       input?.projectId?.trim() && input?.content?.trim(),
       400,
@@ -41,12 +53,17 @@ export class MemoryService {
     const now = new Date().toISOString();
     const scope = input.scope?.trim() || "project";
     const kind = input.kind?.trim() || "note";
+    const approval = review.approval ?? 1;
     await assertContentBudget(this.context, input.content);
     const metadata = input.metadata ?? {};
     await this.memories.insert({
       id,
       project_id: input.projectId,
-      scope,
+      scope: scope === "user" ? "project" : scope,
+      personal: scope === "user" ? 1 : 0,
+      approval,
+      reviewed_by: review.reviewedBy ?? null,
+      review_at: review.reviewAt ?? null,
       kind,
       content: input.content,
       metadata_json: JSON.stringify(metadata),
@@ -60,6 +77,8 @@ export class MemoryService {
       id,
       projectId: input.projectId,
       scope,
+      status: approvalState(approval),
+      createdBy,
       kind,
       content: input.content,
       metadata,
@@ -74,7 +93,7 @@ export class MemoryService {
     return row;
   }
 
-  async listMemories(projectId: string, limit = 50, options: { organizationId?: string; sessionId?: string } = {}) {
+  async listMemories(projectId: string, limit = 50, options: Omit<MemoryScope, "projectId"> = {}) {
     invariant(projectId?.trim(), 400, "INVALID_PROJECT", "projectId es obligatorio");
     const rows = await this.memories.list({ projectId, ...options }, Math.min(Math.max(limit, 1), 200));
     return rows.map(withMetadata);
@@ -89,9 +108,12 @@ export class MemoryService {
     );
     const terms = searchTerms(input.query);
     invariant(terms.length, 400, "INVALID_QUERY", "query no contiene términos buscables");
-    const scope = { projectId: input.projectId, sessionId: input.sessionId, organizationId: input.organizationId };
     const limit = Math.min(Math.max(Number(input.limit) || 10, 1), 50);
-    const hits = await textSearchFor(this.context.dialect).searchMemories(this.context.db, { terms, scope, limit });
+    const hits = await textSearchFor(this.context.dialect).searchMemories(this.context.db, {
+      terms,
+      scope: input,
+      limit,
+    });
     return hits.map(withMetadata);
   }
 
@@ -100,13 +122,13 @@ export class MemoryService {
     await this.memories.delete(id);
   }
 
-  async updateMemory(id: string, input: MemoryUpdate) {
+  async updateMemory(id: string, input: MemoryUpdate, review: ReviewState = {}) {
     const existing = await this.memories.find(id);
     if (!existing) throw new AppError(404, "MEMORY_NOT_FOUND", `Memoria no encontrada: ${id}`);
     const content = input.content?.trim() || existing.content;
     const kind = input.kind?.trim() || existing.kind;
     invariant(
-      input.scope === undefined || input.scope === existing.scope,
+      input.scope === undefined || input.scope === (existing.personal ? "user" : existing.scope),
       400,
       "IMMUTABLE_SCOPE",
       "Para cambiar el ámbito crea una memoria nueva",
@@ -115,14 +137,51 @@ export class MemoryService {
     await assertContentBudget(this.context, content);
     const metadata = input.metadata ?? (JSON.parse(existing.metadata_json) as Record<string, unknown>);
     const updatedAt = new Date().toISOString();
-    await this.memories.update(id, {
+    const approval = review.approval ?? existing.approval;
+    const changed = await this.memories.review(id, existing.updated_at, {
       content,
       kind,
       scope,
       metadata_json: JSON.stringify(metadata),
       updated_at: updatedAt,
+      approval,
+      reviewed_by: review.reviewedBy === undefined ? existing.reviewed_by : review.reviewedBy,
+      review_at: review.reviewAt === undefined ? existing.review_at : review.reviewAt,
     });
-    return { id, projectId: existing.project_id, content, kind, scope, metadata, updatedAt };
+    invariant(changed, 409, "MEMORY_CHANGED", "La memoria cambió durante la edición");
+    return {
+      id,
+      projectId: existing.project_id,
+      content,
+      kind,
+      scope: existing.personal ? "user" : scope,
+      status: approvalState(approval),
+      metadata,
+      updatedAt,
+    };
+  }
+
+  async pending(organizationId: string) {
+    return (await this.memories.pending(organizationId, new Date().toISOString())).map(withMetadata);
+  }
+
+  async review(id: string, previous: string, actor: string, approve: boolean, reviewAt?: string) {
+    const now = new Date().toISOString();
+    invariant(
+      !reviewAt || (approve && reviewAt > now),
+      400,
+      "INVALID_REVIEW_DATE",
+      "Indica una fecha futura al aprobar",
+    );
+    const approval = approve ? 1 : -1;
+    const changed = await this.memories.review(id, previous, {
+      approval,
+      reviewed_by: actor,
+      review_at: reviewAt ?? null,
+      updated_at: now,
+    });
+    invariant(changed, 409, "MEMORY_CHANGED", "La memoria cambió durante la revisión");
+    return { id, status: approvalState(approval), reviewedBy: actor, reviewAt };
   }
 
   async pruneMemories(days: number, dryRun = false): Promise<number> {

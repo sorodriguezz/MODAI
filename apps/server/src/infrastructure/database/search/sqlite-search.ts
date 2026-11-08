@@ -3,6 +3,7 @@ import type { Executor } from "../database.js";
 import {
   KNOWLEDGE_COLUMNS,
   type KnowledgeHit,
+  type KnowledgeQuery,
   MEMORY_COLUMNS,
   type MemoryHit,
   type MemoryScope,
@@ -13,10 +14,7 @@ import {
 const matchQuery = (terms: string[]): string => terms.map((term) => `"${term.replaceAll('"', '""')}"*`).join(" OR ");
 
 export class SqliteFtsSearch implements TextSearch {
-  async searchKnowledge(
-    db: Executor,
-    query: { terms: string[]; packageNames: string[]; limit: number },
-  ): Promise<KnowledgeHit[]> {
+  async searchKnowledge(db: Executor, query: KnowledgeQuery): Promise<KnowledgeHit[]> {
     let select = db
       .selectFrom("knowledge_fts")
       .innerJoin("knowledge_documents", "knowledge_documents.id", "knowledge_fts.id")
@@ -24,6 +22,7 @@ export class SqliteFtsSearch implements TextSearch {
       .select(sql<number>`bm25(knowledge_fts, 0, 0, 4, 1, 0.5)`.as("rank"))
       .where(sql<boolean>`knowledge_fts MATCH ${matchQuery(query.terms)}`);
     if (query.packageNames.length) select = select.where("knowledge_documents.package_name", "in", query.packageNames);
+    if (query.visible) select = select.where(query.visible(db, "knowledge_documents.package_name"));
     return select.orderBy("rank").limit(query.limit).execute();
   }
 

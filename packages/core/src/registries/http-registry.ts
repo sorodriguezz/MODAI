@@ -1,6 +1,6 @@
 import { AppError } from "@modai/contracts/errors";
 import { sha256 } from "@modai/contracts/security";
-import type { PublishPackageInput } from "@modai/contracts/types";
+import type { PackageRecord, PublishPackageInput } from "@modai/contracts/types";
 import { ApiClient } from "@modai/sdk";
 import { computeIntegrity, verifyFiles } from "../packages/integrity.js";
 import { latestPerName, type PackageArtifact, type PackageVersion, type Registry } from "./registry.js";
@@ -34,6 +34,11 @@ export class HttpRegistry implements Registry {
   async fetch(name: string, version: string): Promise<PackageArtifact> {
     const record = (await this.records(name)).find((item) => item.version === version);
     if (!record) throw new AppError(404, "PACKAGE_NOT_FOUND", `No existe ${name}@${version} en ${this.id}`);
+    return this.fetchRecord(record);
+  }
+
+  async fetchRecord(record: PackageRecord): Promise<PackageArtifact> {
+    const { name, version } = record;
     const artifact = await this.api.artifact(record.artifactId);
     if (sha256(JSON.stringify({ files: artifact.files })) !== artifact.sha256)
       throw new AppError(400, "INTEGRITY_MISMATCH", `Integridad del artefacto inválida: ${name}`);

@@ -24,6 +24,7 @@ Instala dos comandos: `modai` (la CLI) y `modai-mcp` (el servidor MCP al que se 
 - [Servidor MCP](#servidor-mcp)
 - [Crear y publicar tus paquetes](#crear-y-publicar-tus-paquetes)
 - [Trabajar en equipo con un servidor](#trabajar-en-equipo-con-un-servidor)
+- [Perfiles efectivos del servidor](#perfiles-efectivos-del-servidor)
 - [Administrar el servidor desde la CLI](#administrar-el-servidor-desde-la-cli)
 - [Agentes y workers](#agentes-y-workers)
 - [Harness engineering](#harness-engineering)
@@ -299,6 +300,26 @@ Para cambiar de servidor, `modai server logout` borra el servidor y la API key g
 Dentro de un proyecto, `modai server ping` revisa también sus registries y sale con código 1 si el servidor no responde. Los proyectos vinculados informan al servidor qué tienen instalado y el panel muestra qué proyectos usan cada paquete (desactívalo con `MODAI_NO_USAGE_REPORT=1`).
 
 Proyectos del servidor: `modai project list/create`, `project update <id> --name … --organization …` y `project delete <id>` (borra su memoria y ejecuciones; pide confirmación y solo lo puede hacer un administrador o quien lo creó).
+
+## Perfiles efectivos del servidor
+
+Asigna un paquete una vez a una organización, a un equipo o a un proyecto. El servidor calcula el conjunto que puede usar cada credencial.
+
+```bash
+modai project bind ORG @seguridad/estandar --scope organization --range 1.2.0 --required
+modai project bind PROYECTO @backend/nestjs --range 2.0.0
+modai project profile PROYECTO
+modai admin team create ORG Backend
+modai admin team add-member EQUIPO USUARIO_ID
+```
+
+- Para instalar las asignaciones del perfil, usa `modai init --project PROYECTO --delivery materialized`. En un repo ya vinculado usa `modai sync --delivery materialized`. `modai sync --frozen` detecta cambios del perfil que afecten el lock.
+- Para consultar sin materializar el perfil, usa `modai context search "consulta" --project PROYECTO`, `modai context skill @backend/nestjs --project PROYECTO` o `modai-mcp --project-id PROYECTO`. En un repo vinculado, `modai sync --delivery virtual` deja las dependencias locales como instalación y consulta el perfil central bajo demanda.
+- `modai admin update-namespace @catalogo --shared` habilita lectura para toda la instancia autenticada. `--internal` limita la visibilidad al ámbito propietario.
+- `modai memory pending --project PROYECTO` y `modai memory review MEMORIA --approve` gestionan propuestas de organización. `modai memory add "preferencia" --project PROYECTO --scope user` guarda una nota privada de una cuenta en el proyecto.
+- `modai project execution-policy set PROYECTO --models modelo-local --capabilities modai_search_knowledge` fija los permisos de futuras tareas. Usa `modai agent worker --project PROYECTO --model modelo-local` con una clave autorizada para ese proyecto.
+
+El paquete npm exporta el cliente HTTP tipado mediante `import { ApiClient } from "@sorodriguez/modai/sdk"`.
 
 ## Administrar el servidor desde la CLI
 

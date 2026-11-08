@@ -104,6 +104,7 @@ export function saveProjectFile(root: string, file: ProjectFile): void {
 export function saveLock(root: string, lock: LockFile): void {
   const clean: LockFile = {
     lockfileVersion: 1,
+    ...(lock.profileDigest ? { profileDigest: lock.profileDigest } : {}),
     packages: sortKeys(lock.packages),
     capabilities: sortKeys(lock.capabilities),
     managed: lock.managed,

@@ -1,5 +1,12 @@
 import { invariant } from "@modai/contracts/errors";
-import { memorySchema, parseInput, projectSchema, publishSchema } from "@modai/contracts/schemas";
+import {
+  capabilityBindingSchema,
+  executionPolicySchema,
+  memorySchema,
+  parseInput,
+  projectSchema,
+  publishSchema,
+} from "@modai/contracts/schemas";
 import { publicKeyFingerprint } from "@modai/contracts/security";
 import type { DataContext } from "../../infrastructure/database/database.js";
 import type { Snapshot } from "./backup-snapshot.js";
@@ -39,6 +46,54 @@ async function projectExists(context: DataContext, id: string): Promise<boolean>
   return Boolean(await context.db.selectFrom("projects").select("id").where("id", "=", id).executeTakeFirst());
 }
 
+function validateContent(snapshot: Snapshot): void {
+  for (const item of snapshot.packages) {
+    parseInput(publishSchema, { manifest: item.manifest, files: item.files, signature: item.signature });
+    invariant(
+      item.artifactId === undefined ||
+        (typeof item.artifactId === "string" &&
+          /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(item.artifactId)),
+      400,
+      "INVALID_BACKUP",
+      "Identificador de artefacto inválido",
+    );
+  }
+  for (const {
+    createdBy: _createdBy,
+    organizationId: _organizationId,
+    approval,
+    reviewedBy: _reviewedBy,
+    reviewAt,
+    ...item
+  } of snapshot.memories ?? []) {
+    parseInput(memorySchema, item);
+    invariant(
+      item.scope !== "user" &&
+        (approval === undefined || [-1, 0, 1].includes(approval)) &&
+        (!reviewAt || !Number.isNaN(Date.parse(reviewAt))),
+      400,
+      "INVALID_BACKUP",
+      "Memoria no exportable o revisión inválida",
+    );
+  }
+}
+
+function validateProfiles(snapshot: Snapshot): void {
+  for (const { target, approvedBy, updatedAt, ...binding } of snapshot.bindings ?? []) {
+    parseInput(capabilityBindingSchema, binding);
+    invariant(
+      target?.id &&
+        ["project", "organization", "team"].includes(target.scope) &&
+        approvedBy &&
+        !Number.isNaN(Date.parse(updatedAt)),
+      400,
+      "INVALID_BACKUP",
+      "Asignación de capacidades inválida",
+    );
+  }
+  for (const item of snapshot.executionPolicies ?? []) parseInput(executionPolicySchema, item.policy);
+}
+
 export async function validateSnapshot(context: DataContext, snapshot: Snapshot): Promise<void> {
   invariant(
     snapshot?.schemaVersion === 1 && Array.isArray(snapshot.packages),
@@ -46,9 +101,8 @@ export async function validateSnapshot(context: DataContext, snapshot: Snapshot)
     "INVALID_BACKUP",
     "Snapshot ModularAI inválido",
   );
-  for (const item of snapshot.packages)
-    parseInput(publishSchema, { manifest: item.manifest, files: item.files, signature: item.signature });
-  for (const item of snapshot.memories ?? []) parseInput(memorySchema, item);
+  validateContent(snapshot);
+  validateProfiles(snapshot);
   for (const item of snapshot.projects ?? [])
     parseInput(projectSchema, { id: item.id, name: item.name, organizationId: item.organizationId ?? undefined });
   const knownProjects = new Set((snapshot.projects ?? []).map((item) => item.id));

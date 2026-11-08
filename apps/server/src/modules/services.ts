@@ -15,7 +15,10 @@ import { MemoryService } from "./memory/memory.service.js";
 import { NamespacesService } from "./namespaces/namespaces.service.js";
 import { OrganizationsService } from "./organizations/organizations.service.js";
 import { PackagesService } from "./packages/packages.service.js";
+import { ProfilesService } from "./profiles/profiles.service.js";
+import { TeamsService } from "./profiles/teams.service.js";
 import { ProjectsService } from "./projects/projects.service.js";
+import { ExecutionPolicies } from "./runs/execution-policy.js";
 import { RunsService } from "./runs/runs.service.js";
 
 export interface ServiceOptions {
@@ -37,12 +40,15 @@ export interface Services {
   organizations: OrganizationsService;
   namespaces: NamespacesService;
   projects: ProjectsService;
+  profiles: ProfilesService;
+  teams: TeamsService;
   packages: PackagesService;
   categories: CategoriesService;
   knowledge: KnowledgeService;
   memory: MemoryService;
   agents: AgentsService;
   runs: RunsService;
+  executionPolicies: ExecutionPolicies;
   audit: AuditService;
   backup: BackupService;
   metrics: MetricsService;
@@ -58,6 +64,8 @@ export function createServices(database: Database, options: ServiceOptions): Ser
   });
   const knowledge = new KnowledgeService(database);
   const memory = new MemoryService(database);
+  const projects = new ProjectsService(database, authz, organizations);
+  const teams = new TeamsService(database, authz, organizations);
   return {
     database,
     authz,
@@ -66,13 +74,16 @@ export function createServices(database: Database, options: ServiceOptions): Ser
     apiKeys: new ApiKeysService(database, authz, options.apiToken),
     organizations,
     namespaces: new NamespacesService(database, authz, organizations),
-    projects: new ProjectsService(database, authz, organizations),
+    projects,
+    profiles: new ProfilesService(database, authz, projects, organizations, teams, packages),
+    teams,
     packages,
     categories: new CategoriesService(database),
     knowledge,
     memory,
     agents: new AgentsService(packages),
     runs: new RunsService(database, options.workerLeaseMs),
+    executionPolicies: new ExecutionPolicies(database),
     audit: new AuditService(database),
     backup: new BackupService(database, packages, knowledge, memory),
     metrics: new MetricsService(),

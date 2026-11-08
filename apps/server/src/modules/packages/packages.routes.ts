@@ -1,11 +1,9 @@
-import { AppError } from "@modai/contracts/errors";
 import { analyzePackageQuality } from "@modai/contracts/quality";
 import { parseInput, resolveSchema } from "@modai/contracts/schemas";
 import type { PublishPackageInput, ResolveRequest } from "@modai/contracts/types";
 import { manifestIdentity } from "@modai/core";
 import type { FastifyInstance } from "fastify";
 import { identityOf } from "../../infrastructure/http/identity-hooks.js";
-import { namespaceOf } from "../auth/identity.js";
 import { LARGE_BODY, type ModuleOptions } from "../module-options.js";
 import type { Services } from "../services.js";
 import { catalog, summary } from "./catalog.js";
@@ -74,17 +72,7 @@ function writeRoutes(app: FastifyInstance, { authz, packages, audit }: Services)
   app.post<{ Body: ResolveRequest }>("/api/v1/resolve", async (request) => {
     const visible = await authz.packageReader(identityOf(request));
     const input = parseInput(resolveSchema, request.body);
-    for (const root of input.packages)
-      if (!visible(root.name)) throw new AppError(404, "PACKAGE_NOT_FOUND", `No existe ${root.name}`);
-    const resolved = await packages.resolve(input);
-    const hidden = resolved.find((item) => !visible(item.name));
-    if (hidden)
-      throw new AppError(
-        403,
-        "PACKAGE_FORBIDDEN",
-        `Una dependencia está en un namespace restringido sin acceso: ${namespaceOf(hidden.name)}`,
-      );
-    return { packages: resolved };
+    return { packages: await packages.resolve(input, visible) };
   });
 }
 

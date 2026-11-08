@@ -11,6 +11,10 @@ export function registerRemove(program: Command, print: Print): void {
     .argument("<package>", "@scope/nombre")
     .action(async (name: string) => {
       const root = requireProject();
-      print(`Retirado ${name}.\n${summarize(await removePackage(root, name))}`);
+      const report = await removePackage(root, name);
+      const result = report.lock.packages[name]
+        ? `Dependencia local retirada. ${name} sigue instalado por una asignación u otra dependencia.`
+        : `Retirado ${name}.`;
+      print(`${result}\n${summarize(report)}`);
     });
 }

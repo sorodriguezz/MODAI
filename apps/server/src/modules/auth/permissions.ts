@@ -23,7 +23,7 @@ export async function permissionsOf(authz: AuthorizationService, identity: Ident
     },
     assignableRoles: global ? ROLES : manager ? DELEGABLE_ROLES : [],
     createProjects: authz.satisfies(actor.role, "publisher"),
-    writeKnowledge: publish.all,
+    writeKnowledge: global,
     writeMemory: WRITER_ROLES.includes(actor.role),
     submitRuns: authz.satisfies(actor.role, "publisher"),
     publish,

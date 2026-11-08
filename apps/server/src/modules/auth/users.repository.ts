@@ -65,6 +65,7 @@ export class UsersRepository {
           owner_user_id: row.id,
           description: `Namespace personal de ${row.username}`,
           visibility: "internal",
+          instance_shared: 0,
           created_by: row.id,
           created_at: row.created_at,
           updated_at: row.created_at,

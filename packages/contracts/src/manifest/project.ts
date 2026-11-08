@@ -31,8 +31,13 @@ export const projectFileSchema = z
         memory: z.enum(["local", "remote", "off"]).default("local"),
         server: z.string().url().max(1000).optional(),
         projectId: z.string().min(1).max(200).optional(),
+        delivery: z.enum(["materialized", "virtual"]).optional(),
       })
       .strict()
+      .refine(
+        (context) => !context.delivery || (context.server && context.projectId),
+        "La entrega central requiere server y projectId",
+      )
       .default({ memory: "local" }),
   })
   .strict();

@@ -5,6 +5,7 @@ import { escapeLike, likeLower, limitRows } from "../sql-helpers.js";
 import {
   KNOWLEDGE_COLUMNS,
   type KnowledgeHit,
+  type KnowledgeQuery,
   MEMORY_COLUMNS,
   type MemoryHit,
   type MemoryScope,
@@ -47,16 +48,14 @@ function anyMatch(columns: Weighted, terms: string[]): RawBuilder<boolean> {
 export class LikeTextSearch implements TextSearch {
   constructor(private readonly dialect: DialectName) {}
 
-  async searchKnowledge(
-    db: Executor,
-    query: { terms: string[]; packageNames: string[]; limit: number },
-  ): Promise<KnowledgeHit[]> {
+  async searchKnowledge(db: Executor, query: KnowledgeQuery): Promise<KnowledgeHit[]> {
     let select = db
       .selectFrom("knowledge_documents")
       .select(KNOWLEDGE_COLUMNS)
       .select(rank(KNOWLEDGE_WEIGHTS, query.terms).as("rank"))
       .where(anyMatch(KNOWLEDGE_WEIGHTS, query.terms));
     if (query.packageNames.length) select = select.where("knowledge_documents.package_name", "in", query.packageNames);
+    if (query.visible) select = select.where(query.visible(db, "knowledge_documents.package_name"));
     const ordered = select.orderBy("rank").orderBy("knowledge_documents.id");
     return limitRows(ordered, this.dialect, query.limit).execute();
   }

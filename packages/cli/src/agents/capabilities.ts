@@ -18,6 +18,7 @@ export interface CapabilityOptions {
   allowedEnv?: string[];
   sessionId?: string;
   signal?: AbortSignal;
+  bundleStore?: { root: string; integrity: Map<string, string> };
 }
 type McpCapability = Extract<AgentCapability, { kind: "mcp" }>;
 type ToolCall = (input: Record<string, unknown>) => Promise<unknown>;
@@ -74,7 +75,7 @@ export class CapabilityHost {
 
   private async connect(capability: McpCapability): Promise<void> {
     const env = this.environment(capability);
-    const client = new Client({ name: "modai-capabilities", version: "0.12.0" });
+    const client = new Client({ name: "modai-capabilities", version: "0.13.0" });
     this.clients.push(client);
     const transport = new StdioClientTransport({
       ...this.launch(capability),
@@ -130,17 +131,26 @@ export class CapabilityHost {
   }
 
   private launch(capability: McpCapability): { command: string; args: string[] } {
-    const { cwd } = this.options;
+    const { cwd, bundleStore } = this.options;
     let packageDir = cwd;
     if ([capability.command, ...capability.args].some((value) => value.includes(PACKAGE_DIR))) {
-      const locked = loadV1Project(cwd).lock.packages[capability.package];
-      if (!locked || !verifyStore(cwd, capability.package, locked.integrity))
+      const root = bundleStore?.root ?? cwd;
+      const integrity = bundleStore
+        ? bundleStore.integrity.get(capability.package)
+        : this.localIntegrity(capability.package);
+      if (!integrity || !verifyStore(root, capability.package, integrity))
         throw new Error(
           `${capability.package} no está instalado o su contenido cambió desde modai.lock; ejecuta modai sync`,
         );
-      packageDir = storePackageDir(cwd, capability.package);
+      packageDir = storePackageDir(root, capability.package);
     }
     return resolveCommand(capability.command, capability.args, packageDir, cwd);
+  }
+
+  private localIntegrity(name: string): string | undefined {
+    const locked = loadV1Project(this.options.cwd).lock.packages[name];
+    const required = this.bundle.packages.find((item) => item.name === name);
+    return locked && locked.version === required?.version ? locked.integrity : undefined;
   }
 
   async close(): Promise<void> {

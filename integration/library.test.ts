@@ -153,7 +153,8 @@ test("los templates son paquetes kind: Template: se publican desde archivos o ZI
   assert.equal(missing.status, 404);
   assert.equal(missing.body.error.code, "NAMESPACE_NOT_FOUND");
   assert.equal(
-    (await call(admin, "POST", "/namespaces", { name: "@plantillas", organizationId: testOrg })).status,
+    (await call(admin, "POST", "/namespaces", { name: "@plantillas", organizationId: testOrg, visibility: "shared" }))
+      .status,
     201,
   );
   const first = await call(admin, "POST", "/packages/import-template", {

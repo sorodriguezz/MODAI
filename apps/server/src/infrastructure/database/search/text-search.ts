@@ -1,4 +1,5 @@
 import { type Expression, type ExpressionBuilder, type SqlBool, sql } from "kysely";
+import type { PackageVisibilityFilter } from "../../../modules/auth/namespace-access.js";
 import type { Executor } from "../database.js";
 import type { Schema } from "../schema.js";
 
@@ -24,6 +25,11 @@ export interface MemoryHit {
   metadataJson: string;
   createdAt: string;
   updatedAt: string;
+  personal: number;
+  createdBy: string | null;
+  reviewedBy: string | null;
+  reviewAt: string | null;
+  approval: number;
   rank: number;
 }
 
@@ -31,13 +37,21 @@ export interface MemoryScope {
   projectId: string;
   sessionId?: string;
   organizationId?: string;
+  personalOwnerId?: string;
+  sessionOwners?: string[];
+  includeProject?: boolean;
+  now?: string;
+}
+
+export interface KnowledgeQuery {
+  terms: string[];
+  packageNames: string[];
+  limit: number;
+  visible?: PackageVisibilityFilter;
 }
 
 export interface KnowledgeSearch {
-  searchKnowledge(
-    db: Executor,
-    query: { terms: string[]; packageNames: string[]; limit: number },
-  ): Promise<KnowledgeHit[]>;
+  searchKnowledge(db: Executor, query: KnowledgeQuery): Promise<KnowledgeHit[]>;
 }
 
 export interface MemorySearch {
@@ -60,6 +74,11 @@ export const MEMORY_COLUMNS = [
   "memories.id",
   "memories.project_id as projectId",
   "memories.scope",
+  "memories.personal",
+  "memories.approval",
+  "memories.created_by as createdBy",
+  "memories.reviewed_by as reviewedBy",
+  "memories.review_at as reviewAt",
   "memories.kind",
   "memories.content",
   "memories.organization_id as organizationId",
@@ -79,18 +98,39 @@ export function memoryScopeFilter<TB extends keyof Schema>(
   scope: MemoryScope,
 ): Expression<SqlBool> {
   const column = (name: string) => sql.ref(`memories.${name}`);
-  const clauses = [eb.and([eb(column("project_id"), "=", scope.projectId), eb(column("scope"), "=", "project")])];
-  if (scope.sessionId)
+  const project = eb(column("project_id"), "=", scope.projectId);
+  const scopeProject = eb(column("scope"), "=", "project");
+  const clauses: Array<Expression<SqlBool>> = [];
+  if (scope.includeProject !== false) clauses.push(eb.and([project, scopeProject, eb(column("personal"), "=", 0)]));
+  if (scope.personalOwnerId)
     clauses.push(
       eb.and([
-        eb(column("project_id"), "=", scope.projectId),
+        project,
+        scopeProject,
+        eb(column("personal"), "=", 1),
+        eb(column("created_by"), "=", scope.personalOwnerId),
+      ]),
+    );
+  if (scope.sessionId && scope.sessionOwners?.length)
+    clauses.push(
+      eb.and([
+        project,
         eb(column("scope"), "=", "session"),
         eb(column("session_id"), "=", scope.sessionId),
+        eb(column("created_by"), "in", scope.sessionOwners),
       ]),
     );
   if (scope.organizationId)
     clauses.push(
-      eb.and([eb(column("organization_id"), "=", scope.organizationId), eb(column("scope"), "=", "organization")]),
+      eb.and([
+        eb(column("organization_id"), "=", scope.organizationId),
+        eb(column("scope"), "=", "organization"),
+        eb(column("approval"), "=", 1),
+        eb.or([
+          eb(column("review_at"), "is", null),
+          eb(column("review_at"), ">", scope.now ?? new Date().toISOString()),
+        ]),
+      ]),
     );
   return eb.or(clauses);
 }

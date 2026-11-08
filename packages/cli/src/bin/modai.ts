@@ -10,7 +10,7 @@ const program = new Command();
 program
   .name("modai")
   .description("MODAI: gestor de paquetes y capacidades para agentes de IA")
-  .version("0.12.0")
+  .version("0.13.0")
   .option("--json", "Salida JSON para scripts (en cualquier comando)")
   .hook("preAction", () => setJsonMode(Boolean(program.opts().json)));
 

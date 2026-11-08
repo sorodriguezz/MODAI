@@ -103,7 +103,12 @@ async function writeRows(
   }
 }
 
-export async function publishPackage(context: DataContext, settings: PublishSettings, input: PublishPackageInput) {
+export async function publishPackage(
+  context: DataContext,
+  settings: PublishSettings,
+  input: PublishPackageInput,
+  artifactId: string = randomUUID(),
+) {
   parseInput(publishSchema, input);
   validatePackage(input.manifest, input.files);
   invariant(
@@ -116,7 +121,6 @@ export async function publishPackage(context: DataContext, settings: PublishSett
   const signer = await verifySignature(context, input, settings.signaturePolicy);
   const body = JSON.stringify({ files: input.files });
   await assertCapacity(new PackagesRepository(context), input, body, settings.maxStorageBytes);
-  const artifactId = randomUUID();
   settings.artifacts.create(artifactId, body);
   try {
     await withTransaction(context, (trx) => writeRows(trx, input, { artifactId, body, signer, quality }));

@@ -3,6 +3,8 @@ import { serverApi } from "../../services/connection.js";
 import { isJsonMode, type Print } from "../../terminal/output.js";
 import { confirmAction } from "../../terminal/prompts.js";
 import { shellQuote } from "../../terminal/shell.js";
+import { registerExecutionPolicy } from "./execution-policy.js";
+import { registerProjectProfile } from "./profile.js";
 
 type UpdateOptions = { name?: string; organization?: string | false };
 
@@ -106,4 +108,6 @@ export function registerProjectsCommands(program: Command, print: Print): void {
   registerProjectsCreate(project, print);
   registerProjectsUpdate(project, print);
   registerProjectsDelete(project, print);
+  registerProjectProfile(project, print);
+  registerExecutionPolicy(project, print);
 }

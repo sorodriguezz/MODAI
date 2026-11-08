@@ -2,6 +2,7 @@ import { AppError } from "@modai/contracts/errors";
 import type { DataContext } from "../../infrastructure/database/database.js";
 import { AuthorizationRepository } from "./authorization.repository.js";
 import { type Grantee, type Identity, type NamespaceScope, namespaceOf, type Role } from "./identity.js";
+import { allNamespaces } from "./namespace-access.js";
 
 export type PackageReader = (packageName: string) => boolean;
 
@@ -54,7 +55,7 @@ export class AuthorizationService {
     return (
       actor.role === "admin" ||
       row.createdBy === actor.id ||
-      (Boolean(actor.ownerId) && row.createdBy === actor.ownerId) ||
+      row.createdBy === actor.personalOwnerId ||
       actor.projectIds.includes(row.id) ||
       (actor.role === "org-admin" && this.administers(actor, row.organizationId))
     );
@@ -68,17 +69,13 @@ export class AuthorizationService {
 
   async packageReader(identity: Identity | undefined): Promise<PackageReader> {
     const actor = this.require(identity, "reader");
-    if (actor.role === "admin" || actor.packageScopes.includes("*")) return () => true;
-    const restricted = new Map((await this.repository.restrictedNamespaces()).map((row) => [row.name, row]));
-    return (packageName) => {
-      const owner = restricted.get(namespaceOf(packageName));
-      if (!owner) return true;
-      return (
-        actor.packageScopes.includes(owner.name) ||
-        (Boolean(owner.ownerUserId) && owner.ownerUserId === actor.personalOwnerId) ||
-        (actor.role === "org-admin" && Boolean(owner.organizationId) && this.administers(actor, owner.organizationId))
-      );
-    };
+    if (allNamespaces(actor)) return () => true;
+    const names = new Set((await this.repository.readableNamespaces(actor)).map((row) => row.name));
+    return (packageName) => names.has(namespaceOf(packageName));
+  }
+
+  packageVisibility(identity: Identity | undefined) {
+    return this.repository.packageVisibility(this.require(identity, "reader"));
   }
 
   async requireReadPackage(identity: Identity | undefined, packageName: string): Promise<void> {
@@ -132,7 +129,7 @@ export class AuthorizationService {
   async requireWriteKnowledge(identity: Identity | undefined, packageName?: string | null): Promise<void> {
     if (packageName) return this.requirePublish(identity, packageName);
     const actor = this.require(identity, "publisher");
-    if (!(await this.publishableNamespaces(actor)).all)
+    if (actor.role !== "admin")
       throw new AppError(
         403,
         "KNOWLEDGE_FORBIDDEN",

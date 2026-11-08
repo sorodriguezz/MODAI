@@ -3,7 +3,12 @@ import { serverApi } from "../../services/connection.js";
 import type { Print } from "../../terminal/output.js";
 
 type OwnerOptions = { organization?: string; user?: string };
-type UpdateOptions = OwnerOptions & { restricted?: boolean; internal?: boolean; description?: string };
+type UpdateOptions = OwnerOptions & {
+  restricted?: boolean;
+  internal?: boolean;
+  shared?: boolean;
+  description?: string;
+};
 
 async function namespaceOwner(options: OwnerOptions) {
   if (options.organization && options.user) throw new Error("Usa --organization o --user, no ambos");
@@ -15,13 +20,11 @@ async function namespaceOwner(options: OwnerOptions) {
 }
 
 async function namespaceChanges(options: UpdateOptions) {
+  const selected = (["restricted", "internal", "shared"] as const).filter((item) => options[item]);
+  if (selected.length > 1) throw new Error("Elige una sola visibilidad: --internal, --restricted o --shared");
   return {
     ...(await namespaceOwner(options)),
-    ...(options.restricted
-      ? { visibility: "restricted" as const }
-      : options.internal
-        ? { visibility: "internal" as const }
-        : {}),
+    ...(selected[0] ? { visibility: selected[0] } : {}),
     ...(options.description !== undefined ? { description: options.description } : {}),
   };
 }
@@ -51,15 +54,14 @@ export function registerAdminCreateNamespace(admin: Command, print: Print): void
     .option("--organization <id>", "Organización dueña")
     .option("--user <username>", "Usuario dueño")
     .option("--restricted", "Solo quien tenga el namespace asignado ve sus paquetes")
+    .option("--shared", "Comparte los paquetes con toda la instancia autenticada")
     .option("--description <text>", "Descripción")
-    .action(async (name: string, options: OwnerOptions & { restricted?: boolean; description?: string }) => {
+    .action(async (name: string, options: UpdateOptions) => {
       if (!options.organization && !options.user) throw new Error("Indica el dueño con --organization o --user");
       print(
         await serverApi().createNamespace({
           name,
-          ...(await namespaceOwner(options)),
-          visibility: options.restricted ? "restricted" : "internal",
-          description: options.description,
+          ...(await namespaceChanges(options)),
         }),
       );
     });
@@ -73,7 +75,8 @@ export function registerAdminUpdateNamespace(admin: Command, print: Print): void
     .option("--organization <id>", "Pasa el namespace a esta organización")
     .option("--user <username>", "Pasa el namespace a este usuario")
     .option("--restricted", "Solo quien lo tenga asignado ve sus paquetes")
-    .option("--internal", "Cualquier identidad autenticada ve sus paquetes")
+    .option("--internal", "Visible para miembros de la organización dueña o para su dueño personal")
+    .option("--shared", "Comparte los paquetes con toda la instancia autenticada")
     .option("--description <text>")
     .action(async (name: string, options: UpdateOptions) =>
       print(await serverApi().updateNamespace(name, await namespaceChanges(options))),

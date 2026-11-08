@@ -25,7 +25,10 @@ import { packageImportsRoutes } from "./modules/packages/package-imports.routes.
 import { packagesRoutes } from "./modules/packages/packages.routes.js";
 import { packagesAdminRoutes } from "./modules/packages/packages-admin.routes.js";
 import { usageRoutes } from "./modules/packages/usage.routes.js";
+import { profilesRoutes } from "./modules/profiles/profiles.routes.js";
+import { teamsRoutes } from "./modules/profiles/teams.routes.js";
 import { projectsRoutes } from "./modules/projects/projects.routes.js";
+import { executionPolicyRoutes } from "./modules/runs/execution-policy.routes.js";
 import { runsRoutes } from "./modules/runs/runs.routes.js";
 import { createServices, type Services } from "./modules/services.js";
 
@@ -39,6 +42,8 @@ const MODULES = [
   organizationsRoutes,
   namespacesRoutes,
   projectsRoutes,
+  profilesRoutes,
+  teamsRoutes,
   packagesRoutes,
   packageImportsRoutes,
   packageFilesRoutes,
@@ -49,6 +54,7 @@ const MODULES = [
   memoryRoutes,
   agentsRoutes,
   runsRoutes,
+  executionPolicyRoutes,
   adminRoutes,
 ];
 

@@ -2,6 +2,7 @@ import { AppError, invariant } from "@modai/contracts/errors";
 import { publicKeyFingerprint, sha256 } from "@modai/contracts/security";
 import type {
   ArtifactFile,
+  EffectiveProfile,
   PackageRecord,
   PublishPackageInput,
   ResolvedPackage,
@@ -10,6 +11,7 @@ import type {
 import { type Candidate, normalizeManifest, resolve as resolveGraph } from "@modai/core";
 import semver from "semver";
 import type { DataContext } from "../../infrastructure/database/database.js";
+import type { PackageReader } from "../auth/authorization.service.js";
 import { type PublishSettings, publishPackage } from "./package-publisher.js";
 import { PACKAGE_NAME, type PackageRow, rowToPackage } from "./package-record.js";
 import { PackagesRepository } from "./packages.repository.js";
@@ -72,31 +74,53 @@ export class PackagesService {
     return this.decorate(row);
   }
 
-  async publish(input: PublishPackageInput): Promise<PackageRecord> {
-    const identity = await publishPackage(this.context, this.settings, input);
+  async publish(input: PublishPackageInput, artifactId?: string): Promise<PackageRecord> {
+    const identity = await publishPackage(this.context, this.settings, input, artifactId);
     return this.get(identity.name, identity.version);
   }
 
-  async resolve(request: ResolveRequest): Promise<ResolvedPackage[]> {
+  async resolve(request: ResolveRequest, visible?: PackageReader): Promise<ResolvedPackage[]> {
+    return (await this.resolveSelection(request, { visible })).packages;
+  }
+
+  async resolveSelection(
+    request: ResolveRequest,
+    options: {
+      visible?: PackageReader;
+      platform?: NodeJS.Platform;
+      pinned?: EffectiveProfile["packages"];
+    } = {},
+  ) {
     invariant(
       Array.isArray(request.packages) && request.packages.length > 0,
       400,
       "INVALID_RESOLVE_REQUEST",
       "packages es obligatorio",
     );
+    const { visible, platform, pinned } = options;
+    const pins = new Map(pinned?.map((item) => [item.name, item]));
+    for (const { name } of request.packages)
+      if (visible && !visible(name)) throw new AppError(404, "PACKAGE_NOT_FOUND", `No existe ${name}`);
     const source = {
       versions: async (name: string): Promise<Array<Candidate<PackageRow>>> => {
-        if (!PACKAGE_NAME.test(name)) return [];
-        return (await this.packages.byName(name)).map((row) => ({
-          version: row.version,
-          status: row.status as PackageRecord["status"],
-          manifest: normalizeManifest(JSON.parse(row.manifest_json)),
-          ref: row,
-        }));
+        if (!PACKAGE_NAME.test(name) || (visible && !visible(name))) return [];
+        const pin = pins.get(name);
+        const rows = await this.packages.byName(name);
+        return rows
+          .filter((row) => !pin || (row.version === pin.version && row.artifact_id === pin.artifactId))
+          .map((row) => ({
+            version: row.version,
+            status: row.status as PackageRecord["status"],
+            manifest: normalizeManifest(JSON.parse(row.manifest_json)),
+            ref: row,
+          }));
       },
     };
-    const resolution = await resolveGraph(source, { roots: request.packages, overrides: request.overrides });
-    return this.decorateAll(resolution.packages.map((node) => node.ref));
+    const resolution = await resolveGraph(source, { roots: request.packages, overrides: request.overrides, platform });
+    return {
+      packages: await this.decorateAll(resolution.packages.map((node) => node.ref)),
+      capabilities: resolution.capabilities,
+    };
   }
 
   artifactOwner(id: string): Promise<string | undefined> {

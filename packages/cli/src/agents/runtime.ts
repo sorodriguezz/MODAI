@@ -74,6 +74,9 @@ export async function executeAgent(
 ): Promise<string> {
   const model = options.model ?? bundle.agent.definition.runtime?.model;
   if (!model || /:cloud$/.test(model)) throw new Error("Selecciona un modelo local con --model");
+  const allowedModels = bundle.executionPolicy?.allowedModels;
+  if (allowedModels && !allowedModels.includes(model))
+    throw new Error("La política del proyecto no autoriza este modelo");
   const url = localRuntimeUrl(options.url ?? "http://127.0.0.1:11434");
   await new LocalOllama(url).model(model);
   const maxSteps = Math.min(Math.max(options.maxSteps ?? 12, 1), 32);

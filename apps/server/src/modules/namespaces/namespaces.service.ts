@@ -5,7 +5,7 @@ import { type Identity, namespaceOf } from "../auth/identity.js";
 import type { OrganizationsService } from "../organizations/organizations.service.js";
 import { NamespacesRepository } from "./namespaces.repository.js";
 
-export type NamespaceVisibility = "internal" | "restricted";
+export type NamespaceVisibility = "internal" | "restricted" | "shared";
 export type NamespaceOwnerKind = "organization" | "user";
 export interface NamespaceRecord {
   name: string;
@@ -30,6 +30,13 @@ type NamespaceInput = NamespaceOwner & { description?: string; visibility?: Name
 type ResolvedOwner = { organization_id: string | null; owner_user_id: string | null };
 
 export const NAMESPACE_PATTERN = /^@[a-z0-9][a-z0-9._-]{0,63}$/;
+
+export function namespaceVisibilityFields(visibility?: NamespaceVisibility) {
+  return {
+    visibility: visibility === "restricted" ? "restricted" : "internal",
+    instance_shared: visibility === "shared" ? 1 : 0,
+  };
+}
 
 export class NamespacesService {
   private readonly namespaces: NamespacesRepository;
@@ -60,7 +67,7 @@ export class NamespacesService {
         ...(row.owner_user_id ? { ownerUserId: row.owner_user_id } : {}),
         ...(row.owner_username ? { ownerUsername: row.owner_username } : {}),
         description: row.description,
-        visibility: row.visibility as NamespaceVisibility,
+        visibility: row.instance_shared ? "shared" : (row.visibility as NamespaceVisibility),
         packages: counts.get(row.name) ?? 0,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -92,7 +99,7 @@ export class NamespacesService {
       name,
       ...owner,
       description: (input.description ?? "").trim().slice(0, 1000),
-      visibility: input.visibility ?? "internal",
+      ...namespaceVisibilityFields(input.visibility),
       created_by: actor.id,
       created_at: now,
       updated_at: now,
@@ -106,12 +113,21 @@ export class NamespacesService {
     if (!current.canManage) throw new AppError(403, "NAMESPACE_FORBIDDEN", "No administras este namespace");
     const ownerChange = input.organizationId !== undefined || input.ownerUserId !== undefined;
     const owner = ownerChange ? await this.assertOwner(actor, input) : undefined;
-    await this.namespaces.update(name, {
-      ...(owner ?? {}),
-      description: input.description === undefined ? current.description : input.description.trim().slice(0, 1000),
-      visibility: input.visibility ?? current.visibility,
-      updated_at: new Date().toISOString(),
-    });
+    const transferred = Boolean(
+      owner &&
+        (owner.organization_id !== (current.organizationId ?? null) ||
+          owner.owner_user_id !== (current.ownerUserId ?? null)),
+    );
+    await this.namespaces.update(
+      name,
+      {
+        ...(owner ?? {}),
+        description: input.description === undefined ? current.description : input.description.trim().slice(0, 1000),
+        ...namespaceVisibilityFields(input.visibility ?? current.visibility),
+        updated_at: new Date().toISOString(),
+      },
+      transferred,
+    );
     return this.getNamespace(actor, name);
   }
 

@@ -3,6 +3,7 @@ import { AppError, invariant } from "@modai/contracts/errors";
 import { type DataContext, withTransaction } from "../../infrastructure/database/database.js";
 import { textSearchFor } from "../../infrastructure/database/search/search-engine.js";
 import { searchTerms } from "../../infrastructure/database/search/text-search.js";
+import type { PackageVisibilityFilter } from "../auth/namespace-access.js";
 import { assertContentBudget } from "./content-budget.js";
 import { KnowledgeRepository } from "./knowledge.repository.js";
 import { rankInWorker } from "./vector-search.js";
@@ -60,10 +61,11 @@ export class KnowledgeService {
     return { id, ...input, tags, createdAt: now };
   }
 
-  async list(limit = 100, offset = 0) {
+  async list(limit = 100, offset = 0, visible?: PackageVisibilityFilter) {
     const rows = await this.knowledge.list(
       Math.min(Math.max(Math.floor(limit), 1), 500),
       Math.max(Math.floor(offset), 0),
+      visible,
     );
     return rows.map(withTags);
   }
@@ -100,7 +102,7 @@ export class KnowledgeService {
     await this.knowledge.delete(id);
   }
 
-  async search(input: { query: string; limit?: number; packageNames?: string[] }) {
+  async search(input: { query: string; limit?: number; packageNames?: string[] }, visible?: PackageVisibilityFilter) {
     invariant(typeof input?.query === "string" && input.query.trim(), 400, "INVALID_QUERY", "query es obligatorio");
     const terms = searchTerms(input.query);
     invariant(terms.length, 400, "INVALID_QUERY", "query no contiene términos buscables");
@@ -111,6 +113,7 @@ export class KnowledgeService {
       terms,
       packageNames,
       limit,
+      visible,
     });
     return hits.map(withTags);
   }
@@ -132,7 +135,13 @@ export class KnowledgeService {
     await this.knowledge.saveVector(documentId, model, embedding.length, blob);
   }
 
-  async vectorSearch(embedding: number[], model: string, limit = 10, packageNames?: string[]) {
+  async vectorSearch(
+    embedding: number[],
+    model: string,
+    limit = 10,
+    packageNames?: string[],
+    visible?: PackageVisibilityFilter,
+  ) {
     invariant(
       embedding.length > 0 && embedding.length <= 8192 && embedding.every(Number.isFinite),
       400,
@@ -141,7 +150,13 @@ export class KnowledgeService {
     );
     if (packageNames && !packageNames.length) return [];
     const maxCandidates = Math.min(2000, Math.floor(2_000_000 / embedding.length));
-    const rows = await this.knowledge.vectorCandidates(model, embedding.length, packageNames, maxCandidates + 1);
+    const rows = await this.knowledge.vectorCandidates(
+      model,
+      embedding.length,
+      packageNames,
+      maxCandidates + 1,
+      visible,
+    );
     invariant(
       rows.length <= maxCandidates,
       413,
@@ -152,7 +167,10 @@ export class KnowledgeService {
     const candidates = rows.map((row) => ({ id: row.id, vector: new Uint8Array(row.vector) }));
     const ranks = await rankInWorker(candidates, embedding, Math.min(Math.max(limit, 1), 50));
     const results = [];
-    for (const rank of ranks) results.push({ ...withTags(await this.knowledge.document(rank.id)), score: rank.score });
+    for (const rank of ranks) {
+      const document = await this.knowledge.document(rank.id, visible);
+      if (document) results.push({ ...withTags(document), score: rank.score });
+    }
     return results;
   }
 }

@@ -9,10 +9,11 @@ import { debounce } from "../../../shared/ui/format.js";
 import { skeletonRows } from "../../../shared/ui/skeleton.js";
 import { toast } from "../../../shared/ui/toast.js";
 
-const visibilityLabels = { internal: "Interno", restricted: "Restringido" };
+const visibilityLabels = { internal: "Interno", restricted: "Restringido", shared: "Compartido" };
 const visibilityHints = {
-  internal: "Cualquier persona o API key autenticada ve e instala sus paquetes.",
+  internal: "Los miembros de la organización dueña o el dueño personal pueden ver sus paquetes.",
   restricted: "Solo quien tenga este namespace asignado (o administre su organización) ve sus paquetes.",
+  shared: "Cualquier identidad autenticada en la instancia puede ver sus paquetes.",
 };
 
 // why: only global administration gives a namespace to another user; the rest choose their organizations or themselves.

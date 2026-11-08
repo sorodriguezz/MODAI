@@ -103,6 +103,12 @@ export class OrganizationsService {
         "ORGANIZATION_NOT_EMPTY",
         `La organización tiene ${current.projects} proyecto(s) y ${current.namespaces} namespace(s). Muévelos o elimínalos antes.`,
       );
+    invariant(
+      !(await this.organizations.hasTeams(id)),
+      409,
+      "ORGANIZATION_NOT_EMPTY",
+      "Elimina primero los equipos de la organización",
+    );
     await this.organizations.delete(id);
     return current;
   }

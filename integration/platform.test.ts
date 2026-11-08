@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -7,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { promisify } from "node:util";
 import { publicKeyFingerprint, sha256, signaturePayload } from "@modai/contracts/security";
 import type { PackageManifest, PublishPackageInput } from "@modai/contracts/types";
 import { createProjectFile, HttpRegistry, loadV1Project, saveProjectFile, syncWorkspace } from "@modai/core";
@@ -76,7 +78,7 @@ async function fixture(overrides: Partial<AppOptions> = {}) {
     server,
     close: async () => {
       await app.close();
-      rmSync(root, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     },
   };
 }
@@ -84,6 +86,221 @@ async function publishExamples(api: ApiClient) {
   for (const name of ["skill-design-patterns", "agent-backend-reviewer"])
     await api.publish(loadPackageSource(join(process.cwd(), "examples/packages", name)));
 }
+
+test("el perfil central conserva versiones y separa la entrega virtual y materializada", async (t) => {
+  const f = await fixture();
+  t.after(f.close);
+  const { id: organizationId } = await f.api.createOrganization("Transporte");
+  const projectId = "portal";
+  await f.api.createProject({ id: projectId, name: "Portal", organizationId });
+  await f.api.createNamespace({ name: "@transporte", organizationId });
+  const makeGuide = (name: string, text: string) =>
+    input(
+      name,
+      {
+        contributes: {
+          knowledge: [{ title: "Criterio de transporte", path: "guide.md" }],
+          skills: [{ name: "transporte", path: "skills/transporte" }],
+        },
+      },
+      {
+        "guide.md": text,
+        "skills/transporte/SKILL.md":
+          "---\nname: transporte\ndescription: Aplica convenciones de nombres del proyecto de transporte.\n---\n\n# Transporte\n\n" +
+          text,
+      },
+    );
+  const standard = "@transporte/estandar";
+  const alternative = "@transporte/excepcion";
+  await f.api.publish(makeGuide(standard, "La convención de transporte fija los nombres compartidos."));
+  await f.api.publish(makeGuide(alternative, "La convención del portal usa otra regla de nombres."));
+  await f.api.setBinding(
+    { scope: "organization", id: organizationId },
+    { slot: "naming", packageName: standard, range: "1.0.0" },
+  );
+  const projectTarget = { scope: "project" as const, id: projectId };
+  const override = { slot: "naming", packageName: alternative, range: "1.0.0" };
+  await f.api.setBinding(projectTarget, override);
+  await assert.rejects(f.api.effectiveProfile(projectId), /BINDING_EXCEPTION_REQUIRED/);
+  const reviewAt = new Date(Date.now() + 86_400_000).toISOString();
+  await f.api.setBinding(projectTarget, { ...override, exception: { reason: "ADR del Portal", reviewAt } });
+  const profile = await f.api.effectiveProfile(projectId);
+  assert.equal(profile.packages[0].name, alternative);
+  assert.equal(profile.bindings[0].exception?.reason, "ADR del Portal");
+  assert.equal((await f.api.effectiveProfile(projectId)).digest, profile.digest);
+  const team = await f.api.createTeam(organizationId, "Backend");
+  const member = await f.api.createUser({
+    username: "backend-dev",
+    password: "test-password-123",
+    role: "reader",
+    organizationIds: [organizationId],
+    projectIds: [projectId],
+  });
+  await f.api.setTeamMember(team.id, member.id, true);
+  await f.api.setBinding({ scope: "team", id: team.id }, { packageName: standard, range: "1.0.0" });
+  const memberKey = await f.api.createApiKey("backend client", "reader", {}, { ownerId: member.id, inherit: true });
+  const memberApi = new ApiClient(f.server, memberKey.token);
+  assert.ok((await memberApi.effectiveProfile(projectId)).bindings.some((binding) => binding.target.id === team.id));
+  await f.api.setTeamMember(team.id, member.id, false);
+  assert.equal((await memberApi.effectiveProfile(projectId)).digest, profile.digest);
+
+  const repo = join(f.root, "workspace");
+  mkdirSync(repo);
+  const env = { ...process.env, MODAI_SERVER: f.server, MODAI_API_TOKEN: admin, MODAI_NO_UPDATE_NOTIFIER: "1" };
+  const bin = join(process.cwd(), "packages/cli/dist/bin/modai.js");
+  const cli = (...args: string[]) => promisify(execFile)(process.execPath, [bin, ...args], { cwd: repo, env });
+  const shown = await cli("--json", "project", "profile", projectId);
+  assert.equal(JSON.parse(shown.stdout).digest, profile.digest);
+  const virtual = await cli("--json", "context", "search", "convención", "--project", projectId);
+  assert.deepEqual(
+    JSON.parse(virtual.stdout).map((item: { packageName: string }) => item.packageName),
+    [alternative],
+  );
+  assert.equal(existsSync(join(repo, "modai.yaml")), false);
+
+  await cli("init", "--project", projectId, "--delivery", "materialized");
+  assert.deepEqual(loadV1Project(repo).file.dependencies, {});
+  assert.equal(loadV1Project(repo).lock.packages[alternative].version, "1.0.0");
+  assert.equal(loadV1Project(repo).lock.profileDigest, profile.digest);
+  await cli("sync", "--frozen");
+  await f.api.deleteBinding(projectTarget, "naming");
+  await assert.rejects(cli("sync", "--frozen"), /modai\.lock no corresponde/);
+  await cli("sync");
+  assert.deepEqual(Object.keys(loadV1Project(repo).lock.packages), [standard]);
+  await cli("sync", "--delivery", "virtual");
+  assert.deepEqual(loadV1Project(repo).lock.packages, {});
+
+  const client = new Client({ name: "profile-test", version: "1.0.0" });
+  try {
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: [join(process.cwd(), "packages/cli/dist/bin/modai-mcp.js"), "--project-id", projectId],
+        cwd: f.root,
+        env: {
+          ...getDefaultEnvironment(),
+          MODAI_SERVER: f.server,
+          MODAI_API_TOKEN: admin,
+          MODAI_CONFIG_DIR: approvalDirectory,
+        },
+      }),
+    );
+    assert.ok((await client.listTools()).tools.some((tool) => tool.name === "modai_effective_profile"));
+    const result = await client.callTool({
+      name: "modai_search_project_knowledge",
+      arguments: { query: "convención" },
+    });
+    assert.match(JSON.stringify(result), /@transporte\/estandar/);
+    const skill = await client.callTool({
+      name: "modai_profile_skill",
+      arguments: { packageName: standard, skill: "transporte" },
+    });
+    assert.match(JSON.stringify(skill), /nombres compartidos/);
+    assert.equal(existsSync(join(f.root, "modai.yaml")), false);
+  } finally {
+    await client.close();
+  }
+});
+
+test("la autorización precede a la búsqueda, la composición y el reclamo de tareas", async (t) => {
+  const f = await fixture();
+  t.after(f.close);
+  const { id: tenantA } = await f.api.createOrganization("Tenant A");
+  const { id: tenantB } = await f.api.createOrganization("Tenant B");
+  await f.api.createProject({ id: "isolated", name: "Isolated", organizationId: tenantA });
+  await f.api.createNamespace({ name: "@confidential", organizationId: tenantB });
+  const privatePackage = "@confidential/rules";
+  await f.api.publish(input(privatePackage));
+  const createDocument = async (title: string, packageName?: string) =>
+    (
+      await f.app.inject({
+        method: "POST",
+        url: "/api/v1/knowledge/documents",
+        headers,
+        payload: { title, content: "transporte transporte transporte", packageName },
+      })
+    ).json().document.id as string;
+  const privateDoc = await createDocument("Transporte privado", privatePackage);
+  const sharedDoc = await createDocument("Transporte compartido");
+  await f.api.saveVector(privateDoc, "fixture", [1, 0]);
+  await f.api.saveVector(sharedDoc, "fixture", [0, 1]);
+  const grants = { projectIds: ["isolated"], organizationIds: [tenantA] };
+  const publisher = new ApiClient(f.server, (await f.api.createApiKey("publisher a", "publisher", grants)).token);
+  assert.equal((await publisher.knowledgeDocuments()).documents.length, 1);
+  assert.equal((await publisher.vectorSearch("fixture", [1, 0])).length, 1);
+  const found = await publisher.searchKnowledge("transporte");
+  assert.equal(found.length, 1);
+  assert.doesNotMatch(JSON.stringify(found), /privado/);
+  const agent = "@agents/limited";
+  await f.api.publish(
+    input(agent, {
+      dependencies: { [privatePackage]: "1.0.0" },
+      contributes: { agents: [{ name: "limited", instructions: "Analiza el proyecto." }] },
+    }),
+  );
+  await assert.rejects(publisher.composeAgent("isolated", agent), /DEPENDENCY_NOT_FOUND/);
+  const run = await f.api.submitRun({ projectId: "isolated", name: agent, task: "Analiza" });
+  assert.equal(run.organizationId, tenantA);
+  assert.equal(run.requestedBy, "bootstrap");
+  await assert.rejects(publisher.run(run.id), /RUN_NOT_FOUND/);
+  await f.api.setExecutionPolicy("isolated", { allowedModels: ["approved-model"], allowedCapabilities: [] });
+  const second = await f.api.submitRun({ projectId: "isolated", name: agent, task: "Analiza con política" });
+  assert.deepEqual(second.bundle.executionPolicy?.allowedModels, ["approved-model"]);
+  await f.api.cancelRun(run.id);
+  const worker = new ApiClient(f.server, (await f.api.createApiKey("worker a", "worker", grants)).token);
+  assert.equal(await worker.claimRun("isolated", { model: "approved-model" }), null);
+  const allowed = new ApiClient(
+    f.server,
+    (
+      await f.api.createApiKey("worker granted", "worker", {
+        ...grants,
+        packageScopes: ["@confidential"],
+      })
+    ).token,
+  );
+  assert.equal(await allowed.claimRun("isolated", { model: "other-model" }), null);
+  assert.equal((await allowed.claimRun("isolated", { model: "approved-model" }))?.run.id, second.id);
+});
+
+test("las memorias de organización requieren revisión y las sesiones están ligadas a su identidad", async (t) => {
+  const f = await fixture();
+  t.after(f.close);
+  const { id: organizationId } = await f.api.createOrganization("Memoria");
+  await f.api.createProject({ id: "review", name: "Revisión", organizationId });
+  const grants = { projectIds: ["review"], organizationIds: [organizationId] };
+  const user = await f.api.createUser({
+    username: "member",
+    password: "test-password-123",
+    role: "publisher",
+    ...grants,
+  });
+  const key = await f.api.createApiKey("author", "publisher", {}, { ownerId: user.id, inherit: true });
+  const author = new ApiClient(f.server, key.token);
+  const other = new ApiClient(f.server, (await f.api.createApiKey("another publisher", "publisher", grants)).token);
+  const proposed = (await author.remember({
+    projectId: "review",
+    content: "decisión compartida",
+    scope: "organization",
+  })) as { id: string; status: string };
+  assert.equal(proposed.status, "pending");
+  assert.deepEqual(await other.recall("review", "decisión", { includeOrganization: true }), []);
+  assert.equal((await f.api.pendingMemories("review")).length, 1);
+  await f.api.reviewMemory(proposed.id, true);
+  assert.equal((await other.recall("review", "decisión", { includeOrganization: true })).length, 1);
+  await author.updateMemory(proposed.id, { content: "decisión revisada" });
+  assert.deepEqual(await other.recall("review", "decisión", { includeOrganization: true }), []);
+
+  const session = (await author.remember({
+    projectId: "review",
+    scope: "session",
+    sessionId: "known",
+    content: "privado sesión",
+  })) as { id: string };
+  await author.remember({ projectId: "review", scope: "user", content: "privado personal" });
+  assert.equal((await author.recall("review", "privado", { sessionId: "known", includePersonal: true })).length, 2);
+  assert.deepEqual(await other.recall("review", "privado", { sessionId: "known", includePersonal: true }), []);
+  await assert.rejects(other.deleteMemory(session.id), /MEMORY_NOT_FOUND/);
+});
 async function localProject(root: string, server: string, id: string) {
   const path = join(root, "project");
   mkdirSync(path);
@@ -719,9 +936,20 @@ test("la cola abandona una tarea después de tres workers vencidos", async () =>
 test("los servidores MCP de un agente usan ${packageDir} solo desde un store que coincide con modai.lock", async () => {
   const f = await fixture();
   try {
+    const pair = generateKeyPairSync("ed25519");
+    const publicKey = pair.publicKey.export({ type: "spki", format: "pem" }).toString();
+    const publishSigned = (value: PublishPackageInput) =>
+      f.api.publish({
+        ...value,
+        signature: {
+          algorithm: "ed25519",
+          publicKey,
+          signature: sign(null, signaturePayload(value.manifest, value.files), pair.privateKey).toString("base64"),
+        },
+      });
     const sdk = (path: string) => JSON.stringify(import.meta.resolve(`@modelcontextprotocol/sdk/${path}`));
     const script = `import {Server} from ${sdk("server/index.js")};\nimport {StdioServerTransport} from ${sdk("server/stdio.js")};\nimport {ListToolsRequestSchema,CallToolRequestSchema} from ${sdk("types.js")};\nconst s=new Server({name:'pkg',version:'1'},{capabilities:{tools:{}}});s.setRequestHandler(ListToolsRequestSchema,async()=>({tools:[{name:'ping',description:'Ping',inputSchema:{type:'object',properties:{},additionalProperties:false}}]}));s.setRequestHandler(CallToolRequestSchema,async()=>({content:[{type:'text',text:'from-store'}]}));await s.connect(new StdioServerTransport());`;
-    await f.api.publish(
+    await publishSigned(
       input(
         "@mcp/packaged",
         {
@@ -740,7 +968,7 @@ test("los servidores MCP de un agente usan ${packageDir} solo desde un store que
         { "server.mjs": script },
       ),
     );
-    await f.api.publish(
+    await publishSigned(
       input("@agents/packaged", {
         dependencies: { "@mcp/packaged": "*" },
         contributes: {
@@ -777,6 +1005,36 @@ test("los servidores MCP de un agente usan ${packageDir} solo desde un store que
     await assert.rejects(() => new CapabilityHost(f.api, activation.bundle, { cwd: project }).start(), /no autorizado/);
     writeFileSync(join(project, ".modai/store/@mcp/packaged/files/server.mjs"), "process.exit(0)");
     await assert.rejects(() => new CapabilityHost(f.api, activation.bundle, options).start(), /contenido cambió/);
+    const runtime = await fakeOllama((body, index) => ({
+      message:
+        index === 0
+          ? { content: "", tool_calls: [{ function: { name: "packaged__ping", arguments: {} } }] }
+          : {
+              content: JSON.stringify(body.messages).includes("from-store")
+                ? "Worker usó el artefacto"
+                : "Faltó el artefacto",
+            },
+    }));
+    try {
+      const run = await f.api.submitRun({ projectId: "p", name: "@agents/packaged", task: "Ejecuta el MCP" });
+      const key = await f.api.createApiKey("worker independiente", "worker", { projectIds: ["p"] });
+      const worker = new ApiClient(f.server, key.token);
+      assert.equal(
+        await workOnce(worker, "p", {
+          cwd: f.root,
+          model: "test-model",
+          url: runtime.url,
+          allowedMcp: ["packaged"],
+          signaturePolicy: "trusted",
+          trustedPublishers: [publicKeyFingerprint(publicKey)],
+        }),
+        true,
+      );
+      assert.equal((await f.api.run(run.id)).result, "Worker usó el artefacto");
+      assert.equal(existsSync(join(f.root, ".modai")), false);
+    } finally {
+      await runtime.close();
+    }
   } finally {
     await f.close();
   }

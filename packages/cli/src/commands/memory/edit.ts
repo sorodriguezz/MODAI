@@ -2,7 +2,7 @@ import { loadV1Project } from "@modai/core";
 import { ApiClient } from "@modai/sdk";
 import type { Command } from "commander";
 import { serverApi, tokenFor } from "../../services/connection.js";
-import { projectMemory } from "../../services/memory.js";
+import { projectMemory, remoteMemoryConnection } from "../../services/memory.js";
 import { requireProject } from "../../services/project.js";
 import type { Print } from "../../terminal/output.js";
 import { type MemoryOptions, PROJECT_OPTION } from "./options.js";
@@ -13,22 +13,23 @@ export function registerMemoryAdd(memory: Command, print: Print): void {
     .description("Guarda una memoria del proyecto")
     .argument("<content>", "Contenido")
     .option("--kind <kind>", "decision, constraint, lesson, preference o note", "note")
-    .option(
-      "--scope <scope>",
-      "project o user (memoria local); project, organization o session en el servidor",
-      "project",
-    )
+    .option("--scope <scope>", "project o user. El servidor también admite organization y session", "project")
     .option(...PROJECT_OPTION)
-    .action(async (content: string, options: MemoryOptions) => {
-      if (options.project)
+    .option("--session <id>", "Sesión de una memoria remota")
+    .action(async (content: string, options: MemoryOptions & { session?: string }) => {
+      const remote = remoteMemoryConnection(options.project);
+      if (remote)
         return print(
-          await serverApi().remember({
-            projectId: options.project,
+          await remote.api.remember({
+            projectId: remote.id,
             content,
             kind: options.kind,
-            scope: options.scope as "project",
+            scope: options.scope,
+            sessionId: options.session,
           }),
         );
+      if (options.session || (options.scope !== "project" && options.scope !== "user"))
+        throw new Error("La memoria local admite los ámbitos project y user");
       print(
         await projectMemory().remember({
           content,

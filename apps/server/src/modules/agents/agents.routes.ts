@@ -5,6 +5,7 @@ import { isAgentPackage, normalizeManifest } from "@modai/core";
 import type { FastifyInstance } from "fastify";
 import { identityOf } from "../../infrastructure/http/identity-hooks.js";
 import type { ModuleOptions } from "../module-options.js";
+import { composeProjectAgent } from "./project-agent.js";
 
 const builtinTools = () =>
   Object.entries(BUILTIN_TOOLS).map(([name, tool]) => ({
@@ -34,7 +35,7 @@ function capabilityContract(item: PackageRecord) {
 }
 
 export async function agentsRoutes(app: FastifyInstance, { services }: ModuleOptions): Promise<void> {
-  const { authz, packages, projects, agents } = services;
+  const { authz, packages } = services;
   app.get("/api/v1/agents", async (request) => {
     const visible = await authz.packageReader(identityOf(request));
     return { agents: (await packages.list()).filter((item) => visible(item.name) && isAgentPackage(item.manifest)) };
@@ -50,8 +51,7 @@ export async function agentsRoutes(app: FastifyInstance, { services }: ModuleOpt
   });
   app.post("/api/v1/agents/compose", async (request) => {
     const input = parseInput(composeSchema, request.body);
-    await projects.requireProject(identityOf(request), input.projectId);
-    await authz.requireReadPackage(identityOf(request), input.name);
-    return { bundle: await agents.compose(input.projectId, input.name, input.range, input.overrides) };
+    const actor = authz.require(identityOf(request), "reader");
+    return { bundle: await composeProjectAgent(services, actor, input) };
   });
 }

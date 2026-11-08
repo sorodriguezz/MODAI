@@ -1,7 +1,7 @@
 import { invariant } from "@modai/contracts/errors";
 import { agentDefinitionSchema, parseInput } from "@modai/contracts/schemas";
 import { sha256 } from "@modai/contracts/security";
-import type { AgentBundle } from "@modai/contracts/types";
+import type { AgentBundle, EffectiveProfile, ExecutionPolicy } from "@modai/contracts/types";
 import {
   agentDefinitionOf,
   contributesSkills,
@@ -11,6 +11,7 @@ import {
   selectPackageFeatures,
   skillFiles,
 } from "@modai/core";
+import type { PackageReader } from "../auth/authorization.service.js";
 import type { PackagesService } from "../packages/packages.service.js";
 
 const INSTRUCTION_FILE = /(^|\/)(SKILL|AGENTS|CLAUDE)\.md$/i;
@@ -56,8 +57,25 @@ export class AgentsService {
     name: string,
     range = "*",
     overrides?: Record<string, string>,
+    visible?: PackageReader,
+    context?: { profile: EffectiveProfile; policy?: ExecutionPolicy },
   ): Promise<AgentBundle> {
-    const resolved = (await this.packages.resolve({ packages: [{ name, range }], overrides })).map((item) => {
+    const profile = context?.profile;
+    const required =
+      profile?.bindings
+        .filter((binding) => binding.required)
+        .map(({ packageName, range }) => ({
+          name: packageName,
+          range,
+        })) ?? [];
+    const selection = await this.packages.resolveSelection(
+      { packages: [{ name, range }, ...required], overrides },
+      {
+        visible,
+        pinned: profile?.packages,
+      },
+    );
+    const resolved = selection.packages.map((item) => {
       const manifest = normalizeManifest(item.manifest);
       return {
         ...item,
@@ -76,6 +94,13 @@ export class AgentsService {
         `${skill} no resuelve a una skill`,
       );
     const capabilities = resolveAgentCapabilities(definition, resolved);
+    const policy = context?.policy;
+    invariant(
+      !policy?.allowedCapabilities || capabilities.every((item) => policy.allowedCapabilities!.includes(item.name)),
+      403,
+      "EXECUTION_POLICY",
+      "La política del proyecto restringe las herramientas de este agente",
+    );
     const instructions = await collectInstructions(this.packages, resolved);
     invariant(
       Buffer.byteLength(JSON.stringify(instructions)) <= 500_000,
@@ -85,9 +110,13 @@ export class AgentsService {
     );
     const payload = {
       schemaVersion: 1 as const,
+      manifestFormat: "published" as const,
       projectId,
+      ...(profile?.organizationId ? { organizationId: profile.organizationId } : {}),
+      ...(profile ? { effectiveProfile: profile } : {}),
+      ...(policy ? { executionPolicy: policy } : {}),
       agent: { name: root.name, version: root.version, definition },
-      packages: resolved,
+      packages: selection.packages,
       capabilities,
       instructions,
       permissions: [...new Set(resolved.flatMap((item) => normalizeManifest(item.manifest).spec.permissions))],

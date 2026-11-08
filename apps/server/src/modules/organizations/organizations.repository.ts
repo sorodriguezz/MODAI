@@ -50,6 +50,12 @@ export class OrganizationsRepository {
     );
   }
 
+  async hasTeams(id: string): Promise<boolean> {
+    return Boolean(
+      await this.context.db.selectFrom("teams").select("id").where("organization_id", "=", id).executeTakeFirst(),
+    );
+  }
+
   async nameTaken(name: string): Promise<boolean> {
     const row = await this.context.db
       .selectFrom("organizations")

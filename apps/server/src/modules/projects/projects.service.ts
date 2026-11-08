@@ -68,18 +68,19 @@ export class ProjectsService {
     const createdBy = await this.creatorOf(id);
     const managesCurrent =
       actor.role === "admin" || (actor.role === "org-admin" && this.authz.administers(actor, current.organizationId));
-    if (!managesCurrent && createdBy !== actor.id && createdBy !== actor.ownerId)
+    if (!managesCurrent && createdBy !== actor.id && createdBy !== actor.personalOwnerId)
       throw new AppError(
         403,
         "FORBIDDEN",
         "Solo la administración de la organización o quien creó el proyecto puede editarlo",
       );
-    if (input.organizationId !== undefined && (input.organizationId ?? null) !== (current.organizationId ?? null))
-      await this.assertMove(actor, managesCurrent, input.organizationId);
     const name = input.name?.trim() ?? current.name;
     invariant(name.length > 0 && name.length <= 200, 400, "INVALID_INPUT", "El nombre es obligatorio");
-    const organizationId = input.organizationId === undefined ? (current.organizationId ?? null) : input.organizationId;
-    await this.projects.update(id, name, organizationId);
+    const previous = current.organizationId ?? null;
+    if (input.organizationId !== undefined && input.organizationId !== previous) {
+      await this.assertMove(actor, managesCurrent, input.organizationId);
+      await this.projects.transfer(id, name, previous, input.organizationId, actor.personalOwnerId ?? actor.id);
+    } else await this.projects.rename(id, name);
     return this.requireProject(actor, id);
   }
 
@@ -93,14 +94,15 @@ export class ProjectsService {
     }
     const id = input.id ?? randomUUID();
     if (await this.projects.findById(id)) return this.requireProject(actor, id);
-    const count = await this.projects.countByCreator(actor.id);
+    const creator = actor.personalOwnerId ?? actor.id;
+    const count = await this.projects.countByCreator(creator);
     invariant(actor.role === "admin" || count < 100, 429, "PROJECT_QUOTA", "Límite de proyectos por clave alcanzado");
     const createdAt = new Date().toISOString();
     await this.projects.insert({
       id,
       name: input.name,
       organization_id: input.organizationId ?? null,
-      created_by: actor.ownerId ?? actor.id,
+      created_by: creator,
       created_at: createdAt,
     });
     return { id, name: input.name, organizationId: input.organizationId, createdAt };
@@ -111,7 +113,7 @@ export class ProjectsService {
     const project = await this.requireProject(actor, id);
     const createdBy = await this.creatorOf(id);
     const managesIt = actor.role === "org-admin" && this.authz.administers(actor, project.organizationId);
-    const isCreator = createdBy === actor.id || createdBy === actor.ownerId;
+    const isCreator = createdBy === actor.id || createdBy === actor.personalOwnerId;
     if (actor.role !== "admin" && !managesIt && (actor.role === "reader" || !isCreator))
       throw new AppError(403, "FORBIDDEN", "Solo la administración o quien creó el proyecto puede eliminarlo");
     const busy = await this.projects.liveRuns(id, new Date().toISOString());
@@ -133,7 +135,7 @@ export class ProjectsService {
         const manages =
           actor.role === "admin" ||
           (actor.role === "org-admin" && this.authz.administers(actor, project.organizationId));
-        const owns = actor.role !== "reader" && (createdBy === actor.id || createdBy === actor.ownerId);
+        const owns = actor.role !== "reader" && (createdBy === actor.id || createdBy === actor.personalOwnerId);
         return {
           ...(project as ProjectRecord),
           ...(organizationName ? { organizationName } : {}),

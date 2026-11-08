@@ -1,8 +1,6 @@
 import type { AgentBundle } from "@modai/contracts/types";
 import type { ApiClient } from "@modai/sdk";
 
-type Scope = "project" | "organization" | "session";
-
 function queryOf(input: Record<string, unknown>): string {
   if (typeof input.query !== "string" || !input.query.trim()) throw new Error("query es obligatorio");
   return input.query;
@@ -16,11 +14,11 @@ async function recall(
 ) {
   const scopes = bundle.agent.definition.memory.read;
   if (!scopes.length) return [];
-  const memories = await api.recall(bundle.projectId, queryOf(input), {
+  return api.recall(bundle.projectId, queryOf(input), {
+    includeProject: scopes.includes("project"),
     includeOrganization: scopes.includes("organization"),
     sessionId: scopes.includes("session") ? sessionId : undefined,
   });
-  return memories.filter((memory) => scopes.includes((memory as { scope: Scope }).scope));
 }
 
 function remember(api: ApiClient, bundle: AgentBundle, input: Record<string, unknown>) {
@@ -41,11 +39,14 @@ export async function invokeBuiltin(
   name: string,
   input: Record<string, unknown>,
 ): Promise<unknown> {
-  if (name === "modai_search_knowledge")
+  if (name === "modai_search_knowledge") {
+    const versions = bundle.packages.map(({ name, version }) => ({ name, version }));
     return api.searchKnowledge(
       queryOf(input),
-      bundle.packages.map((item) => item.name),
+      versions.map(({ name }) => name),
+      versions,
     );
+  }
   if (name === "modai_recall") return recall(api, bundle, sessionId, input);
   if (name === "modai_remember") return remember(api, bundle, input);
   throw new Error(`Herramienta integrada desconocida: ${name}`);

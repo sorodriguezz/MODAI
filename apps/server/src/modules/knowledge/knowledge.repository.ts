@@ -3,6 +3,7 @@ import type { DataContext } from "../../infrastructure/database/database.js";
 import type { KnowledgeDocumentsTable } from "../../infrastructure/database/schema.js";
 import { limitRows } from "../../infrastructure/database/sql-helpers.js";
 import { upsert } from "../../infrastructure/database/upsert.js";
+import type { PackageVisibilityFilter } from "../auth/namespace-access.js";
 
 export class KnowledgeRepository {
   constructor(private readonly context: DataContext) {}
@@ -11,8 +12,8 @@ export class KnowledgeRepository {
     await this.context.db.insertInto("knowledge_documents").values(row).execute();
   }
 
-  list(limit: number, offset: number) {
-    const query = this.context.db
+  list(limit: number, offset: number, visible?: PackageVisibilityFilter) {
+    let query = this.context.db
       .selectFrom("knowledge_documents")
       .select([
         "id",
@@ -26,6 +27,7 @@ export class KnowledgeRepository {
       ])
       .orderBy("updated_at", "desc")
       .orderBy("id");
+    if (visible) query = query.where(visible(this.context.db, "package_name"));
     return limitRows(query, this.context.dialect, limit, offset).execute();
   }
 
@@ -65,7 +67,13 @@ export class KnowledgeRepository {
     );
   }
 
-  vectorCandidates(model: string, dimensions: number, packageNames: string[] | undefined, limit: number) {
+  vectorCandidates(
+    model: string,
+    dimensions: number,
+    packageNames: string[] | undefined,
+    limit: number,
+    visible?: PackageVisibilityFilter,
+  ) {
     let query = this.context.db
       .selectFrom("knowledge_vectors as v")
       .innerJoin("knowledge_documents as k", "k.id", "v.document_id")
@@ -73,11 +81,12 @@ export class KnowledgeRepository {
       .where("v.model", "=", model)
       .where("v.dimensions", "=", dimensions);
     if (packageNames?.length) query = query.where("k.package_name", "in", packageNames);
+    if (visible) query = query.where(visible(this.context.db, "k.package_name"));
     return limitRows(query, this.context.dialect, limit).execute();
   }
 
-  document(id: string) {
-    return this.context.db
+  document(id: string, visible?: PackageVisibilityFilter) {
+    let query = this.context.db
       .selectFrom("knowledge_documents")
       .select([
         "id",
@@ -87,7 +96,8 @@ export class KnowledgeRepository {
         "content",
         "tags_json as tagsJson",
       ])
-      .where("id", "=", id)
-      .executeTakeFirstOrThrow();
+      .where("id", "=", id);
+    if (visible) query = query.where(visible(this.context.db, "package_name"));
+    return query.executeTakeFirst();
   }
 }

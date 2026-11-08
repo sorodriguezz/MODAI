@@ -140,7 +140,7 @@ test("una administración de organización solo ve y gestiona lo suyo", async ()
   assert.equal((await call(orgAdmin, "POST", "/namespaces", { name: "@huerfano" })).status, 400);
   assert.equal(
     (await call(orgAdmin, "PATCH", "/namespaces/" + encodeURIComponent("@facturas"), { description: "x" })).status,
-    403,
+    404,
   );
   assert.equal((await call(orgAdmin, "POST", "/projects", { id: "pc", name: "Sin organización" })).status, 400);
   assert.equal(
@@ -330,8 +330,8 @@ test("los namespaces restringidos solo se ven con acceso y publicar exige el nam
   const names = async (headers: Record<string, string>) =>
     (await call(headers, "GET", "/packages")).body.packages.map((p: { name: string }) => p.name).sort();
   assert.deepEqual(await names(stranger), ["@facturas/emision"]);
-  assert.deepEqual(await names(insider), ["@facturas/emision", "@pagos/cobros"]);
-  assert.deepEqual(await names(orgAdmin), ["@facturas/emision", "@pagos/cobros"]);
+  assert.deepEqual(await names(insider), ["@pagos/cobros"]);
+  assert.deepEqual(await names(orgAdmin), ["@pagos/cobros"]);
   assert.equal((await call(stranger, "GET", "/package?name=" + encodeURIComponent("@pagos/cobros"))).status, 404);
   assert.equal(
     (await call(stranger, "POST", "/resolve", { packages: [{ name: "@pagos/cobros", range: "*" }] })).status,
@@ -345,8 +345,8 @@ test("los namespaces restringidos solo se ven con acceso y publicar exige el nam
   assert.equal((await call(insider, "GET", "/artifacts/" + artifact)).status, 200);
   assert.deepEqual(
     (await call(stranger, "GET", "/namespaces")).body.namespaces.map((n: { name: string }) => n.name),
-    ["@beto.facturas", "@carla.pagos", "@dev.1", "@facturas", "@pagos-front"],
-    "@pagos-front y los namespaces personales son internos",
+    ["@facturas"],
+    "los namespaces internos de otra organización y los personales quedan fuera",
   );
 
   const publisher = as(

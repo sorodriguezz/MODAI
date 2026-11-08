@@ -1,8 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { AppError, invariant } from "@modai/contracts/errors";
 import { sha256 } from "@modai/contracts/security";
-import type { AgentBundle, ClaimedRun, RunRecord } from "@modai/contracts/types";
+import type { AgentBundle, ClaimedRun, RunRecord, WorkerCapabilities } from "@modai/contracts/types";
 import { type DataContext, withTransaction } from "../../infrastructure/database/database.js";
+import type { PackageVisibilityFilter } from "../auth/namespace-access.js";
 import { RunsRepository, toRun } from "./runs.repository.js";
 
 export class RunsService {
@@ -49,28 +50,56 @@ export class RunsService {
     });
   }
 
-  async get(id: string): Promise<RunRecord> {
-    const row = await this.runs.find(id);
+  async get(id: string, visible?: PackageVisibilityFilter): Promise<RunRecord> {
+    const row = await this.runs.find(id, visible);
     if (!row) throw new AppError(404, "RUN_NOT_FOUND", "Ejecución no encontrada");
     return toRun(row);
   }
 
-  async list(projectId: string): Promise<RunRecord[]> {
-    return (await this.runs.list(projectId)).map(toRun);
+  async list(projectId: string, visible?: PackageVisibilityFilter): Promise<RunRecord[]> {
+    return (await this.runs.list(projectId, visible)).map(toRun);
   }
 
-  claim(projectId: string, workerId: string): Promise<ClaimedRun | undefined> {
+  claim(
+    projectId: string,
+    workerId: string,
+    options?: {
+      visible?: PackageVisibilityFilter;
+      worker?: WorkerCapabilities;
+    },
+  ): Promise<ClaimedRun | undefined> {
     return withTransaction(this.context, async (trx) => {
       const runs = new RunsRepository(trx);
       const now = new Date().toISOString();
       await runs.expireLeases(projectId, now);
-      const id = await runs.nextQueued(projectId);
+      const id = await this.nextCompatible(runs, projectId, options?.visible, options?.worker);
       if (!id) return undefined;
       const leaseToken = randomBytes(32).toString("base64url");
       const expiresAt = new Date(Date.now() + this.leaseMs).toISOString();
       if (!(await runs.lease(id, { workerId, leaseHash: sha256(leaseToken), expiresAt, now }))) return undefined;
       return { run: toRun((await runs.find(id))!), leaseToken };
     });
+  }
+
+  private async nextCompatible(
+    runs: RunsRepository,
+    projectId: string,
+    visible?: PackageVisibilityFilter,
+    worker?: WorkerCapabilities,
+  ) {
+    for (let offset = 0; ; offset += 100) {
+      const batch = await runs.queued(projectId, visible, offset);
+      const match = batch.find((row) => {
+        const bundle: AgentBundle = JSON.parse(row.bundle_json);
+        const allowed = bundle.executionPolicy?.allowedModels;
+        const model = worker?.model ?? bundle.agent.definition.runtime?.model;
+        return (
+          (!allowed || (model && allowed.includes(model))) &&
+          bundle.capabilities.every((tool) => tool.kind !== "mcp" || worker?.mcp?.includes(tool.name))
+        );
+      });
+      if (match || batch.length < 100) return match?.id;
+    }
   }
 
   async heartbeat(id: string, workerId: string, leaseToken: string): Promise<string> {

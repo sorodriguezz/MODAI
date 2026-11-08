@@ -1,6 +1,17 @@
 import type { BuiltinToolName } from "./agent-tools.js";
 import type { PackageManifestV1Input } from "./manifest/package.js";
 import type { PermissionV1 } from "./manifest/permissions.js";
+import type { EffectiveProfile, ExecutionPolicy } from "./profiles.js";
+
+export type {
+  BindingTarget,
+  CapabilityBinding,
+  CapabilityBindingInput,
+  EffectiveProfile,
+  ExecutionPolicy,
+  TeamRecord,
+  WorkerCapabilities,
+} from "./profiles.js";
 export type PackageManifest = PackageManifestV1Input;
 
 export type PackageStatus = "active" | "deprecated" | "yanked";
@@ -95,7 +106,11 @@ export interface ProjectRecord {
 }
 export interface AgentBundle {
   schemaVersion: 1;
+  manifestFormat?: "published";
   projectId: string;
+  organizationId?: string;
+  effectiveProfile?: EffectiveProfile;
+  executionPolicy?: ExecutionPolicy;
   agent: { name: string; version: string; definition: AgentDefinition };
   packages: PackageRecord[];
   capabilities: AgentCapability[];
@@ -106,6 +121,8 @@ export interface AgentBundle {
 export interface RunRecord {
   id: string;
   projectId: string;
+  organizationId?: string;
+  requestedBy?: string;
   agentName: string;
   agentVersion: string;
   task: string;

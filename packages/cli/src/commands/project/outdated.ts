@@ -1,13 +1,15 @@
-import { loadV1Project } from "@modai/core";
+import { CompositeRegistry, loadV1Project } from "@modai/core";
 import type { Command } from "commander";
 import semver from "semver";
+import { withMaterializedProfile } from "../../services/profile.js";
 import { requireProject } from "../../services/project.js";
 import { projectRegistry } from "../../services/registries.js";
 import type { Print } from "../../terminal/output.js";
 
 async function outdatedRows(root: string) {
   const project = loadV1Project(root);
-  const registry = projectRegistry(project);
+  const effective = await withMaterializedProfile(project.file, projectRegistry(project).registries);
+  const registry = new CompositeRegistry(effective.registries);
   const rows = [];
   for (const [name, locked] of Object.entries(project.lock.packages)) {
     if (locked.source.startsWith("file:")) {
@@ -23,7 +25,7 @@ async function outdatedRows(root: string) {
       name,
       current: locked.version,
       latest,
-      wanted: project.file.dependencies[name] ?? "(transitiva)",
+      wanted: effective.file.dependencies[name] ?? "(transitiva)",
       outdated: semver.lt(locked.version, latest),
     });
   }

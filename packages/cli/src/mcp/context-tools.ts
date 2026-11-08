@@ -1,3 +1,4 @@
+import type { SignaturePolicy } from "@modai/contracts/types";
 import {
   type InstalledPackage,
   loadContextIndex,
@@ -6,6 +7,8 @@ import {
   searchKnowledge,
   type V1Project,
 } from "@modai/core";
+import type { profileConnection } from "../services/profile.js";
+import { profileSkillReader } from "../services/profile-skill.js";
 
 export interface GatewayTool {
   name: string;
@@ -27,6 +30,51 @@ const QUERY_SCHEMA = {
   additionalProperties: false,
 };
 const NO_INPUT = { type: "object", properties: {}, additionalProperties: false };
+
+export function remoteProfileTools(
+  connection: ReturnType<typeof profileConnection>,
+  signaturePolicy?: SignaturePolicy,
+): GatewayTool[] {
+  const { id, api, platform } = connection;
+  const readSkill = profileSkillReader(connection, signaturePolicy);
+  return [
+    {
+      name: "modai_effective_profile",
+      description: "Lista capacidades, asignaciones y versiones del perfil central autorizado del proyecto.",
+      readOnly: true,
+      inputSchema: NO_INPUT,
+      call: () => api.effectiveProfile(id, platform),
+    },
+    {
+      name: "modai_search_project_knowledge",
+      description: "Busca conocimiento relevante de las versiones del perfil central del proyecto.",
+      readOnly: true,
+      inputSchema: QUERY_SCHEMA,
+      call: (input) =>
+        api.searchProjectKnowledge(id, {
+          query: input.query as string,
+          packageNames: input.packages as string[] | undefined,
+          limit: input.limit as number | undefined,
+          platform,
+        }),
+    },
+    {
+      name: "modai_profile_skill",
+      description: "Lista las skills de un paquete del perfil o lee una skill concreta.",
+      readOnly: true,
+      inputSchema: {
+        type: "object",
+        properties: {
+          packageName: { type: "string", minLength: 1, maxLength: 214 },
+          skill: { type: "string", minLength: 1, maxLength: 64 },
+        },
+        required: ["packageName"],
+        additionalProperties: false,
+      },
+      call: (input) => readSkill(input.packageName as string, input.skill as string | undefined),
+    },
+  ];
+}
 
 function listCapabilities(project: V1Project, installed: InstalledPackage[]) {
   return {

@@ -22,6 +22,7 @@ export interface InitOptions {
   memory?: string;
   project?: string;
   server?: string;
+  delivery?: ProjectFile["context"]["delivery"];
 }
 
 function initialRegistries(root: string, options: InitOptions, server?: string): RegistrySource[] {
@@ -35,7 +36,9 @@ function initialRegistries(root: string, options: InitOptions, server?: string):
 async function initialContext(options: InitOptions, server?: string): Promise<ProjectFile["context"]> {
   const context: ProjectFile["context"] = {
     memory: (options.memory as "local") ?? (options.project ? "remote" : "local"),
+    ...(options.delivery ? { delivery: options.delivery } : {}),
   };
+  if (options.delivery && !options.project) throw new Error("--delivery requiere --project");
   if (!options.project) return context;
   if (!server) throw new Error("--project requiere un servidor conectado (modai server connect <url>) o --server");
   const api = new ApiClient(server, tokenFor(server));
@@ -46,7 +49,7 @@ async function initialContext(options: InitOptions, server?: string): Promise<Pr
 
 export async function initProject(root: string, options: InitOptions, print: Print): Promise<void> {
   if (isV1Project(root)) throw new Error("El proyecto ya está inicializado (modai.yaml existe).");
-  const server = (options.server ?? loadClientConfig()?.server)?.replace(/\/+$/, "");
+  const server = (options.server ?? process.env.MODAI_SERVER ?? loadClientConfig()?.server)?.replace(/\/+$/, "");
   const registries = initialRegistries(root, options, server);
   const context = await initialContext(options, server);
   const file = createProjectFile(options.name ?? basename(root), {
@@ -128,6 +131,7 @@ export function registerInit(program: Command, print: Print): void {
     .option("--memory <mode>", "Memoria: local, remote u off")
     .option("--project <id>", "Proyecto del servidor: comparte su memoria y habilita agentes y ejecuciones")
     .option("--server <url>", "Servidor MODAI específico para este proyecto")
+    .option("--delivery <mode>", "Entrega del perfil central: virtual o materialized")
     .action(async (options: InitOptions) => {
       if (isV1Project(process.cwd())) throw new Error("El proyecto ya está inicializado (modai.yaml existe).");
       if (interactive() && !Object.values(options).some((value) => value !== undefined))

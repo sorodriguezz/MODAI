@@ -20,6 +20,7 @@ export class NamespacesRepository {
         "u.username as owner_username",
         "n.description",
         "n.visibility",
+        "n.instance_shared",
         "n.created_at",
         "n.updated_at",
       ])
@@ -60,8 +61,11 @@ export class NamespacesRepository {
     return Boolean(await this.context.db.selectFrom("users").select("id").where("id", "=", id).executeTakeFirst());
   }
 
-  async update(name: string, fields: Updateable<NamespacesTable>): Promise<void> {
-    await this.context.db.updateTable("namespaces").set(fields).where("name", "=", name).execute();
+  async update(name: string, fields: Updateable<NamespacesTable>, ownerChanged: boolean): Promise<void> {
+    await withTransaction(this.context, async (trx) => {
+      await trx.db.updateTable("namespaces").set(fields).where("name", "=", name).execute();
+      if (ownerChanged) await removeGrant(trx, "package_scopes_json", name);
+    });
   }
 
   async delete(name: string): Promise<void> {

@@ -5,6 +5,7 @@ import type { PackagesService } from "../packages/packages.service.js";
 import { PublishersRepository } from "../packages/publishers.repository.js";
 import { UsageRepository } from "../packages/usage.repository.js";
 import { RunsRepository, toRun } from "../runs/runs.repository.js";
+import { exportProfiles } from "./backup-profiles.js";
 import type { Snapshot } from "./backup-snapshot.js";
 
 async function exportPackages(packages: PackagesService): Promise<Snapshot["packages"]> {
@@ -13,6 +14,7 @@ async function exportPackages(packages: PackagesService): Promise<Snapshot["pack
     const artifact = await packages.getArtifact(item.artifactId);
     items.push({
       manifest: item.manifest,
+      artifactId: item.artifactId,
       files: artifact.files,
       signature: item.signature,
       status: item.status,
@@ -36,6 +38,7 @@ async function exportDirectory(context: DataContext) {
       "u.username as ownerUsername",
       "n.description",
       "n.visibility",
+      "n.instance_shared as instanceShared",
       "n.created_at as createdAt",
     ])
     .execute();
@@ -45,9 +48,9 @@ async function exportDirectory(context: DataContext) {
     .execute();
   return {
     organizations,
-    namespaces: namespaces.map(({ organizationId, ownerUsername, visibility, ...item }) => ({
+    namespaces: namespaces.map(({ organizationId, ownerUsername, visibility, instanceShared, ...item }) => ({
       ...item,
-      visibility: visibility as "internal" | "restricted",
+      visibility: instanceShared ? ("shared" as const) : (visibility as "internal" | "restricted"),
       ...(organizationId ? { organizationId } : {}),
       ...(ownerUsername ? { ownerUsername } : {}),
     })),
@@ -80,8 +83,14 @@ export async function exportSnapshot(context: DataContext, packages: PackagesSer
       content: item.content,
       metadata: JSON.parse(item.metadataJson) as Record<string, unknown>,
       sessionId: item.sessionId ?? undefined,
+      createdBy: item.createdBy ?? undefined,
+      organizationId: item.organizationId ?? undefined,
+      approval: item.approval,
+      reviewedBy: item.reviewedBy ?? undefined,
+      reviewAt: item.reviewAt ?? undefined,
     })),
     ...(await exportDirectory(context)),
+    ...(await exportProfiles(context)),
     runs: runRecords,
     installations: installations.map((item) => ({ ...item, direct: Boolean(item.direct) })),
     publishers: publishers.map((item) => ({

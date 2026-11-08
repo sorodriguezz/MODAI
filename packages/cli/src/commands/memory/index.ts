@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import type { Print } from "../../terminal/output.js";
 import { registerMemoryAdd, registerMemoryRemove, registerMemoryUpdate } from "./edit.js";
 import { registerMemoryList, registerMemorySearch } from "./read.js";
+import { registerMemoryReview } from "./review.js";
 import { registerMemoryExport, registerMemoryImport } from "./transfer.js";
 
 export function registerMemoryCommands(program: Command, print: Print): void {
@@ -15,4 +16,5 @@ export function registerMemoryCommands(program: Command, print: Print): void {
   registerMemoryRemove(memory, print);
   registerMemoryImport(memory, print);
   registerMemoryExport(memory, print);
+  registerMemoryReview(memory, print);
 }

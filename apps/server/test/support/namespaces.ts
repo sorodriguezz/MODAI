@@ -26,7 +26,7 @@ export async function createNamespaces(app: FastifyInstance, token: string, name
       method: "POST",
       url: "/api/v1/namespaces",
       headers,
-      payload: { name, organizationId: organization!.id },
+      payload: { name, organizationId: organization!.id, visibility: "shared" },
     });
     assert.ok([201, 409].includes(response.statusCode), response.body);
   }

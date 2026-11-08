@@ -9,7 +9,7 @@ const namespaceBody = {
   organizationId: { type: ["string", "null"], minLength: 1, maxLength: 200 },
   ownerUserId: { type: ["string", "null"], minLength: 1, maxLength: 200 },
   description: { type: "string", maxLength: 1000 },
-  visibility: { type: "string", enum: ["internal", "restricted"] },
+  visibility: { type: "string", enum: ["internal", "restricted", "shared"] },
 };
 
 export async function namespacesRoutes(app: FastifyInstance, { services }: ModuleOptions): Promise<void> {

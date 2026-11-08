@@ -61,7 +61,7 @@ export interface NamespaceRecord {
   ownerUserId?: string;
   ownerUsername?: string;
   description: string;
-  visibility: "internal" | "restricted";
+  visibility: "internal" | "restricted" | "shared";
   packages: number;
   canManage: boolean;
   canPublish: boolean;

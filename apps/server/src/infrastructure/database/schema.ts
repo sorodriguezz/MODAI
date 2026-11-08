@@ -61,8 +61,36 @@ export interface NamespacesTable {
   owner_user_id: string | null;
   description: string;
   visibility: string;
+  instance_shared: number;
   created_by: string;
   created_at: string;
+  updated_at: string;
+}
+
+export interface TeamsTable {
+  id: string;
+  organization_id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface TeamMembershipsTable {
+  team_id: string;
+  user_id: string;
+}
+
+export interface CapabilityBindingsTable {
+  id: string;
+  organization_id: string | null;
+  project_id: string | null;
+  team_id: string | null;
+  slot: string;
+  package_name: string;
+  version_range: string;
+  required: number;
+  exception_reason: string | null;
+  review_at: string | null;
+  approved_by: string;
   updated_at: string;
 }
 
@@ -73,6 +101,10 @@ export interface MemoriesTable {
   session_id: string | null;
   created_by: string | null;
   scope: string;
+  personal: number;
+  approval: number;
+  reviewed_by: string | null;
+  review_at: string | null;
   kind: string;
   content: string;
   metadata_json: string;
@@ -190,6 +222,11 @@ export interface MemoriesFtsTable {
 }
 
 export interface Schema {
+  project_execution_policies: { project_id: string; policy_json: string };
+  run_packages: { run_id: string; package_name: string };
+  teams: TeamsTable;
+  team_memberships: TeamMembershipsTable;
+  capability_bindings: CapabilityBindingsTable;
   packages: PackagesTable;
   artifacts: ArtifactsTable;
   knowledge_documents: KnowledgeDocumentsTable;

@@ -17,6 +17,7 @@ import {
   registerAdminUpdateOrganization,
 } from "./organizations.js";
 import { registerAdminPublishers, registerAdminTrustPublisher, registerAdminUntrustPublisher } from "./publishers.js";
+import { registerAdminTeams } from "./teams.js";
 import {
   registerAdminCreateUser,
   registerAdminDeleteUser,
@@ -31,6 +32,7 @@ const ORDER = [
   registerAdminGrantKey,
   registerAdminCreateOrganization,
   registerAdminOrganizations,
+  registerAdminTeams,
   registerAdminNamespaces,
   registerAdminCreateNamespace,
   registerAdminTrustPublisher,

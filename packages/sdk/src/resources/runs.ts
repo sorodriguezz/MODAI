@@ -1,7 +1,33 @@
-import type { AgentBundle, ClaimedRun, PackageRecord, RunRecord } from "@modai/contracts/types";
+import type {
+  AgentBundle,
+  ClaimedRun,
+  ExecutionPolicy,
+  PackageRecord,
+  RunRecord,
+  WorkerCapabilities,
+} from "@modai/contracts/types";
 import { AdminApi } from "./admin.js";
 
 export class RunsApi extends AdminApi {
+  async executionPolicy(projectId: string): Promise<ExecutionPolicy | null> {
+    const path = `/api/v1/projects/${encodeURIComponent(projectId)}/execution-policy`;
+    return (await this.request<{ policy: ExecutionPolicy | null }>(path)).policy;
+  }
+
+  async setExecutionPolicy(projectId: string, policy: ExecutionPolicy): Promise<ExecutionPolicy> {
+    const path = `/api/v1/projects/${encodeURIComponent(projectId)}/execution-policy`;
+    return (
+      await this.request<{ policy: ExecutionPolicy }>(path, {
+        method: "PUT",
+        body: JSON.stringify(policy),
+      })
+    ).policy;
+  }
+
+  async deleteExecutionPolicy(projectId: string): Promise<void> {
+    await this.request(`/api/v1/projects/${encodeURIComponent(projectId)}/execution-policy`, { method: "DELETE" });
+  }
+
   async agents(): Promise<PackageRecord[]> {
     return (await this.request<{ agents: PackageRecord[] }>("/api/v1/agents")).agents;
   }
@@ -55,11 +81,11 @@ export class RunsApi extends AdminApi {
     ).run;
   }
 
-  async claimRun(projectId: string): Promise<ClaimedRun | null> {
+  async claimRun(projectId: string, capabilities?: WorkerCapabilities): Promise<ClaimedRun | null> {
     return (
       await this.request<{ claimed: ClaimedRun | null }>("/api/v1/worker/claim", {
         method: "POST",
-        body: JSON.stringify({ projectId }),
+        body: JSON.stringify({ projectId, ...capabilities }),
       })
     ).claimed;
   }

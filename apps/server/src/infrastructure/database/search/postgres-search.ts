@@ -3,6 +3,7 @@ import type { Executor } from "../database.js";
 import {
   KNOWLEDGE_COLUMNS,
   type KnowledgeHit,
+  type KnowledgeQuery,
   MEMORY_COLUMNS,
   type MemoryHit,
   type MemoryScope,
@@ -13,10 +14,7 @@ import {
 const tsQuery = (terms: string[]) => sql`to_tsquery('simple', ${terms.map((term) => `'${term}':*`).join(" | ")})`;
 
 export class PostgresTextSearch implements TextSearch {
-  async searchKnowledge(
-    db: Executor,
-    query: { terms: string[]; packageNames: string[]; limit: number },
-  ): Promise<KnowledgeHit[]> {
+  async searchKnowledge(db: Executor, query: KnowledgeQuery): Promise<KnowledgeHit[]> {
     const match = tsQuery(query.terms);
     let select = db
       .selectFrom("knowledge_documents")
@@ -24,6 +22,7 @@ export class PostgresTextSearch implements TextSearch {
       .select(sql<number>`-ts_rank('{0.1,0.125,0.25,1}', knowledge_documents.search_vector, ${match})`.as("rank"))
       .where(sql<boolean>`knowledge_documents.search_vector @@ ${match}`);
     if (query.packageNames.length) select = select.where("knowledge_documents.package_name", "in", query.packageNames);
+    if (query.visible) select = select.where(query.visible(db, "knowledge_documents.package_name"));
     return select.orderBy("rank").orderBy("knowledge_documents.id").limit(query.limit).execute();
   }
 

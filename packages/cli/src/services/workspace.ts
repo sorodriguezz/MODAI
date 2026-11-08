@@ -1,5 +1,5 @@
 import { lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { isV1Project } from "@modai/core";
 
 const SKIPPED_DIRECTORIES = new Set([
@@ -61,7 +61,8 @@ export function discoverProjects(
   const walk = (directory: string, level: number) => {
     if (++visited > MAX_DIRECTORIES)
       throw new Error(`Hay más de ${MAX_DIRECTORIES} carpetas bajo ${base}; usa una raíz más concreta o --depth menor`);
-    if (isV1Project(directory)) found.push({ root: directory, path: relative(base, directory) || "." });
+    if (isV1Project(directory))
+      found.push({ root: directory, path: relative(base, directory).split(sep).join("/") || "." });
     if (level >= depth) return;
     for (const child of childDirectories(directory)) walk(child, level + 1);
   };

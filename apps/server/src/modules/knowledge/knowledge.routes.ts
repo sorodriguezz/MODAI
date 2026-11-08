@@ -1,22 +1,40 @@
 import { createHash } from "node:crypto";
 import { AppError } from "@modai/contracts/errors";
+import { knowledgeQuerySchema, parseInput, profileKnowledgeSchema } from "@modai/contracts/schemas";
 import type { FastifyInstance } from "fastify";
 import { identityOf } from "../../infrastructure/http/identity-hooks.js";
 import type { ModuleOptions } from "../module-options.js";
 import type { Services } from "../services.js";
 import { createKnowledgeBody, updateKnowledgeBody, vectorBody, vectorSearchBody } from "./knowledge.schemas.js";
+import { withPackageVersions } from "./knowledge-scope.js";
 
 type VectorSearchBody = { embedding: number[]; model: string; limit?: number; packageNames?: string[] };
 
+function projectSearchRoute(app: FastifyInstance, { authz, knowledge, projects, profiles }: Services): void {
+  app.post<{ Params: { id: string } }>("/api/v1/projects/:id/knowledge/search", async (request, reply) => {
+    const actor = authz.require(identityOf(request), "reader");
+    const project = await projects.requireProject(actor, request.params.id);
+    const input = parseInput(profileKnowledgeSchema, request.body);
+    const profile = await profiles.resolve(actor, project, input.platform);
+    const selected = input.packageNames && new Set(input.packageNames);
+    const packages = profile.packages.filter((item) => !selected || selected.has(item.name));
+    if (!packages.length) return { results: [] };
+    const visible = authz.packageVisibility(actor);
+    reply.header("Cache-Control", "private, no-store");
+    const results = await knowledge.search(
+      { query: input.query, limit: input.limit },
+      withPackageVersions(packages, visible),
+    );
+    return { results };
+  });
+}
+
 function documentRoutes(app: FastifyInstance, { authz, knowledge, audit }: Services): void {
   app.get<{ Querystring: { limit?: string; offset?: string } }>("/api/v1/knowledge/documents", async (request) => {
-    authz.require(identityOf(request), "reader");
+    const visible = authz.packageVisibility(identityOf(request));
     const limit = Math.min(Math.max(Number(request.query.limit) || 100, 1), 500);
     const offset = Math.max(Number(request.query.offset) || 0, 0);
-    const visible = await authz.packageReader(identityOf(request));
-    const documents = (await knowledge.list(limit, offset)).filter(
-      (doc) => !doc.packageName || visible(doc.packageName),
-    );
+    const documents = await knowledge.list(limit, offset, visible);
     return { documents, nextOffset: documents.length === limit ? offset + limit : null };
   });
   app.post<{ Body: { title: string; content: string; tags?: string[]; packageName?: string } }>(
@@ -48,22 +66,20 @@ function documentRoutes(app: FastifyInstance, { authz, knowledge, audit }: Servi
 }
 
 function searchRoutes(app: FastifyInstance, { authz, knowledge }: Services): void {
-  app.post<{ Body: { query: string; limit?: number; packageNames?: string[] } }>(
-    "/api/v1/knowledge/search",
-    async (request) => {
-      const visible = await authz.packageReader(identityOf(request));
-      const results = await knowledge.search(request.body);
-      return { results: results.filter((doc) => !doc.packageName || visible(doc.packageName)) };
-    },
-  );
+  app.post("/api/v1/knowledge/search", async (request) => {
+    const visible = authz.packageVisibility(identityOf(request));
+    const { packageVersions, ...query } = parseInput(knowledgeQuerySchema, request.body);
+    return {
+      results: await knowledge.search(query, packageVersions ? withPackageVersions(packageVersions, visible) : visible),
+    };
+  });
   app.post<{ Body: VectorSearchBody }>(
     "/api/v1/knowledge/vector-search",
     { schema: { body: vectorSearchBody } },
     async (request) => {
-      const visible = await authz.packageReader(identityOf(request));
+      const visible = authz.packageVisibility(identityOf(request));
       const { embedding, model, limit, packageNames } = request.body;
-      const results = await knowledge.vectorSearch(embedding, model, limit, packageNames);
-      return { results: results.filter((doc) => !doc.packageName || visible(doc.packageName)) };
+      return { results: await knowledge.vectorSearch(embedding, model, limit, packageNames, visible) };
     },
   );
 }
@@ -91,5 +107,6 @@ function vectorRoute(app: FastifyInstance, { authz, knowledge, audit }: Services
 export async function knowledgeRoutes(app: FastifyInstance, { services }: ModuleOptions): Promise<void> {
   documentRoutes(app, services);
   searchRoutes(app, services);
+  projectSearchRoute(app, services);
   vectorRoute(app, services);
 }

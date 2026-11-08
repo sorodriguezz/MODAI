@@ -1,5 +1,14 @@
 # Cambios
 
+## 0.13.0
+
+- **Perfiles efectivos por proyecto.** Las asignaciones de organización, equipo y proyecto fijan versiones y artefactos. Las asignaciones obligatorias en conflicto detienen la resolución. Una excepción sobre una asignación opcional requiere justificación, aprobación y fecha de revisión.
+- **CLI, SDK y MCP.** `modai project profile` muestra el perfil, `modai project bind` administra sus asignaciones y `modai admin team` gestiona equipos y miembros. `modai sync --delivery materialized` instala el perfil y registra su digest en el lock para detectar cambios con `--frozen`. `modai context skill` y `modai-mcp --project-id` consultan el perfil sin materializarlo. El paquete npm exporta el cliente HTTP tipado desde `@sorodriguez/modai/sdk`.
+- **Visibilidad y migración desde 0.12.0.** Las migraciones se aplican al iniciar el servidor. Los namespaces `internal` pasan a respetar el ámbito de su organización o dueño personal. Usa `modai admin update-namespace @catalogo --shared` para los catálogos destinados a toda la instancia autenticada. La búsqueda de conocimiento filtra permisos antes de paginar o seleccionar candidatos vectoriales.
+- **Transferencia entre organizaciones.** Al transferir un proyecto o namespace se retiran sus accesos previos. Los proyectos se pueden transferir mientras estén vacíos de memoria, ejecuciones, instalaciones y políticas.
+- **Memoria remota.** Las memorias personales y de sesión se vinculan a su identidad y proyecto. Las propuestas de organización requieren revisión y pueden tener fecha de vencimiento. La CLI incorpora `modai memory pending` y `modai memory review`.
+- **Ejecución por proyecto.** Las tareas conservan el perfil y la política de modelos y capacidades. Cada worker requiere acceso explícito al proyecto y a los paquetes de la tarea. Las herramientas MCP firmadas pueden ejecutarse desde un directorio temporal con las aprobaciones locales del worker.
+
 ## Sin publicar (0.11.x)
 
 - **Cada paquete tiene dueño**: el namespace de un paquete (`@namespace/nombre`) pertenece a una sola **organización** o a un solo **usuario**, nunca a nadie. Rompe el esquema: la tabla `namespaces` gana `owner_user_id` y exige exactamente un dueño; hay que recrear la base de datos (`npm run docker:down`, borrar el volumen y `docker:up` + `docker:seed`).

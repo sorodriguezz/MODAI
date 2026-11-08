@@ -9,25 +9,38 @@ import {
 } from "@modai/core";
 import { ApiClient } from "@modai/sdk";
 import { tokenFor } from "./connection.js";
-import { requireProject } from "./project.js";
+import { profileConnection } from "./profile.js";
+import { currentProject, requireProject } from "./project.js";
 
-class RemoteMemoryProvider implements MemoryProvider {
+export class RemoteMemoryProvider implements MemoryProvider {
   constructor(
     private readonly api: ApiClient,
     private readonly projectId: string,
   ) {}
-  remember(input: { content: string; kind?: string }) {
-    return this.api.remember({ projectId: this.projectId, content: input.content, kind: input.kind ?? "note" });
+  remember(input: { content: string; kind?: string; scope?: "project" | "user"; tags?: string[] }) {
+    return this.api.remember({
+      projectId: this.projectId,
+      content: input.content,
+      kind: input.kind ?? "note",
+      scope: input.scope,
+      ...(input.tags ? { metadata: { tags: input.tags } } : {}),
+    });
   }
-  recall(query: string) {
-    return this.api.recall(this.projectId, query);
+  recall(query: string, limit?: number) {
+    return this.api.recall(this.projectId, query, { includePersonal: true, limit });
   }
   list() {
-    return this.api.listMemories(this.projectId);
+    return this.api.listMemories(this.projectId, { includePersonal: true });
   }
   forget(id: string) {
     return this.api.deleteMemory(id);
   }
+}
+
+export function remoteMemoryConnection(projectId?: string) {
+  const context = currentProject()?.file.context;
+  if (!projectId && context?.memory !== "remote") return undefined;
+  return profileConnection(projectId, context);
 }
 
 export function memoryProvider(project: V1Project): MemoryProvider | undefined {

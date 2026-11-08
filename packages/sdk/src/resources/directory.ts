@@ -1,7 +1,7 @@
 import type { NamespaceOwner, NamespaceRecord, OrganizationRecord } from "../types.js";
-import { ProjectsApi } from "./projects.js";
+import { ProfilesApi } from "./profiles.js";
 
-export class DirectoryApi extends ProjectsApi {
+export class DirectoryApi extends ProfilesApi {
   async createOrganization(name: string, description?: string): Promise<{ id: string; name: string }> {
     return (
       await this.request<{ organization: { id: string; name: string } }>("/api/v1/organizations", {
@@ -36,7 +36,7 @@ export class DirectoryApi extends ProjectsApi {
   }
 
   async createNamespace(
-    input: NamespaceOwner & { name: string; description?: string; visibility?: "internal" | "restricted" },
+    input: NamespaceOwner & { name: string; description?: string; visibility?: NamespaceRecord["visibility"] },
   ): Promise<NamespaceRecord> {
     return (
       await this.request<{ namespace: NamespaceRecord }>("/api/v1/namespaces", {
@@ -48,7 +48,7 @@ export class DirectoryApi extends ProjectsApi {
 
   async updateNamespace(
     name: string,
-    input: NamespaceOwner & { description?: string; visibility?: "internal" | "restricted" },
+    input: NamespaceOwner & { description?: string; visibility?: NamespaceRecord["visibility"] },
   ): Promise<NamespaceRecord> {
     return (
       await this.request<{ namespace: NamespaceRecord }>(`/api/v1/namespaces/${encodeURIComponent(name)}`, {

@@ -38,6 +38,8 @@ export function projectStatus(root: string) {
     registries: file.registries.map((item) => item.url ?? item.path),
     adapters: file.adapters,
     memory: file.context.memory,
+    ...(file.context.delivery ? { delivery: file.context.delivery } : {}),
+    ...(project.lock.profileDigest ? { profileDigest: project.lock.profileDigest } : {}),
     dependencies: file.dependencies,
     ...(Object.keys(file.features).length ? { features: file.features } : {}),
     installed: inspectWorkspace(project).map((item) => installedRow(project, item)),

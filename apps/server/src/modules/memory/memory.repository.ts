@@ -31,9 +31,39 @@ export class MemoryRepository {
   access(id: string) {
     return this.context.db
       .selectFrom("memories")
-      .select(["project_id as projectId", "scope", "organization_id as organizationId", "session_id as sessionId"])
+      .select([
+        "project_id as projectId",
+        "scope",
+        "organization_id as organizationId",
+        "session_id as sessionId",
+        "personal",
+        "created_by as createdBy",
+        "updated_at as updatedAt",
+      ])
       .where("id", "=", id)
       .executeTakeFirst();
+  }
+
+  pending(organizationId: string, now: string) {
+    const query = this.context.db
+      .selectFrom("memories")
+      .select(MEMORY_COLUMNS)
+      .where("organization_id", "=", organizationId)
+      .where("scope", "=", "organization")
+      .where((eb) => eb.or([eb("approval", "=", 0), eb.and([eb("approval", "=", 1), eb("review_at", "<=", now)])]))
+      .orderBy("updated_at")
+      .orderBy("id");
+    return limitRows(query, this.context.dialect, 100).execute();
+  }
+
+  async review(id: string, updatedAt: string, fields: Updateable<MemoriesTable>): Promise<boolean> {
+    const result = await this.context.db
+      .updateTable("memories")
+      .set(fields)
+      .where("id", "=", id)
+      .where("updated_at", "=", updatedAt)
+      .executeTakeFirst();
+    return affectedRows(result) > 0;
   }
 
   list(scope: MemoryScope, limit: number) {
@@ -43,10 +73,6 @@ export class MemoryRepository {
       .where((eb) => memoryScopeFilter(eb, scope))
       .orderBy("memories.updated_at", "desc");
     return limitRows(query, this.context.dialect, limit).execute();
-  }
-
-  async update(id: string, fields: Updateable<MemoriesTable>): Promise<void> {
-    await this.context.db.updateTable("memories").set(fields).where("id", "=", id).execute();
   }
 
   async delete(id: string): Promise<void> {
@@ -78,7 +104,13 @@ export class MemoryRepository {
         "content",
         "metadata_json as metadataJson",
         "session_id as sessionId",
+        "created_by as createdBy",
+        "organization_id as organizationId",
+        "approval",
+        "reviewed_by as reviewedBy",
+        "review_at as reviewAt",
       ])
+      .where("personal", "=", 0)
       .execute();
   }
 }

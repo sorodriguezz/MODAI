@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../apps/server/dist/app.js";
 import { loadPackageSource } from "../packages/cli/dist/authoring/package-source.js";
-import { ApiClient } from "../packages/sdk/dist/index.js";
 
 const exec = promisify(execFile),
   root = mkdtempSync(join(tmpdir(), "modai-standalone-"));
@@ -20,10 +20,27 @@ try {
     (await import("node:fs")).readFileSync(resolve("packages/cli/package.json"), "utf8"),
   );
   const tarballs = [resolve(`dist/npm/${packageName.replace(/^@/, "").replaceAll("/", "-")}-${version}.tgz`)];
-  await exec("npm", ["install", "--prefix", root, "--ignore-scripts", "--no-audit", "--no-fund", ...tarballs], {
-    timeout: 120000,
-  });
+  const npmCli = process.env.npm_execpath;
+  await exec(
+    npmCli ? process.execPath : "npm",
+    [
+      ...(npmCli ? [npmCli] : []),
+      "install",
+      "--prefix",
+      root,
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      ...tarballs,
+    ],
+    {
+      timeout: 120000,
+    },
+  );
   const require = createRequire(join(root, "package.json"));
+  const sdk = join(root, "sdk.mjs");
+  writeFileSync(sdk, `export { ApiClient } from ${JSON.stringify(`${packageName}/sdk`)};\n`);
+  const { ApiClient } = await import(pathToFileURL(sdk).href);
   for (const dependency of ["fastify", "better-sqlite3", "@modai/contracts", "@modai/sdk"])
     assert.throws(() => require.resolve(dependency), { code: "MODULE_NOT_FOUND" });
   app = await createApp({
@@ -37,7 +54,7 @@ try {
     api = new ApiClient(server, "standalone-test");
   const owner = await api.createOrganization("Smoke");
   for (const namespace of ["@skills", "@agents"])
-    await api.createNamespace({ name: namespace, organizationId: owner.id });
+    await api.createNamespace({ name: namespace, organizationId: owner.id, visibility: "shared" });
   for (const name of ["skill-design-patterns", "agent-backend-reviewer"])
     await api.publish(loadPackageSource(resolve("examples/packages", name)));
   let chatCalls = 0;
@@ -64,6 +81,7 @@ try {
   await new Promise((resolve) => runtime.listen(0, "127.0.0.1", resolve));
   const runtimeUrl = `http://127.0.0.1:${runtime.address().port}`;
   const shared = await api.createProject({ name: "Shared project" });
+  assert.equal((await api.effectiveProfile(shared.id)).projectId, shared.id);
   const clientKey = await api.createApiKey("Laptop A", "publisher", { projectIds: [shared.id] });
   const teammateKey = await api.createApiKey("Laptop B", "publisher", { projectIds: [shared.id] });
   const clientToken = clientKey.token;
