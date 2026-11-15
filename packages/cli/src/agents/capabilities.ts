@@ -73,7 +73,7 @@ export class CapabilityHost {
 
   private async connect(capability: McpCapability): Promise<void> {
     const env = this.environment(capability);
-    const client = new Client({ name: "modai-capabilities", version: "0.14.0" });
+    const client = new Client({ name: "modai-capabilities", version: "0.14.1" });
     this.clients.push(client);
     const transport = new StdioClientTransport({
       ...this.launch(capability),

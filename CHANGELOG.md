@@ -1,5 +1,14 @@
 # Cambios
 
+## 0.14.1
+
+Primera versión publicada de la serie 0.14: incluye todo lo de 0.14.0, que no llegó a npm.
+
+- **Login con verificación en dos pasos.** Al pedir el código, el panel oculta de verdad el usuario y la contraseña; antes seguían visibles. Cualquier elemento con el atributo `hidden` queda oculto aunque su componente defina otro `display`.
+- **SDK.** Nuevo tipo `AccessGrants` (`projectIds`, `organizationIds`, `packageScopes`), compartido por `UserRecord`, `ApiKeyRecord`, la sesión y las entradas de administración.
+- **Contracts.** `PACKAGE_DIR_PLACEHOLDER` y `PROJECT_DIR_PLACEHOLDER` exportan desde `@modai/contracts/manifest` los marcadores `${packageDir}` y `${projectDir}` de los manifiestos.
+- **Mantenimiento.** Esquemas de la API, diálogos, tablas y cargas del panel, y las opciones de acceso de `modai admin` comparten helpers. El repositorio deja los archivos de pnpm y fija fines de línea LF.
+
 ## 0.14.0
 
 - **Conocimiento por proyecto.** El panel, la CLI, MCP y el SDK consultan documentos privados del proyecto y los paquetes de su perfil efectivo. Los agentes encolados conservan las versiones fijadas al preparar la tarea.
