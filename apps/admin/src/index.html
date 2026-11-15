@@ -43,12 +43,11 @@
           <button class="icon-button menu-toggle" id="menuToggle" type="button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
             <i data-icon="menu"></i>
           </button>
-          <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: kept as in the published panel -->
-          <div class="crumbs" aria-label="Ubicación">
+          <nav class="crumbs" aria-label="Ubicación">
             <span id="crumbSection" class="crumb-section"></span>
             <span class="crumb-sep" aria-hidden="true">/</span>
             <span id="crumbPage" class="crumb-page"></span>
-          </div>
+          </nav>
           <div class="topbar-actions">
             <button class="icon-button" id="refreshButton" type="button" aria-label="Actualizar datos" title="Actualizar datos">
               <i data-icon="refresh"></i>
@@ -84,8 +83,7 @@
         <main id="main" class="content" tabindex="-1">
           <div class="page-head">
             <div>
-              <!-- biome-ignore lint/a11y/useHeadingContent: filled by the router -->
-              <h1 id="pageTitle"></h1>
+              <h1 id="pageTitle">MODAI</h1>
               <p id="pageSubtitle"></p>
             </div>
             <div class="page-actions" id="pageActions"></div>
@@ -98,8 +96,7 @@
     <dialog id="dialog" class="dialog" aria-labelledby="dialogTitle" aria-describedby="dialogDescription">
       <header class="dialog-head">
         <div>
-          <!-- biome-ignore lint/a11y/useHeadingContent: filled by openDialog -->
-          <h2 id="dialogTitle"></h2>
+          <h2 id="dialogTitle">MODAI</h2>
           <p id="dialogDescription" hidden></p>
         </div>
         <button class="icon-button dialog-close" type="button" aria-label="Cerrar diálogo"><i data-icon="x"></i></button>

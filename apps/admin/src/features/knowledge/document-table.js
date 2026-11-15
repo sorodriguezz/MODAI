@@ -3,6 +3,7 @@ import { html } from "../../shared/lib/html.js";
 import { icon } from "../../shared/lib/icons.js";
 import { emptyState } from "../../shared/ui/empty-state.js";
 import { timeTag } from "../../shared/ui/format.js";
+import { dataTable, optionalColumn } from "../../shared/ui/table.js";
 
 function originCell(d) {
   if (d.projectId) return html`<span class="badge tone-info">Proyecto</span>`;
@@ -26,10 +27,7 @@ export function documentMeta(list, documents) {
 }
 
 export function documentTable(list, total, project) {
-  if (list.length)
-    return html`<div class="table-wrap"><table class="table">
-            <thead><tr><th scope="col">Documento</th><th scope="col" class="hide-sm">Origen</th><th scope="col">Actualizado</th></tr></thead>
-            <tbody>${list.map(documentRow)}</tbody></table></div>`;
+  if (list.length) return dataTable(["Documento", optionalColumn("Origen"), "Actualizado"], list.map(documentRow));
   if (total) return emptyState({ iconName: "search", title: "Sin coincidencias", text: "Prueba con otras palabras." });
   if (project) return emptyState({ iconName: "book", title: "El proyecto aún no tiene documentos privados" });
   return emptyState({

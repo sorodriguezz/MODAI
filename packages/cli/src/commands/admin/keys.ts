@@ -1,16 +1,19 @@
 import type { Command } from "commander";
 import { serverApi } from "../../services/connection.js";
-import { commaList } from "../../terminal/options.js";
 import type { Print } from "../../terminal/output.js";
+import { type AccessOptions, accessGrants, replacementGrants, withAccessOptions } from "./access-options.js";
 
-type CreateKeyOptions = {
+type CreateKeyOptions = AccessOptions & {
   label: string;
   owner?: string;
   role: string;
-  projects?: string[];
-  organizations?: string[];
-  scopes?: string[];
   service?: boolean;
+};
+
+const SCOPED_ACCESS_HELP = {
+  organizations: "Acotar a estas organizaciones",
+  projects: "Acotar a estos proyectos",
+  scopes: "Acotar a estos namespaces, por ejemplo @skills",
 };
 
 async function createKey(options: CreateKeyOptions) {
@@ -21,12 +24,7 @@ async function createKey(options: CreateKeyOptions) {
     : undefined;
   if (options.owner && !owner) throw new Error(`No administras un usuario llamado ${options.owner}`);
   const ownership = options.service ? { ownerId: null } : owner ? { ownerId: owner.id } : {};
-  const key = await api.createApiKey(
-    options.label,
-    options.role,
-    { projectIds: options.projects, organizationIds: options.organizations, packageScopes: options.scopes },
-    ownership,
-  );
+  const key = await api.createApiKey(options.label, options.role, accessGrants(options), ownership);
   return {
     id: key.id,
     label: key.label,
@@ -38,34 +36,24 @@ async function createKey(options: CreateKeyOptions) {
 }
 
 export function registerAdminCreateKey(admin: Command, print: Print): void {
-  admin
-    .command("create-key")
-    .description("Crea una API key a nombre de un usuario, dentro de sus permisos (sin --owner: para tu usuario)")
-    .requiredOption("--label <label>")
-    .option("--owner <username|id>", "Usuario dueño de la key")
-    .option("--role <role>", "reader, publisher, worker, org-admin o admin (como máximo el del dueño)", "reader")
-    .option("--projects <ids>", "Acotar a estos proyectos", commaList)
-    .option("--organizations <ids>", "Acotar a estas organizaciones", commaList)
-    .option("--scopes <scopes>", "Acotar a estos namespaces, por ejemplo @skills", commaList)
+  withAccessOptions(
+    admin
+      .command("create-key")
+      .description("Crea una API key a nombre de un usuario, dentro de sus permisos (sin --owner: para tu usuario)")
+      .requiredOption("--label <label>")
+      .option("--owner <username|id>", "Usuario dueño de la key")
+      .option("--role <role>", "reader, publisher, worker, org-admin o admin (como máximo el del dueño)", "reader"),
+    SCOPED_ACCESS_HELP,
+  )
     .option("--service", "Key de servicio sin dueño (solo con el token de instalación o administración global)")
     .action(async (options: CreateKeyOptions) => print(await createKey(options)));
 }
 
 export function registerAdminGrantKey(admin: Command, print: Print): void {
-  admin
-    .command("grant-key")
-    .argument("<id>")
-    .option("--projects <ids>", "Proyectos", commaList)
-    .option("--organizations <ids>", "Organizaciones", commaList)
-    .option("--scopes <scopes>", "Namespaces", commaList)
-    .action(async (id: string, options: { projects?: string[]; organizations?: string[]; scopes?: string[] }) => {
-      await serverApi().updateKeyGrants(id, {
-        projectIds: options.projects ?? [],
-        organizationIds: options.organizations ?? [],
-        packageScopes: options.scopes ?? [],
-      });
-      print("Accesos de la API key reemplazados.");
-    });
+  withAccessOptions(admin.command("grant-key").argument("<id>")).action(async (id: string, options: AccessOptions) => {
+    await serverApi().updateKeyGrants(id, replacementGrants(options));
+    print("Accesos de la API key reemplazados.");
+  });
 }
 
 export function registerAdminKeys(admin: Command, print: Print): void {

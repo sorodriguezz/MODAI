@@ -1,6 +1,6 @@
 import type { SignaturePolicy } from "@modai/contracts/types";
 import { HttpClient } from "../http-client.js";
-import type { Permissions, Role } from "../types.js";
+import type { AccessGrants, Permissions, Role } from "../types.js";
 
 export class SessionApi extends HttpClient {
   async health(): Promise<{
@@ -13,14 +13,7 @@ export class SessionApi extends HttpClient {
     return this.request("/health");
   }
 
-  async session(): Promise<{
-    label: string;
-    role: Role;
-    projectIds: string[];
-    organizationIds: string[];
-    packageScopes: string[];
-    permissions: Permissions;
-  }> {
+  async session(): Promise<AccessGrants & { label: string; role: Role; permissions: Permissions }> {
     return this.request("/api/v1/session");
   }
 

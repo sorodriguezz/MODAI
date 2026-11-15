@@ -38,10 +38,9 @@ export function loadActivation(root: string): Activation {
   if (activation.bundle.packages.some((item) => target.project.lock.packages[item.name]?.version !== item.version))
     throw new Error("La activación ya no coincide con modai.lock; vuelve a activar el agente");
   const approval = localApproval(root, target.projectId, activation.server);
-  // why: repository files only request capabilities; only machine-local approvals authorize processes
-  const approved = approval.digest === activation.bundle.digest;
-  activation.allowedMcp = approved ? (approval.allowedMcp ?? []) : [];
-  activation.allowedEnv = approved ? (approval.allowedEnv ?? []) : [];
+  const approvedOnThisMachine = approval.digest === activation.bundle.digest;
+  activation.allowedMcp = approvedOnThisMachine ? (approval.allowedMcp ?? []) : [];
+  activation.allowedEnv = approvedOnThisMachine ? (approval.allowedEnv ?? []) : [];
   return activation;
 }
 

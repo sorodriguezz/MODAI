@@ -1,3 +1,4 @@
+import { PACKAGE_DIR_PLACEHOLDER } from "@modai/contracts/manifest";
 import { sha256 } from "@modai/contracts/security";
 import type { AgentBundle, AgentCapability } from "@modai/contracts/types";
 import { loadV1Project, resolveCommand, storePackageDir, verifyStore } from "@modai/core";
@@ -22,9 +23,6 @@ export interface CapabilityOptions {
 }
 type McpCapability = Extract<AgentCapability, { kind: "mcp" }>;
 type ToolCall = (input: Record<string, unknown>) => Promise<unknown>;
-
-// biome-ignore lint/suspicious/noTemplateCurlyInString: placeholder the Core expands at run time
-const PACKAGE_DIR = "${packageDir}";
 
 const toolName = (capability: string, tool: string) => {
   const fullName = `${capability}__${tool}`;
@@ -133,7 +131,7 @@ export class CapabilityHost {
   private launch(capability: McpCapability): { command: string; args: string[] } {
     const { cwd, bundleStore } = this.options;
     let packageDir = cwd;
-    if ([capability.command, ...capability.args].some((value) => value.includes(PACKAGE_DIR))) {
+    if ([capability.command, ...capability.args].some((value) => value.includes(PACKAGE_DIR_PLACEHOLDER))) {
       const root = bundleStore?.root ?? cwd;
       const integrity = bundleStore
         ? bundleStore.integrity.get(capability.package)

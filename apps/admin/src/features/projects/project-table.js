@@ -3,6 +3,7 @@ import { html } from "../../shared/lib/html.js";
 import { icon } from "../../shared/lib/icons.js";
 import { emptyState } from "../../shared/ui/empty-state.js";
 import { timeTag } from "../../shared/ui/format.js";
+import { actionsColumn, dataTable, optionalColumn } from "../../shared/ui/table.js";
 
 function organizationCell(p) {
   if (!p.organizationId) return html`<span class="muted">Personal</span>`;
@@ -42,9 +43,10 @@ function noProjects() {
 
 export function projectTable(list, total) {
   if (list.length)
-    return html`<div class="table-wrap"><table class="table">
-          <thead><tr><th scope="col">Proyecto</th><th scope="col">Identificador</th><th scope="col" class="hide-sm">Organización</th><th scope="col" class="hide-sm">Creado</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
-          <tbody>${list.map(projectRow)}</tbody></table></div>`;
+    return dataTable(
+      ["Proyecto", "Identificador", optionalColumn("Organización"), optionalColumn("Creado"), actionsColumn()],
+      list.map(projectRow),
+    );
   return total ? emptyState({ iconName: "search", title: "Sin coincidencias" }) : noProjects();
 }
 

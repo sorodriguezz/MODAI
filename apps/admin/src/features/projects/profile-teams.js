@@ -1,6 +1,6 @@
 import { del, get, post, put } from "../../shared/lib/api.js";
 import { delegate, html, mount } from "../../shared/lib/html.js";
-import { confirmDialog } from "../../shared/ui/dialog.js";
+import { confirmDialog, dialogFooter } from "../../shared/ui/dialog.js";
 import { errorState } from "../../shared/ui/empty-state.js";
 import { bindForm } from "../../shared/ui/form.js";
 import { toast, toastError } from "../../shared/ui/toast.js";
@@ -21,8 +21,7 @@ function memberEditor(members, candidates) {
         ? html`<form class="stack" novalidate>
       <div class="field"><label for="profileTeamMember">Usuario de la organización</label><select id="profileTeamMember" required>
       <option value="">Selecciona un usuario</option>${candidates.map((user) => html`<option value="${user.id}">${user.displayName} · ${user.username}</option>`)}</select></div>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="submit" class="btn">Agregar integrante</button></div>
+      ${dialogFooter("Agregar integrante", { tone: "", cancel: false })}
     </form>`
         : ""
     }
@@ -48,8 +47,7 @@ export async function renderTeams(root, project, reopen) {
     <form data-create-team class="stack" novalidate>
       <h3>Nuevo equipo</h3>
       <div class="field"><label for="profileTeamName">Nombre del equipo</label><input id="profileTeamName" required maxlength="200"></div>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="submit" class="btn primary">Crear equipo</button></div>
+      ${dialogFooter("Crear equipo", { cancel: false })}
     </form>
   </div>`,
   );

@@ -3,7 +3,7 @@ import { del, get, patch } from "../../../shared/lib/api.js";
 import { delegate, html, mount } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
 import { confirmDialog } from "../../../shared/ui/dialog.js";
-import { emptyState, errorState } from "../../../shared/ui/empty-state.js";
+import { emptyState, loadOrShowError } from "../../../shared/ui/empty-state.js";
 import { debounce } from "../../../shared/ui/format.js";
 import { roleLabels } from "../../../shared/ui/labels.js";
 import { skeletonRows } from "../../../shared/ui/skeleton.js";
@@ -90,16 +90,13 @@ export const usersView = {
       );
     };
     const load = async () => {
-      try {
-        store.invalidate("organizations");
-        const [result, loaded] = await Promise.all([get("/admin/users"), grantChoices().catch(() => choices)]);
-        users = result.users;
-        choices = loaded;
-      } catch (error) {
-        if (isCurrent()) mount(root.querySelector("#userResults"), errorState(error));
-        return;
-      }
-      if (isCurrent()) draw();
+      store.invalidate("organizations");
+      const loaded = await loadOrShowError(root.querySelector("#userResults"), isCurrent, () =>
+        Promise.all([get("/admin/users"), grantChoices().catch(() => choices)]),
+      );
+      if (!loaded) return;
+      [{ users }, choices] = loaded;
+      draw();
     };
     root.querySelector("#userSearch").addEventListener("input", debounce(draw));
     root.querySelector("#userRoleFilter").addEventListener("change", draw);

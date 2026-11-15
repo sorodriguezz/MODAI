@@ -2,11 +2,12 @@ import { can, state, store } from "../../../app/state.js";
 import { del, get, patch, post } from "../../../shared/lib/api.js";
 import { delegate, html, mount } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
-import { closeDialog, confirmDialog, openDialog } from "../../../shared/ui/dialog.js";
-import { emptyState, errorState } from "../../../shared/ui/empty-state.js";
+import { closeDialog, confirmDialog, dialogFooter, openFormDialog } from "../../../shared/ui/dialog.js";
+import { emptyState, loadOrShowError } from "../../../shared/ui/empty-state.js";
 import { bindForm } from "../../../shared/ui/form.js";
 import { debounce } from "../../../shared/ui/format.js";
 import { skeletonRows } from "../../../shared/ui/skeleton.js";
+import { actionsColumn, dataTable, optionalColumn } from "../../../shared/ui/table.js";
 import { toast } from "../../../shared/ui/toast.js";
 
 const visibilityLabels = { internal: "Interno", restricted: "Restringido", shared: "Compartido" };
@@ -16,15 +17,14 @@ const visibilityHints = {
   shared: "Cualquier identidad autenticada en la instancia puede ver sus paquetes.",
 };
 
-// why: only global administration gives a namespace to another user; the rest choose their organizations or themselves.
-async function ownerOptions() {
+async function assignableUsers() {
+  if (can.admin()) return (await get("/admin/users")).users.filter((u) => !u.disabledAt);
+  return state.user ? [state.user] : [];
+}
+
+async function assignableOwners() {
   const organizations = (await store.organizations()).filter((o) => o.canManage);
-  const users = can.admin()
-    ? (await get("/admin/users")).users.filter((u) => !u.disabledAt)
-    : state.user
-      ? [state.user]
-      : [];
-  return { organizations, users };
+  return { organizations, users: await assignableUsers() };
 }
 
 const ownerValue = (namespace) =>
@@ -55,8 +55,8 @@ const ownerLabel = (n) =>
 
 async function namespaceForm(namespace, onSaved) {
   const editing = Boolean(namespace);
-  const owners = await ownerOptions();
-  const body = openDialog({
+  const owners = await assignableOwners();
+  const { form } = openFormDialog({
     title: editing ? `Namespace ${namespace.name}` : "Nuevo namespace",
     description:
       "Un namespace es el prefijo de los paquetes (@equipo/paquete). Tiene un solo dueño, una organización o un usuario, y sus paquetes le pertenecen.",
@@ -66,12 +66,9 @@ async function namespaceForm(namespace, onSaved) {
       <div class="field"><label for="nsOwner">Dueño</label>${ownerSelect("nsOwner", owners, ownerValue(namespace))}<p class="hint">La organización o el usuario al que pertenecen sus paquetes.</p></div>
       <fieldset class="field"><legend>Visibilidad</legend><div class="role-options">${Object.entries(visibilityLabels).map(([value, label]) => html`<label class="role-option"><input type="radio" name="nsVisibility" value="${value}" ${value === (namespace?.visibility || "internal") ? "checked" : ""}><span><b>${label}</b><span class="muted small">${visibilityHints[value]}</span></span></label>`)}</div></fieldset>
       <div class="field"><label for="nsDescription">Descripción (opcional)</label><textarea id="nsDescription" rows="2" maxlength="1000">${namespace?.description || ""}</textarea></div>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">${editing ? "Guardar" : "Crear namespace"}</button></div>
+      ${dialogFooter(editing ? "Guardar" : "Crear namespace")}
     </form>`,
   });
-  const form = body.querySelector("form");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   bindForm(form, async () => {
     if (!form.nsOwner.value) throw new Error("Elige el dueño del namespace");
     const payload = {
@@ -133,9 +130,17 @@ export const namespacesView = {
       mount(
         root.querySelector("#nsResults"),
         list.length
-          ? html`<div class="table-wrap"><table class="table">
-          <thead><tr><th scope="col">Namespace</th><th scope="col">Dueño</th><th scope="col">Visibilidad</th><th scope="col" class="hide-sm">Paquetes</th><th scope="col" class="hide-sm">Puedes publicar</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
-          <tbody>${list.map(namespaceRow)}</tbody></table></div>`
+          ? dataTable(
+              [
+                "Namespace",
+                "Dueño",
+                "Visibilidad",
+                optionalColumn("Paquetes"),
+                optionalColumn("Puedes publicar"),
+                actionsColumn(),
+              ],
+              list.map(namespaceRow),
+            )
           : namespaces.length
             ? emptyState({ iconName: "search", title: "Sin coincidencias" })
             : emptyState({
@@ -148,13 +153,9 @@ export const namespacesView = {
     };
 
     const load = async (force = false) => {
-      try {
-        namespaces = await store.namespaces(force);
-      } catch (error) {
-        if (isCurrent()) mount(root.querySelector("#nsResults"), errorState(error));
-        return;
-      }
-      if (!isCurrent()) return;
+      const result = await loadOrShowError(root.querySelector("#nsResults"), isCurrent, () => store.namespaces(force));
+      if (!result) return;
+      namespaces = result;
       drawNamespaces();
     };
     const reload = async () => {

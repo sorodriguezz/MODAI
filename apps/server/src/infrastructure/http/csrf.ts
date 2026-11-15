@@ -13,15 +13,22 @@ function sameOrigin(origin: string, request: FastifyRequest, publicUrl?: string)
   }
 }
 
-// why: cookie writes need a custom header that cross-site forms cannot send, plus a same-origin Origin when present.
-export function assertCsrf(request: FastifyRequest, publicUrl?: string): void {
+function requireHeaderCrossSiteFormsCannotSend(request: FastifyRequest): void {
   if (request.headers[CSRF_HEADER] !== "1")
     throw new AppError(
       403,
       "CSRF_REQUIRED",
       `Falta la cabecera ${CSRF_HEADER}. Recarga el panel e inténtalo de nuevo.`,
     );
+}
+
+function requireSameOriginWhenPresent(request: FastifyRequest, publicUrl?: string): void {
   const origin = request.headers.origin;
   if (!origin || sameOrigin(origin, request, publicUrl)) return;
   throw new AppError(403, "CSRF_ORIGIN", "Origen de la solicitud no permitido");
+}
+
+export function assertCsrf(request: FastifyRequest, publicUrl?: string): void {
+  requireHeaderCrossSiteFormsCannotSend(request);
+  requireSameOriginWhenPresent(request, publicUrl);
 }

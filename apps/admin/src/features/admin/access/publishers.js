@@ -1,13 +1,14 @@
 import { patch, post } from "../../../shared/lib/api.js";
 import { html } from "../../../shared/lib/html.js";
-import { closeDialog, openDialog } from "../../../shared/ui/dialog.js";
+import { closeDialog, dialogFooter, openFormDialog } from "../../../shared/ui/dialog.js";
 import { emptyState } from "../../../shared/ui/empty-state.js";
 import { bindForm } from "../../../shared/ui/form.js";
 import { timeTag } from "../../../shared/ui/format.js";
+import { dataTable, optionalColumn } from "../../../shared/ui/table.js";
 import { toast, toastError } from "../../../shared/ui/toast.js";
 
 export function publisherForm(onSaved) {
-  const body = openDialog({
+  const { form } = openFormDialog({
     title: "Registrar publicador",
     description: "Las claves públicas Ed25519 permiten verificar la firma de los paquetes.",
     size: "md",
@@ -15,12 +16,9 @@ export function publisherForm(onSaved) {
       <div class="field"><label for="pubLabel">Nombre</label><input id="pubLabel" required maxlength="200" placeholder="Equipo de plataforma"></div>
       <div class="field"><label for="pubKey">Clave pública (PEM)</label><textarea id="pubKey" class="mono" rows="6" required maxlength="4096" placeholder="-----BEGIN PUBLIC KEY-----"></textarea></div>
       <label class="checkbox"><input type="checkbox" id="pubTrusted" checked> Marcar como de confianza</label>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">Registrar</button></div>
+      ${dialogFooter("Registrar")}
     </form>`,
   });
-  const form = body.querySelector("form");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   bindForm(form, async () => {
     await post("/admin/publishers", {
       label: form.pubLabel.value.trim(),
@@ -43,9 +41,7 @@ function publisherRow(p) {
 
 export function publishersTable(publishers) {
   return publishers.length
-    ? html`<div class="table-wrap"><table class="table">
-          <thead><tr><th scope="col">Publicador</th><th scope="col">Huella</th><th scope="col">Confianza</th><th scope="col" class="hide-sm">Registrado</th></tr></thead>
-          <tbody>${publishers.map(publisherRow)}</tbody></table></div>`
+    ? dataTable(["Publicador", "Huella", "Confianza", optionalColumn("Registrado")], publishers.map(publisherRow))
     : emptyState({
         iconName: "shield",
         title: "Sin publicadores registrados",

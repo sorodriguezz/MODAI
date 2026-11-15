@@ -2,6 +2,8 @@ import { type Kysely, sql } from "kysely";
 import type { DialectName } from "../database-url.js";
 import type { ColumnTypes } from "./column-types.js";
 
+const exactlyOneNamespaceOwner = sql`(organization_id is not null and owner_user_id is null) or (organization_id is null and owner_user_id is not null)`;
+
 export async function createDirectoryTables(db: Kysely<unknown>, t: ColumnTypes): Promise<void> {
   await db.schema
     .createTable("organizations")
@@ -34,11 +36,7 @@ export async function createDirectoryTables(db: Kysely<unknown>, t: ColumnTypes)
     .addColumn("updated_at", t.key(40), (col) => col.notNull())
     .addForeignKeyConstraint("fk_namespaces_organization", ["organization_id"], "organizations", ["id"])
     .addCheckConstraint("ck_namespaces_visibility", sql`visibility in ('internal', 'restricted')`)
-    // why: every namespace (and so every package in it) has exactly one owner, an organization or a user.
-    .addCheckConstraint(
-      "ck_namespaces_owner",
-      sql`(organization_id is not null and owner_user_id is null) or (organization_id is null and owner_user_id is not null)`,
-    )
+    .addCheckConstraint("ck_namespaces_owner", exactlyOneNamespaceOwner)
     .execute();
   await db.schema.createIndex("idx_namespaces_org").on("namespaces").column("organization_id").execute();
   await db.schema.createIndex("idx_namespaces_owner_user").on("namespaces").column("owner_user_id").execute();
@@ -84,7 +82,8 @@ export async function createRunTables(db: Kysely<unknown>, t: ColumnTypes, diale
     .unique()
     .on("runs")
     .columns(["project_id", "created_by", "idempotency_key"]);
-  // why: SQL Server treats NULLs as equal in unique indexes, so the uniqueness only covers runs with a key.
-  await (dialect === "mysql" ? unique : unique.where(sql.ref("idempotency_key"), "is not", null)).execute();
+  const uniqueAmongRunsWithKey =
+    dialect === "mysql" ? unique : unique.where(sql.ref("idempotency_key"), "is not", null);
+  await uniqueAmongRunsWithKey.execute();
   await db.schema.createIndex("idx_runs_queue").on("runs").columns(["project_id", "status", "created_at"]).execute();
 }

@@ -1,7 +1,7 @@
 import { post } from "../../../shared/lib/api.js";
 import { html } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
-import { closeDialog, openDialog } from "../../../shared/ui/dialog.js";
+import { closeDialog, dialogFooter, openFormDialog } from "../../../shared/ui/dialog.js";
 import { bindForm } from "../../../shared/ui/form.js";
 import { debounce } from "../../../shared/ui/format.js";
 import { toast } from "../../../shared/ui/toast.js";
@@ -27,7 +27,7 @@ const retention = {
 
 export function pruneDialog(target, onDone) {
   const config = retention[target];
-  const body = openDialog({
+  const { body, form } = openFormDialog({
     title: config.title,
     description: config.help,
     size: "sm",
@@ -35,14 +35,11 @@ export function pruneDialog(target, onDone) {
       <div class="field"><label for="pruneDays">Más antiguos que (días)</label><input id="pruneDays" type="number" min="0" max="36500" step="1" value="${config.days}" required></div>
       <p class="callout tone-info" id="prunePreview" aria-live="polite">${icon("info")}<span>Calculando…</span></p>
       <div class="callout tone-danger">${icon("alert")}<span>Lo eliminado no se puede recuperar. Exporta un backup antes si lo necesitas.</span></div>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn danger" disabled>Depurar</button></div>
+      ${dialogFooter("Depurar", { tone: "danger", disabled: true })}
     </form>`,
   });
-  const form = body.querySelector("form"),
-    submit = form.querySelector('button[type="submit"]'),
+  const submit = form.querySelector('button[type="submit"]'),
     preview = body.querySelector("#prunePreview span");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   let count = 0,
     sequence = 0;
   const refresh = debounce(async () => {

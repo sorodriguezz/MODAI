@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { identityOf } from "../../infrastructure/http/identity-hooks.js";
+import { strictObject } from "../../infrastructure/http/json-schema.js";
 import type { ModuleOptions } from "../module-options.js";
 
+const teamBody = strictObject({ name: { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" } }, ["name"]);
 const organizationTeams = "/api/v1/organizations/:id/teams";
 const teamMembers = "/api/v1/teams/:id/members";
 
@@ -11,16 +13,7 @@ export async function teamsRoutes(app: FastifyInstance, { services: { teams, aud
   }));
   app.post<{ Params: { id: string }; Body: { name: string } }>(
     organizationTeams,
-    {
-      schema: {
-        body: {
-          type: "object",
-          required: ["name"],
-          additionalProperties: false,
-          properties: { name: { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" } },
-        },
-      },
-    },
+    { schema: { body: teamBody } },
     async (request, reply) => {
       const team = await teams.create(identityOf(request), request.params.id, request.body.name.trim());
       await audit.fromRequest(request, "team.create", team.id, { organizationId: team.organizationId });

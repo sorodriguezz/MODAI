@@ -1,6 +1,6 @@
 import { patch, post } from "../../shared/lib/api.js";
 import { html } from "../../shared/lib/html.js";
-import { closeDialog } from "../../shared/ui/dialog.js";
+import { closeDialog, dialogFooter } from "../../shared/ui/dialog.js";
 import { roleDescriptions, roleLabels } from "../../shared/ui/labels.js";
 import { toast } from "../../shared/ui/toast.js";
 import { grantsFields, readGrants } from "../admin/users/grants.js";
@@ -37,8 +37,7 @@ export function keyFormBody({ mode, key, owners, currentOwner, choices }) {
       ${scopeStep(key)}
       ${grantsFields({ projectIds: key?.projectIds, organizationIds: key?.organizationIds, packageScopes: key?.packageScopes, ...choices, withRole: false })}
       <section data-step="review" data-title="Revisión"><div data-review></div></section>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">${editing ? "Guardar" : "Crear API key"}</button></div>
+      ${dialogFooter(editing ? "Guardar" : "Crear API key")}
     </form>`;
 }
 

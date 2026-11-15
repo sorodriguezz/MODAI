@@ -4,6 +4,7 @@ import { confirmDialog } from "../../shared/ui/dialog.js";
 import { errorState } from "../../shared/ui/empty-state.js";
 import { bindForm } from "../../shared/ui/form.js";
 import { timeTag } from "../../shared/ui/format.js";
+import { actionsColumn, dataTable } from "../../shared/ui/table.js";
 import { toast } from "../../shared/ui/toast.js";
 
 export const scopeNames = { project: "Proyecto", organization: "Organización", team: "Equipo" };
@@ -11,15 +12,15 @@ const collections = { project: "projects", organization: "organizations", team: 
 
 function existingBindings(bindings) {
   if (!bindings.length) return html`<p class="muted">Este ámbito no tiene asignaciones.</p>`;
-  return html`<div class="table-wrap"><table class="table">
-    <thead><tr><th>Identificador</th><th>Paquete</th><th>Política</th><th><span class="sr-only">Acciones</span></th></tr></thead>
-    <tbody>${bindings.map(
+  return dataTable(
+    ["Identificador", "Paquete", "Política", actionsColumn()],
+    bindings.map(
       (item) => html`<tr><td><code>${item.slot}</code></td><td>${item.packageName}@${item.range}</td>
       <td>${item.required ? "Obligatoria" : "Opcional"}${item.exception ? html`<br>Revisión ${timeTag(item.exception.reviewAt)} · ${item.exception.reason}` : ""}</td>
       <td class="actions"><button type="button" class="btn small" data-action="edit-binding" data-slot="${item.slot}">Editar</button>
       <button type="button" class="btn small ghost danger-text" data-action="delete-binding" data-slot="${item.slot}">Quitar</button></td></tr>`,
-    )}</tbody>
-  </table></div>`;
+    ),
+  );
 }
 
 function localInputDate(iso) {

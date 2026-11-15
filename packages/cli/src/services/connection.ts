@@ -19,15 +19,14 @@ export function effectiveConnection(server?: string): { server: string; token?: 
   const normalize = (url: string) => new URL(url).href.replace(/\/+$/, "");
   const same = (other?: string) => Boolean(other) && normalize(other!) === normalize(value);
   const envServer = process.env.MODAI_SERVER || config?.server;
-  // why: a credential only goes to the server it was issued for, and never over plain http
-  const token =
+  const tokenIssuedForThisServer =
     (process.env.MODAI_API_TOKEN && same(envServer) ? process.env.MODAI_API_TOKEN : undefined) ??
     (same(config?.server) ? config?.token : undefined);
-  if (token && insecureTransport(value))
+  if (tokenIssuedForThisServer && insecureTransport(value))
     throw new Error(
       `${INSECURE_REFUSAL} por http a ${new URL(value).host}: usa https (o MODAI_ALLOW_INSECURE_HTTP=1 si es una red de confianza).`,
     );
-  return { server: value.replace(/\/+$/, ""), token };
+  return { server: value.replace(/\/+$/, ""), token: tokenIssuedForThisServer };
 }
 
 export function tokenFor(url: string): string | undefined {

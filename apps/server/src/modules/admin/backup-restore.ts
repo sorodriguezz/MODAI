@@ -23,8 +23,7 @@ const ADMIN = "restored-admin";
 
 type NamespaceOwner = { organization_id: string | null; owner_user_id: string | null };
 
-// why: users are not part of the backup; namespaces whose owner is missing go to the oldest active admin.
-async function fallbackOwner(context: DataContext): Promise<NamespaceOwner> {
+async function oldestActiveAdminAsOwner(context: DataContext): Promise<NamespaceOwner> {
   const admin = await context.db
     .selectFrom("users")
     .select("id")
@@ -61,7 +60,7 @@ async function namespaceOwner(
       .executeTakeFirst();
     if (user) return { organization_id: null, owner_user_id: user.id };
   }
-  return fallbackOwner(context);
+  return oldestActiveAdminAsOwner(context);
 }
 
 async function restoreNamespace(context: DataContext, item: NonNullable<Snapshot["namespaces"]>[number]) {
@@ -89,7 +88,7 @@ async function ensurePackageNamespaces(context: DataContext, snapshot: Snapshot)
       .insertInto("namespaces")
       .values({
         name,
-        ...(await fallbackOwner(context)),
+        ...(await oldestActiveAdminAsOwner(context)),
         description: "",
         ...namespaceVisibilityFields(),
         created_by: ADMIN,

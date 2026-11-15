@@ -2,7 +2,7 @@ import { can, state, store } from "../../app/state.js";
 import { patch, post } from "../../shared/lib/api.js";
 import { html } from "../../shared/lib/html.js";
 import { bindComboSearch, comboField } from "../../shared/pickers/combo-field.js";
-import { closeDialog, openDialog } from "../../shared/ui/dialog.js";
+import { closeDialog, dialogFooter, openFormDialog } from "../../shared/ui/dialog.js";
 import { bindForm } from "../../shared/ui/form.js";
 import { csv } from "../../shared/ui/format.js";
 import { toast } from "../../shared/ui/toast.js";
@@ -68,7 +68,7 @@ function bindScope(form) {
 export async function documentEditor(documentRecord, onSaved, project) {
   const editing = Boolean(documentRecord);
   const scopes = project ? [] : await scopeOptions(editing);
-  const body = openDialog({
+  const { form } = openFormDialog({
     title: editing ? "Editar documento" : "Nuevo documento",
     description: project
       ? `Visible para quienes tienen acceso a «${project.name}».`
@@ -85,12 +85,9 @@ export async function documentEditor(documentRecord, onSaved, project) {
       <div class="field"><label for="docTitle">Título</label><input id="docTitle" required maxlength="300" value="${documentRecord?.title || ""}"></div>
       <div class="field"><label for="docTags">Etiquetas</label><input id="docTags" value="${(documentRecord?.tags || []).join(", ")}" placeholder="arquitectura, convenciones"><p class="hint">Separadas por comas.</p></div>
       <div class="field"><label for="docContent">Contenido (Markdown)</label><textarea id="docContent" class="mono" rows="14" required>${documentRecord?.content || ""}</textarea></div>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">Guardar documento</button></div>
+      ${dialogFooter("Guardar documento")}
     </form>`,
   });
-  const form = body.querySelector("form");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   if (!editing && !project) bindComboSearch(form, "docScope", scopes);
   const packageName = project ? () => "" : bindScope(form);
   const path = project ? `/projects/${encodeURIComponent(project.id)}/knowledge/documents` : "/knowledge/documents";

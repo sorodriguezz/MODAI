@@ -31,7 +31,6 @@ export async function verifyPassword(password: string, encoded: string): Promise
 
 let decoyHash: Promise<string> | undefined;
 
-// why: unknown usernames still pay the scrypt cost, so response times do not reveal which accounts exist.
 export function decoyPasswordHash(): Promise<string> {
   decoyHash ??= hashPassword(randomBytes(18).toString("base64url"));
   return decoyHash;

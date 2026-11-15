@@ -2,12 +2,13 @@ import { can, store } from "../../app/state.js";
 import { get, post } from "../../shared/lib/api.js";
 import { delegate, html, mount } from "../../shared/lib/html.js";
 import { icon } from "../../shared/lib/icons.js";
-import { closeDialog, confirmDialog, openDialog } from "../../shared/ui/dialog.js";
+import { closeDialog, confirmDialog, dialogFooter, openDialog, openFormDialog } from "../../shared/ui/dialog.js";
 import { emptyState, errorState } from "../../shared/ui/empty-state.js";
 import { bindForm } from "../../shared/ui/form.js";
 import { formatDate, timeTag } from "../../shared/ui/format.js";
 import { statusBadge } from "../../shared/ui/labels.js";
 import { skeletonRows } from "../../shared/ui/skeleton.js";
+import { dataTable, optionalColumn } from "../../shared/ui/table.js";
 import { toast } from "../../shared/ui/toast.js";
 
 let lastProject = "";
@@ -49,7 +50,7 @@ function runDetail(run, onChange) {
 
 async function newRun(project, onCreated) {
   const agents = await store.agents();
-  const body = openDialog({
+  const { form } = openFormDialog({
     title: "Nueva tarea",
     description: `Proyecto ${project.name}`,
     size: "md",
@@ -57,8 +58,7 @@ async function newRun(project, onCreated) {
       ? html`<form class="stack" novalidate>
         <div class="field"><label for="runAgent">Agente</label><select id="runAgent" required>${agents.map((item) => html`<option value="${item.name}@${item.version}">${item.name}@${item.version}</option>`)}</select></div>
         <div class="field"><label for="runTask">Tarea</label><textarea id="runTask" rows="6" required maxlength="50000" placeholder="Describe qué debe hacer el agente…"></textarea></div>
-        <div class="form-error" role="alert" hidden></div>
-        <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">${icon("play")}Enviar a la cola</button></div>
+        ${dialogFooter(html`${icon("play")}Enviar a la cola`)}
       </form>`
       : emptyState({
           iconName: "bot",
@@ -66,9 +66,7 @@ async function newRun(project, onCreated) {
           text: "Publica un agente antes de enviar tareas.",
         }),
   });
-  const form = body.querySelector("form");
   if (!form) return;
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   bindForm(form, async () => {
     const spec = form.runAgent.value,
       at = spec.lastIndexOf("@");
@@ -117,16 +115,17 @@ export const runsView = {
               text: "Las ejecuciones se organizan por proyecto.",
             })
           : list.length
-            ? html`<div class="table-wrap"><table class="table">
-            <thead><tr><th scope="col">Agente</th><th scope="col">Tarea</th><th scope="col">Estado</th><th scope="col" class="hide-sm">Intentos</th><th scope="col">Actualizada</th></tr></thead>
-            <tbody>${list.map(
-              (run) => html`<tr>
+            ? dataTable(
+                ["Agente", "Tarea", "Estado", optionalColumn("Intentos"), "Actualizada"],
+                list.map(
+                  (run) => html`<tr>
               <td><button type="button" class="link-button" data-action="open" data-id="${run.id}">${run.agentName}</button><div class="muted small">v${run.agentVersion}</div></td>
               <td class="truncate" title="${run.task}">${run.task.slice(0, 120)}</td>
               <td>${statusBadge(run.status)}</td>
               <td class="hide-sm">${run.attempts}</td>
               <td>${timeTag(run.updatedAt)}</td></tr>`,
-            )}</tbody></table></div>`
+                ),
+              )
             : emptyState({
                 iconName: "play",
                 title: runs.length ? "Sin ejecuciones con ese estado" : "Este proyecto no tiene ejecuciones",

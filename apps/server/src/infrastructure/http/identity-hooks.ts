@@ -23,11 +23,11 @@ function bearerToken(request: FastifyRequest): string | undefined {
   return authorization.startsWith("Bearer ") ? authorization.slice(7) : undefined;
 }
 
-// why: the Bearer hook runs first so API keys keep priority; the cookie is only read without an Authorization header.
 export function registerIdentityHooks(app: FastifyInstance, resolvers: IdentityResolvers): void {
-  app.addHook("onRequest", async (raw) => {
+  const apiKeysTakePriority = async (raw: FastifyRequest) => {
     (raw as IdentityRequest).modaiIdentity = await resolvers.bearer(bearerToken(raw));
-  });
+  };
+  app.addHook("onRequest", apiKeysTakePriority);
   app.addHook("onRequest", async (raw) => {
     const request = raw as IdentityRequest;
     if (request.headers.authorization) return;

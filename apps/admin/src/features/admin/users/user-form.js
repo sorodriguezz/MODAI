@@ -4,7 +4,7 @@ import { delegate, html } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
 import { reviewList, wizard } from "../../../shared/lib/wizard.js";
 import { codeBlock } from "../../../shared/ui/code-block.js";
-import { closeDialog, openDialog } from "../../../shared/ui/dialog.js";
+import { closeDialog, dialogFooter, openDialog, openFormDialog } from "../../../shared/ui/dialog.js";
 import { bindForm } from "../../../shared/ui/form.js";
 import { bindStrength, generatePassword, passwordField, strengthMeter } from "../../../shared/ui/password.js";
 import { toast } from "../../../shared/ui/toast.js";
@@ -45,8 +45,7 @@ function userFormBody(user, choices, self) {
       ${accountStep(user, editing)}
       ${grants}
       <section data-step="review" data-title="Revisión"><p class="hint">Revisa antes de ${editing ? "guardar" : "crear la cuenta"}. Puedes volver a cualquier paso desde la barra superior.</p><div data-review></div></section>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">${editing ? "Guardar cambios" : "Crear usuario"}</button></div>
+      ${dialogFooter(editing ? "Guardar cambios" : "Crear usuario")}
     </form>`;
 }
 
@@ -81,7 +80,7 @@ async function saveUser(form, user, self) {
 export function userForm(user, choices, onSaved) {
   const editing = Boolean(user);
   const self = editing && user.id === state.user?.id;
-  const body = openDialog({
+  const { body, form } = openFormDialog({
     title: editing ? `Editar ${user.username}` : "Nuevo usuario",
     description: editing
       ? "Los cambios de rol y permisos se aplican de inmediato, también a las sesiones abiertas."
@@ -89,8 +88,6 @@ export function userForm(user, choices, onSaved) {
     size: "lg",
     body: userFormBody(user, choices, self),
   });
-  const form = body.querySelector("form");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   if (!editing) bindStrength(form.userPassword, body.querySelector("#userStrength"));
   bindGrants(form);
   const steps = grantSteps(choices);
@@ -123,32 +120,28 @@ export function userForm(user, choices, onSaved) {
 }
 
 function showCredentials(username, password, title) {
-  const body = openDialog({
+  openDialog({
     title,
     size: "sm",
     body: html`<div class="callout tone-warning">${icon("alert")}<span>Es la única vez que verás esta contraseña. Entrégala por un canal privado.</span></div>
       <dl class="definition-grid single"><div><dt>Panel</dt><dd>${location.origin}/admin</dd></div><div><dt>Usuario</dt><dd><code>${username}</code></dd></div></dl>
       ${codeBlock("newPasswordValue", password, "Copiar contraseña")}
-      <div class="dialog-actions"><button type="button" class="btn primary" data-close>Listo</button></div>`,
+      <div class="dialog-actions"><button type="button" class="btn primary" data-dismiss>Listo</button></div>`,
   });
-  body.querySelector("[data-close]").addEventListener("click", closeDialog);
 }
 
 export function resetPassword(user, onSaved) {
   const min = state.minPasswordLength;
-  const body = openDialog({
+  const { body, form } = openFormDialog({
     title: "Restablecer contraseña",
     description: `${user.username} deberá usar la nueva contraseña. Sus sesiones abiertas se cerrarán.`,
     size: "sm",
     body: html`<form class="stack" novalidate>
       ${passwordField({ id: "resetPassword", label: "Nueva contraseña", autocomplete: "new-password", minlength: min, value: generatePassword() })}
       ${strengthMeter("resetStrength")}
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">Restablecer</button></div>
+      ${dialogFooter("Restablecer")}
     </form>`,
   });
-  const form = body.querySelector("form");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   bindStrength(form.resetPassword, body.querySelector("#resetStrength"));
   bindForm(form, async () => {
     const password = form.resetPassword.value;

@@ -80,7 +80,13 @@ export interface NamespaceRecord {
   canPublish: boolean;
 }
 
-export interface ApiKeyRecord {
+export interface AccessGrants {
+  projectIds: string[];
+  organizationIds: string[];
+  packageScopes: string[];
+}
+
+export interface ApiKeyRecord extends AccessGrants {
   id: string;
   label: string;
   role: Role;
@@ -90,18 +96,12 @@ export interface ApiKeyRecord {
   ownerId?: string;
   ownerName?: string;
   inherit: boolean;
-  projectIds: string[];
-  organizationIds: string[];
-  packageScopes: string[];
 }
-export interface UserRecord {
+export interface UserRecord extends AccessGrants {
   id: string;
   username: string;
   displayName: string;
   role: Role;
-  projectIds: string[];
-  organizationIds: string[];
-  packageScopes: string[];
   createdAt: string;
   lastLoginAt?: string;
   disabledAt?: string;

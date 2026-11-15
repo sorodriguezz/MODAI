@@ -4,7 +4,7 @@ import { $, html, mount } from "../shared/lib/html.js";
 import { icon } from "../shared/lib/icons.js";
 import { closeDialog } from "../shared/ui/dialog.js";
 import { toast, toastError } from "../shared/ui/toast.js";
-import { byId, hashParams, isVisible, MOVED, navigate, parseHash } from "./router.js";
+import { byId, hashParams, isVisible, LEGACY_MENU_REDIRECTS, navigate, parseHash } from "./router.js";
 import { renderNav, renderServerStatus, renderUser, show } from "./shell.js";
 import { state, store } from "./state.js";
 
@@ -64,8 +64,8 @@ async function enterApp(status) {
   renderServerStatus();
   show("app");
   const target = parseHash();
-  await navigate(target && (isVisible(byId[target]) || MOVED[target]) ? target : "dashboard", {
-    params: MOVED[target] ? Object.fromEntries(hashParams()) : undefined,
+  await navigate(target && (isVisible(byId[target]) || LEGACY_MENU_REDIRECTS[target]) ? target : "dashboard", {
+    params: LEGACY_MENU_REDIRECTS[target] ? Object.fromEntries(hashParams()) : undefined,
     replace: true,
   });
 }

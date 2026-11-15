@@ -13,8 +13,7 @@ const sources = readdirSync(root, { withFileTypes: true })
   .filter((item) => item.isDirectory())
   .map((entry) => loadPackageSource(join(root, entry.name)));
 
-// why: every package lives in a namespace with an owner; the examples' namespaces belong to one organization.
-async function ensureNamespaces(): Promise<void> {
+async function ensureNamespacesOwnedByExamplesOrganization(): Promise<void> {
   const existing = new Set((await api.namespaces()).map((item) => item.name));
   const missing = [...new Set(sources.map((input) => manifestIdentity(input.manifest).name.split("/")[0]))].filter(
     (name) => !existing.has(name),
@@ -29,7 +28,7 @@ async function ensureNamespaces(): Promise<void> {
   }
 }
 
-await ensureNamespaces();
+await ensureNamespacesOwnedByExamplesOrganization();
 for (const input of sources) {
   try {
     const item = await api.publish(input);

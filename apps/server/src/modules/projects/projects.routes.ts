@@ -1,24 +1,13 @@
-import { AppError } from "@modai/contracts/errors";
 import { parseInput, projectSchema } from "@modai/contracts/schemas";
 import type { FastifyInstance } from "fastify";
 import { identityOf } from "../../infrastructure/http/identity-hooks.js";
+import { confirmationBody, requireConfirmation, strictObject } from "../../infrastructure/http/json-schema.js";
 import type { ModuleOptions } from "../module-options.js";
 
-const deleteBody = {
-  type: "object",
-  required: ["confirmation"],
-  properties: { confirmation: { type: "string", maxLength: 200 } },
-  additionalProperties: false,
-};
-
-const updateBody = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    name: { type: "string", minLength: 1, maxLength: 200 },
-    organizationId: { type: ["string", "null"], minLength: 1, maxLength: 200 },
-  },
-};
+const updateBody = strictObject({
+  name: { type: "string", minLength: 1, maxLength: 200 },
+  organizationId: { type: ["string", "null"], minLength: 1, maxLength: 200 },
+});
 
 export async function projectsRoutes(app: FastifyInstance, { services }: ModuleOptions): Promise<void> {
   const { projects, audit } = services;
@@ -30,14 +19,13 @@ export async function projectsRoutes(app: FastifyInstance, { services }: ModuleO
   });
   app.delete<{ Params: { id: string }; Body: { confirmation: string } }>(
     "/api/v1/projects/:id",
-    { schema: { body: deleteBody } },
+    { schema: { body: confirmationBody } },
     async (request) => {
-      if (request.body.confirmation !== request.params.id)
-        throw new AppError(
-          400,
-          "CONFIRMATION_REQUIRED",
-          "Para eliminar el proyecto, confirma escribiendo su identificador",
-        );
+      requireConfirmation(
+        request.body.confirmation,
+        request.params.id,
+        "Para eliminar el proyecto, confirma escribiendo su identificador",
+      );
       const result = await projects.deleteProject(identityOf(request), request.params.id);
       await audit.fromRequest(request, "project.delete", request.params.id, {
         name: result.project.name,

@@ -2,11 +2,17 @@ import { get } from "../../../shared/lib/api.js";
 import { base64ToBytes, bytesToText, formatBytes } from "../../../shared/lib/files.js";
 import { html, mount } from "../../../shared/lib/html.js";
 import { errorState } from "../../../shared/ui/empty-state.js";
+import { dataTable, optionalColumn } from "../../../shared/ui/table.js";
 
 function filesMarkup(files) {
   if (!files.length) return html`<p class="muted small">El paquete no contiene archivos.</p>`;
-  return html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col">Archivo</th><th scope="col" class="hide-sm">Tamaño</th></tr></thead>
-          <tbody>${files.map((file) => html`<tr><td><button type="button" class="link-button" data-action="showFile" data-path="${file.path}"><code>${file.path}</code></button></td><td class="hide-sm">${formatBytes(base64ToBytes(file.content).length)}</td></tr>`)}</tbody></table></div>
+  return html`${dataTable(
+    ["Archivo", optionalColumn("Tamaño")],
+    files.map(
+      (file) =>
+        html`<tr><td><button type="button" class="link-button" data-action="showFile" data-path="${file.path}"><code>${file.path}</code></button></td><td class="hide-sm">${formatBytes(base64ToBytes(file.content).length)}</td></tr>`,
+    ),
+  )}
           <div id="fileViewer"></div>`;
 }
 

@@ -19,6 +19,11 @@ const GENERIC_TOOLS = new Set([
   "modai_profile_skill",
 ]);
 
+function removeToolsThatBypassAgentPolicy(tools: GatewayTool[]): void {
+  for (let index = tools.length - 1; index >= 0; index--)
+    if (GENERIC_TOOLS.has(tools[index].name)) tools.splice(index, 1);
+}
+
 export interface ActiveAgent {
   host?: CapabilityHost;
   instructions?: string;
@@ -37,9 +42,7 @@ export async function startActiveAgent(project: V1Project, tools: GatewayTool[])
     if (capability.kind === "mcp") servers.add(`${capability.package}:${capability.name}`);
   const host = new CapabilityHost(api, activation.bundle, { ...runtimeOptions({}, activation), cwd: project.root });
   await host.start();
-  // why: an active agent exposes only its selected capabilities, so generic memory/search cannot bypass its policy
-  for (let index = tools.length - 1; index >= 0; index--)
-    if (GENERIC_TOOLS.has(tools[index].name)) tools.splice(index, 1);
+  removeToolsThatBypassAgentPolicy(tools);
   return { host, instructions, servers };
 }
 

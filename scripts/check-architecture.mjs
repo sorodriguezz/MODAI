@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 const MAX_LINES = 250;
 const SOURCE = /^(apps|packages)\/[^/]+\/src\/.+\.(ts|js)$/;
-const DIRECTIVE = /^\s*\/\/\s*(@ts-|biome-ignore|why:)|^#!/;
+const DIRECTIVE = /^\s*\/\/\s*(@ts-|biome-ignore)|^#!/;
 
 const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { encoding: "utf8" })
   .split("\n")

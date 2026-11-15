@@ -2,16 +2,17 @@ import { can } from "../../../app/state.js";
 import { del, get, patch, post } from "../../../shared/lib/api.js";
 import { delegate, html, mount } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
-import { closeDialog, confirmDialog, openDialog } from "../../../shared/ui/dialog.js";
-import { emptyState, errorState } from "../../../shared/ui/empty-state.js";
+import { closeDialog, confirmDialog, dialogFooter, openFormDialog } from "../../../shared/ui/dialog.js";
+import { emptyState, loadOrShowError } from "../../../shared/ui/empty-state.js";
 import { bindForm } from "../../../shared/ui/form.js";
 import { debounce } from "../../../shared/ui/format.js";
 import { skeletonRows } from "../../../shared/ui/skeleton.js";
+import { actionsColumn, dataTable, optionalColumn } from "../../../shared/ui/table.js";
 import { toast } from "../../../shared/ui/toast.js";
 
 function categoryForm(category, onSaved) {
   const editing = Boolean(category?.registered);
-  const body = openDialog({
+  const { form } = openFormDialog({
     title: editing ? `Categoría ${category.name}` : "Nueva categoría",
     description:
       "Las categorías ordenan el catálogo: el panel las ofrece al crear paquetes y templates, y sirven para filtrar y para modai list <categoría>.",
@@ -19,12 +20,9 @@ function categoryForm(category, onSaved) {
     body: html`<form class="stack" novalidate>
       <div class="field"><label for="catName">Nombre</label><input id="catName" required maxlength="64" pattern="[a-z][a-z0-9\\-]{0,63}" spellcheck="false" autocapitalize="off" placeholder="backend" value="${category?.name || ""}" ${category ? "disabled" : ""}><p class="hint">En minúsculas, con guiones. No se puede renombrar: los paquetes publicados la guardan en su manifiesto.</p></div>
       <div class="field"><label for="catDescription">Descripción</label><textarea id="catDescription" rows="2" maxlength="500" placeholder="Qué tipo de paquetes van aquí.">${category?.description || ""}</textarea><p class="hint">Se muestra al elegirla en el editor.</p></div>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">${editing ? "Guardar" : "Crear categoría"}</button></div>
+      ${dialogFooter(editing ? "Guardar" : "Crear categoría")}
     </form>`,
   });
-  const form = body.querySelector("form");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   bindForm(form, async () => {
     const description = form.catDescription.value.trim();
     if (editing) await patch(`/categories/${encodeURIComponent(category.name)}`, { description });
@@ -73,9 +71,7 @@ export const categoriesView = {
       mount(
         root.querySelector("#catResults"),
         list.length
-          ? html`<div class="table-wrap"><table class="table">
-          <thead><tr><th scope="col">Categoría</th><th scope="col">Estado</th><th scope="col" class="hide-sm">Paquetes</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
-          <tbody>${list.map(categoryRow)}</tbody></table></div>`
+          ? dataTable(["Categoría", "Estado", optionalColumn("Paquetes"), actionsColumn()], list.map(categoryRow))
           : categories.length
             ? emptyState({ iconName: "search", title: "Sin coincidencias" })
             : emptyState({
@@ -88,13 +84,10 @@ export const categoriesView = {
     };
 
     const load = async () => {
-      try {
-        ({ categories } = await get("/categories"));
-      } catch (error) {
-        if (isCurrent()) mount(root.querySelector("#catResults"), errorState(error));
-        return;
-      }
-      if (isCurrent()) draw();
+      const result = await loadOrShowError(root.querySelector("#catResults"), isCurrent, () => get("/categories"));
+      if (!result) return;
+      categories = result.categories;
+      draw();
     };
     root.querySelector("#catSearch").addEventListener("input", debounce(draw));
     const find = (button) => categories.find((item) => item.name === button.dataset.name);

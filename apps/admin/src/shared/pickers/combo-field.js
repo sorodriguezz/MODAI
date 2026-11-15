@@ -61,12 +61,12 @@ export function bindComboSearch(root, id, options, { required = true } = {}) {
     input.setCustomValidity("");
     value.dispatchEvent(new Event("change", { bubbles: true }));
   };
-  // why: opens on click, not focus, because a wizard may focus its first field on entry.
-  input.addEventListener("click", () => {
+  const openOnClickSoWizardFocusKeepsItClosed = () => {
     if (!list.hidden) return;
     combo.render("");
     input.select();
-  });
+  };
+  input.addEventListener("click", openOnClickSoWizardFocusKeepsItClosed);
   input.addEventListener("input", () => {
     value.value = "";
     combo.render(input.value);

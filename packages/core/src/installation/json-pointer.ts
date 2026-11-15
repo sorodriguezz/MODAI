@@ -2,8 +2,7 @@ import { AppError } from "@modai/contracts/errors";
 import { UNSAFE_JSON_KEYS } from "@modai/contracts/manifest";
 import { sha256 } from "@modai/contracts/security";
 
-// why: checked again here even if the adapter schema already refused them, so no pointer can ever reach Object.prototype.
-function pointerKeys(pointer: string): string[] {
+function keysThatCannotReachPrototype(pointer: string): string[] {
   const keys = pointer.split(".");
   if (keys.some((key) => UNSAFE_JSON_KEYS.has(key)))
     throw new AppError(400, "UNSAFE_POINTER", `Puntero JSON no permitido: ${pointer}`);
@@ -11,7 +10,7 @@ function pointerKeys(pointer: string): string[] {
 }
 
 export function getPointer(value: unknown, pointer: string): unknown {
-  return pointerKeys(pointer).reduce<unknown>(
+  return keysThatCannotReachPrototype(pointer).reduce<unknown>(
     (node, key) =>
       node && typeof node === "object" && Object.hasOwn(node, key) ? (node as Record<string, unknown>)[key] : undefined,
     value,
@@ -19,7 +18,7 @@ export function getPointer(value: unknown, pointer: string): unknown {
 }
 
 export function setPointer(value: Record<string, unknown>, pointer: string, next: unknown): void {
-  const keys = pointerKeys(pointer);
+  const keys = keysThatCannotReachPrototype(pointer);
   let node = value;
   for (const key of keys.slice(0, -1)) {
     if (!node[key] || typeof node[key] !== "object" || Array.isArray(node[key])) node[key] = {};

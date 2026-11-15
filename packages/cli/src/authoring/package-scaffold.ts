@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { API_VERSION } from "@modai/contracts/manifest";
+import { API_VERSION, PACKAGE_DIR_PLACEHOLDER } from "@modai/contracts/manifest";
 import YAML from "yaml";
 
 export interface ScaffoldOptions {
@@ -27,8 +27,7 @@ function addTool(spec: Spec, files: Files, tool: string): void {
         description: `Describe qué hace ${tool} y qué devuelve.`,
         implements: (spec.provides as string[])[0].split("@")[0],
         command: "node",
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: placeholder the Core expands at run time
-        args: ["${packageDir}/tools/run.mjs"],
+        args: [`${PACKAGE_DIR_PLACEHOLDER}/tools/run.mjs`],
         inputSchema: {
           type: "object",
           properties: { target: { type: "string", maxLength: 500 } },

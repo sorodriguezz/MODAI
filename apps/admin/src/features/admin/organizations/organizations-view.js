@@ -2,16 +2,17 @@ import { can, store } from "../../../app/state.js";
 import { del, patch, post } from "../../../shared/lib/api.js";
 import { delegate, html, mount } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
-import { closeDialog, confirmDialog, openDialog } from "../../../shared/ui/dialog.js";
-import { emptyState, errorState } from "../../../shared/ui/empty-state.js";
+import { closeDialog, confirmDialog, dialogFooter, openFormDialog } from "../../../shared/ui/dialog.js";
+import { emptyState, loadOrShowError } from "../../../shared/ui/empty-state.js";
 import { bindForm } from "../../../shared/ui/form.js";
 import { timeTag } from "../../../shared/ui/format.js";
 import { skeletonRows } from "../../../shared/ui/skeleton.js";
+import { actionsColumn, dataTable, optionalColumn } from "../../../shared/ui/table.js";
 import { toast } from "../../../shared/ui/toast.js";
 
 function organizationForm(organization, onSaved) {
   const editing = Boolean(organization);
-  const body = openDialog({
+  const { form } = openFormDialog({
     title: editing ? `Editar ${organization.name}` : "Nueva organización",
     description:
       "Una organización agrupa proyectos (por ejemplo las de un equipo o un área) y es dueña de namespaces de paquetes.",
@@ -19,12 +20,9 @@ function organizationForm(organization, onSaved) {
     body: html`<form class="stack" novalidate>
       <div class="field"><label for="orgName">Nombre</label><input id="orgName" required maxlength="200" value="${organization?.name || ""}" placeholder="Acme Pagos"></div>
       <div class="field"><label for="orgDescription">Descripción (opcional)</label><textarea id="orgDescription" rows="3" maxlength="1000" placeholder="Qué equipo o área representa">${organization?.description || ""}</textarea></div>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">${editing ? "Guardar" : "Crear organización"}</button></div>
+      ${dialogFooter(editing ? "Guardar" : "Crear organización")}
     </form>`,
   });
-  const form = body.querySelector("form");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   bindForm(form, async () => {
     const payload = { name: form.orgName.value.trim(), description: form.orgDescription.value.trim() };
     if (editing) await patch(`/organizations/${encodeURIComponent(organization.id)}`, payload);
@@ -73,9 +71,17 @@ export const organizationsView = {
       mount(
         root.querySelector("#orgResults"),
         organizations.length
-          ? html`<div class="table-wrap"><table class="table">
-        <thead><tr><th scope="col">Organización</th><th scope="col">Proyectos</th><th scope="col">Namespaces</th><th scope="col" class="hide-sm">Miembros</th><th scope="col" class="hide-sm">Creada</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
-        <tbody>${organizations.map(organizationRow)}</tbody></table></div>`
+          ? dataTable(
+              [
+                "Organización",
+                "Proyectos",
+                "Namespaces",
+                optionalColumn("Miembros"),
+                optionalColumn("Creada"),
+                actionsColumn(),
+              ],
+              organizations.map(organizationRow),
+            )
           : emptyState({
               iconName: "layers",
               title: "Aún no hay organizaciones",
@@ -89,13 +95,11 @@ export const organizationsView = {
       );
 
     const load = async (force = false) => {
-      try {
-        organizations = await store.organizations(force);
-      } catch (error) {
-        if (isCurrent()) mount(root.querySelector("#orgResults"), errorState(error));
-        return;
-      }
-      if (!isCurrent()) return;
+      const result = await loadOrShowError(root.querySelector("#orgResults"), isCurrent, () =>
+        store.organizations(force),
+      );
+      if (!result) return;
+      organizations = result;
       drawOrganizations();
     };
     const reload = async () => {

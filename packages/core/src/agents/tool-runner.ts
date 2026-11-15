@@ -1,7 +1,12 @@
 import { spawn } from "node:child_process";
 import { isAbsolute, relative, resolve } from "node:path";
 import { AppError } from "@modai/contracts/errors";
-import type { McpServerContribution, ToolContribution } from "@modai/contracts/manifest";
+import {
+  type McpServerContribution,
+  PACKAGE_DIR_PLACEHOLDER,
+  PROJECT_DIR_PLACEHOLDER,
+  type ToolContribution,
+} from "@modai/contracts/manifest";
 import { Ajv, type ValidateFunction } from "ajv";
 import type { PackageGrant } from "../projects/project-grants.js";
 
@@ -31,7 +36,7 @@ export function resolveCommand(
   projectDir: string,
 ): { command: string; args: string[] } {
   const substitute = (value: string) =>
-    value.replaceAll("${packageDir}", packageDir).replaceAll("${projectDir}", projectDir);
+    value.replaceAll(PACKAGE_DIR_PLACEHOLDER, packageDir).replaceAll(PROJECT_DIR_PLACEHOLDER, projectDir);
   const insidePackage = (path: string) => {
     const relation = relative(packageDir, path);
     if (relation.startsWith("..") || isAbsolute(relation))
@@ -39,13 +44,13 @@ export function resolveCommand(
     return path;
   };
   let resolved = command === "node" ? process.execPath : substitute(command);
-  if (command.startsWith("./") || command.startsWith("${packageDir}"))
+  if (command.startsWith("./") || command.startsWith(PACKAGE_DIR_PLACEHOLDER))
     resolved = insidePackage(resolve(packageDir, resolved.replace(/^\.\//, "")));
   return {
     command: resolved,
     args: args.map((arg) => {
       const value = substitute(arg);
-      if (arg.startsWith("${packageDir}")) insidePackage(resolve(value));
+      if (arg.startsWith(PACKAGE_DIR_PLACEHOLDER)) insidePackage(resolve(value));
       return value;
     }),
   };

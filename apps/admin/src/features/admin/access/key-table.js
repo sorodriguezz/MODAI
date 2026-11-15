@@ -3,6 +3,7 @@ import { icon } from "../../../shared/lib/icons.js";
 import { emptyState } from "../../../shared/ui/empty-state.js";
 import { timeTag } from "../../../shared/ui/format.js";
 import { roleBadge } from "../../../shared/ui/labels.js";
+import { actionsColumn, dataTable, optionalColumn } from "../../../shared/ui/table.js";
 import { keyAccess } from "../../keys/key-wizard.js";
 
 function ownerCell(k) {
@@ -48,9 +49,10 @@ function emptyKeys(q, total) {
 
 export function keysTable(list, { q, total }) {
   if (!list.length) return emptyKeys(q, total);
-  return html`<div class="table-wrap"><table class="table">
-          <thead><tr><th scope="col">Nombre</th><th scope="col">Dueño</th><th scope="col">Rol</th><th scope="col" class="hide-sm">Accesos</th><th scope="col" class="hide-sm">Último uso</th><th scope="col">Estado</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
-          <tbody>${list.map(keyRow)}</tbody></table></div>`;
+  return dataTable(
+    ["Nombre", "Dueño", "Rol", optionalColumn("Accesos"), optionalColumn("Último uso"), "Estado", actionsColumn()],
+    list.map(keyRow),
+  );
 }
 
 export function keyMatches(k, { q, showRevoked, ownerFilter }) {

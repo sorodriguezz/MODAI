@@ -4,7 +4,7 @@ import { html } from "../../shared/lib/html.js";
 import { icon } from "../../shared/lib/icons.js";
 import { reviewList, wizard } from "../../shared/lib/wizard.js";
 import { codeBlock } from "../../shared/ui/code-block.js";
-import { closeDialog, openDialog } from "../../shared/ui/dialog.js";
+import { openDialog, openFormDialog } from "../../shared/ui/dialog.js";
 import { bindForm } from "../../shared/ui/form.js";
 import { bindGrants, grantChoices } from "../admin/users/grants.js";
 import { drawKeyRoles, keyFormBody, keyReview, saveKey } from "./key-wizard-steps.js";
@@ -22,15 +22,14 @@ export function keyRoles(ownerRole) {
 }
 
 export function showNewKey(key, extra) {
-  const body = openDialog({
+  openDialog({
     title: `API key creada: ${key.label}`,
     size: "md",
     body: html`<div class="callout tone-warning">${icon("alert")}<span>El token se muestra una sola vez. Guárdalo o entrégalo por un canal privado antes de cerrar.</span></div>
       ${codeBlock("newKeyToken", key.token, "Copiar token")}
       ${extra || html`<p class="hint">En el equipo: <code>modai server connect ${location.origin}</code> y pega el token cuando lo pida.</p>`}
-      <div class="dialog-actions"><button type="button" class="btn primary" data-close>He guardado el token</button></div>`,
+      <div class="dialog-actions"><button type="button" class="btn primary" data-dismiss>He guardado el token</button></div>`,
   });
-  body.querySelector("[data-close]").addEventListener("click", closeDialog);
 }
 
 export function keyAccess(key) {
@@ -81,15 +80,13 @@ export async function openKeyWizard({ mode, key, owner, onSaved }) {
   const owners = await loadOwners(mode, me);
   const choices = await loadChoices(mode);
   let currentOwner = owners.find((o) => o.id === (key?.ownerId || owner?.id)) || me;
-  const body = openDialog({
+  const { form } = openFormDialog({
     title: wizardTitle(mode, key),
     description:
       "Una API key conecta la CLI, tu editor (MCP) o un worker en nombre de una persona. Nunca tiene más permisos que esa persona: si a su cuenta le quitan accesos o la desactivan, la key también los pierde.",
     size: "lg",
     body: keyFormBody({ mode, key, owners, currentOwner, choices }),
   });
-  const form = body.querySelector("form");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   drawKeyRoles(form, keyRoles(currentOwner.role));
   form.querySelector("#keyOwner")?.addEventListener("change", (event) => {
     currentOwner = owners.find((o) => o.id === event.target.value) || me;

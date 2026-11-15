@@ -41,8 +41,7 @@ export const sections = [
     views: ["organizations", "namespaces", "categories", "users", "access", "audit"],
   },
 ];
-// why: agents and templates were menus before becoming type tabs of Paquetes; old links still land there.
-export const MOVED = { agents: { type: "agents" }, templates: { type: "templates" } };
+export const LEGACY_MENU_REDIRECTS = { agents: { type: "agents" }, templates: { type: "templates" } };
 export const byId = Object.fromEntries(views.map((view) => [view.id, view]));
 let current = null;
 let renderToken = 0;
@@ -61,8 +60,8 @@ export function hashParams() {
 }
 
 export async function navigate(id, { params, replace = false } = {}) {
-  if (MOVED[id]) {
-    params = { ...MOVED[id], ...params };
+  if (LEGACY_MENU_REDIRECTS[id]) {
+    params = { ...LEGACY_MENU_REDIRECTS[id], ...params };
     id = "packages";
     replace = true;
   }
@@ -132,7 +131,7 @@ export function initRouter() {
   window.addEventListener("popstate", () => {
     if ($("appShell").hidden) return;
     const id = parseHash();
-    if (MOVED[id]) navigate(id, { params: Object.fromEntries(hashParams()) });
+    if (LEGACY_MENU_REDIRECTS[id]) navigate(id, { params: Object.fromEntries(hashParams()) });
     else if (id && isVisible(byId[id])) renderView(byId[id]);
   });
   document.addEventListener("click", (event) => {

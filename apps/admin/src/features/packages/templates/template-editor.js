@@ -3,7 +3,7 @@ import { base64ToBytes } from "../../../shared/lib/files.js";
 import { html } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
 import { wizard } from "../../../shared/lib/wizard.js";
-import { closeDialog, openDialog } from "../../../shared/ui/dialog.js";
+import { dialogFooter, openDialog } from "../../../shared/ui/dialog.js";
 import { fileEditor } from "../../../shared/ui/file-editor.js";
 import { bindForm } from "../../../shared/ui/form.js";
 import { toastError } from "../../../shared/ui/toast.js";
@@ -36,8 +36,7 @@ function templateForm(ctx) {
       ${dataStep(ctx)}
       ${optionsStep(ctx)}
       ${reviewStep()}
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">${icon("package")}Publicar template</button></div>
+      ${dialogFooter(html`${icon("package")}Publicar template`)}
     </form>`;
 }
 
@@ -101,7 +100,6 @@ export async function openTemplateEditor({ base, onPublished } = {}) {
     body: templateForm(ctx),
   });
   ctx.form = body.querySelector("form");
-  ctx.form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   attachHelpers(ctx);
   ctx.editor = fileEditor(ctx.form.querySelector("#tplEditor"), editorFiles, { exclude: EXCLUDED });
   ctx.features = createTemplateFeatures(ctx);

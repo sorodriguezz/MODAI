@@ -3,10 +3,11 @@ import { get } from "../../../shared/lib/api.js";
 import { delegate, html, mount } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
 import { openDialog } from "../../../shared/ui/dialog.js";
-import { emptyState, errorState } from "../../../shared/ui/empty-state.js";
+import { emptyState, loadOrShowError } from "../../../shared/ui/empty-state.js";
 import { setBusy } from "../../../shared/ui/form.js";
 import { debounce, formatDate, timeTag } from "../../../shared/ui/format.js";
 import { skeletonRows } from "../../../shared/ui/skeleton.js";
+import { actionsColumn, dataTable, optionalColumn } from "../../../shared/ui/table.js";
 import { toast, toastError } from "../../../shared/ui/toast.js";
 import { actionLabel } from "../../dashboard/action-labels.js";
 import { pruneDialog } from "./prune-dialog.js";
@@ -41,9 +42,10 @@ function auditRow(e) {
 }
 
 function auditTable(list) {
-  return html`<div class="table-wrap"><table class="table">
-          <thead><tr><th scope="col">Cuándo</th><th scope="col">Acción</th><th scope="col">Autor</th><th scope="col" class="hide-sm">Recurso</th><th scope="col"><span class="sr-only">Detalles</span></th></tr></thead>
-          <tbody>${list.map(auditRow)}</tbody></table></div>`;
+  return dataTable(
+    ["Cuándo", "Acción", "Autor", optionalColumn("Recurso"), actionsColumn("Detalles")],
+    list.map(auditRow),
+  );
 }
 
 function showDetails(event) {
@@ -118,13 +120,13 @@ export const auditView = {
     };
     const load = async () => {
       mount(root.querySelector("#auditResults"), skeletonRows(8, 4));
-      try {
-        events = (await get(`/admin/audit?limit=${root.querySelector("#auditLimit").value}`)).events;
-      } catch (error) {
-        if (isCurrent()) mount(root.querySelector("#auditResults"), errorState(error));
-        return;
-      }
-      if (isCurrent()) draw();
+      const limit = root.querySelector("#auditLimit").value;
+      const result = await loadOrShowError(root.querySelector("#auditResults"), isCurrent, () =>
+        get(`/admin/audit?limit=${limit}`),
+      );
+      if (!result) return;
+      events = result.events;
+      draw();
     };
     root.querySelector("#auditSearch").addEventListener("input", debounce(draw));
     root.querySelector("#auditGroup").addEventListener("change", draw);

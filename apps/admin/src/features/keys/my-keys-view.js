@@ -3,10 +3,11 @@ import { del, get } from "../../shared/lib/api.js";
 import { delegate, html, mount } from "../../shared/lib/html.js";
 import { icon } from "../../shared/lib/icons.js";
 import { confirmDialog } from "../../shared/ui/dialog.js";
-import { emptyState, errorState } from "../../shared/ui/empty-state.js";
+import { emptyState, loadOrShowError } from "../../shared/ui/empty-state.js";
 import { timeTag } from "../../shared/ui/format.js";
 import { roleBadge } from "../../shared/ui/labels.js";
 import { skeletonRows } from "../../shared/ui/skeleton.js";
+import { actionsColumn, dataTable, optionalColumn } from "../../shared/ui/table.js";
 import { toast } from "../../shared/ui/toast.js";
 import { keyAccess, openKeyWizard } from "./key-wizard.js";
 
@@ -34,14 +35,15 @@ export const myKeysView = {
       mount(
         root.querySelector("#myKeys"),
         active.length
-          ? html`<div class="table-wrap"><table class="table">
-          <thead><tr><th scope="col">Nombre</th><th scope="col">Rol</th><th scope="col" class="hide-sm">Accesos</th><th scope="col" class="hide-sm">Último uso</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
-          <tbody>${active.map(
-            (
-              k,
-            ) => html`<tr><td><b>${k.label}</b><div class="muted small">Creada ${timeTag(k.createdAt)}</div></td><td>${roleBadge(k.role)}</td><td class="hide-sm">${keyAccess(k)}</td><td class="hide-sm">${timeTag(k.lastUsedAt, "Sin uso")}</td>
+          ? dataTable(
+              ["Nombre", "Rol", optionalColumn("Accesos"), optionalColumn("Último uso"), actionsColumn()],
+              active.map(
+                (
+                  k,
+                ) => html`<tr><td><b>${k.label}</b><div class="muted small">Creada ${timeTag(k.createdAt)}</div></td><td>${roleBadge(k.role)}</td><td class="hide-sm">${keyAccess(k)}</td><td class="hide-sm">${timeTag(k.lastUsedAt, "Sin uso")}</td>
             <td class="actions"><button type="button" class="btn small ghost danger-text" data-action="revoke" data-id="${k.id}">Revocar</button></td></tr>`,
-          )}</tbody></table></div>`
+              ),
+            )
           : emptyState({
               iconName: "key",
               title: "Aún no tienes API keys",
@@ -51,13 +53,10 @@ export const myKeysView = {
       );
     };
     const load = async () => {
-      try {
-        keys = (await get("/me/api-keys")).keys;
-      } catch (error) {
-        if (isCurrent()) mount(root.querySelector("#myKeys"), errorState(error));
-        return;
-      }
-      if (isCurrent()) draw();
+      const result = await loadOrShowError(root.querySelector("#myKeys"), isCurrent, () => get("/me/api-keys"));
+      if (!result) return;
+      keys = result.keys;
+      draw();
     };
     const handlers = {
       new: () => openKeyWizard({ mode: "self", onSaved: load }),

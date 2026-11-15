@@ -100,17 +100,13 @@ export function wizard(form, { validate = {}, onEnter = {}, skip = {}, start = 0
     const target = event.target.closest("[data-step-index]");
     if (target) go(Number(target.dataset.stepIndex));
   });
-  // why: capture phase runs before bindForm's submit handler, so Enter on an early step only advances.
-  form.addEventListener(
-    "submit",
-    (event) => {
-      if (current === sections.length - 1) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      go(step(current, 1));
-    },
-    true,
-  );
+  const advanceUntilLastStep = (event) => {
+    if (current === sections.length - 1) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    go(step(current, 1));
+  };
+  form.addEventListener("submit", advanceUntilLastStep, { capture: true });
   show(start);
   return {
     show,

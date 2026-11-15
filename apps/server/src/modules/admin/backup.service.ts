@@ -19,7 +19,6 @@ export class BackupService {
     return exportSnapshot(this.database, this.packages);
   }
 
-  // why: all or nothing; every repository the import touches runs on the same transaction executor.
   async import(snapshot: Snapshot): Promise<ImportResult> {
     await validateSnapshot(this.database, snapshot);
     return this.database.transaction((trx) =>

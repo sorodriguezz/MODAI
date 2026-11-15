@@ -5,7 +5,7 @@ import { html, mount, toMarkup } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
 import { qualityMarkup } from "../../../shared/lib/quality.js";
 import { reviewList, wizard } from "../../../shared/lib/wizard.js";
-import { closeDialog, closeDialogAndWait, openDialog } from "../../../shared/ui/dialog.js";
+import { closeDialogAndWait, dialogFooter, openFormDialog } from "../../../shared/ui/dialog.js";
 import { bindForm } from "../../../shared/ui/form.js";
 import { toast } from "../../../shared/ui/toast.js";
 
@@ -38,23 +38,20 @@ function skillForm(publish, namespaces) {
         </div>
       </div></section>
       <section data-step="preview" data-title="Vista previa"><div class="stack" id="skillPreview"></div></section>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">${icon("package")}Publicar skill</button></div>
+      ${dialogFooter(html`${icon("package")}Publicar skill`)}
     </form>`;
 }
 
 export async function openSkillImport({ onPublished } = {}) {
   const publish = state.permissions?.publish || { all: false, namespaces: [] };
   const namespaces = publish.all ? (await store.namespaces().catch(() => [])).map((n) => n.name) : publish.namespaces;
-  const body = openDialog({
+  const { form } = openFormDialog({
     title: "Subir skill (.skill)",
     description:
       "Un archivo .skill es un ZIP con SKILL.md (y sus referencias). Se publica como un paquete de tipo skill que cualquier proyecto puede instalar.",
     size: "lg",
     body: skillForm(publish, namespaces),
   });
-  const form = body.querySelector("form");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   let archive = "";
   const request = (dryRun) => ({
     archive,

@@ -2,6 +2,7 @@ import { get } from "../../../shared/lib/api.js";
 import { html, mount } from "../../../shared/lib/html.js";
 import { emptyState, errorState } from "../../../shared/ui/empty-state.js";
 import { timeTag } from "../../../shared/ui/format.js";
+import { dataTable, optionalColumn } from "../../../shared/ui/table.js";
 
 function projectRow(project, latest) {
   const outdated =
@@ -20,8 +21,10 @@ function usageMarkup(projects, latest) {
       title: "Ningún proyecto lo usa",
       text: "O los proyectos que lo instalan no están vinculados a este servidor con modai init --project.",
     });
-  return html`<div class="table-wrap"><table class="table"><thead><tr><th scope="col">Proyecto</th><th scope="col">Versión</th><th scope="col" class="hide-sm">Cómo</th><th scope="col" class="hide-sm">Reportado</th></tr></thead>
-            <tbody>${projects.map((project) => projectRow(project, latest))}</tbody></table></div>
+  return html`${dataTable(
+    ["Proyecto", "Versión", optionalColumn("Cómo"), optionalColumn("Reportado")],
+    projects.map((project) => projectRow(project, latest)),
+  )}
             <p class="hint">Cada proyecto vinculado a este servidor (modai init --project) informa lo que instala al sincronizar. Solo ves los proyectos a los que tienes acceso.</p>`;
 }
 

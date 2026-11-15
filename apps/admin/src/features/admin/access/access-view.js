@@ -3,7 +3,7 @@ import { del, get } from "../../../shared/lib/api.js";
 import { delegate, html, mount } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
 import { confirmDialog } from "../../../shared/ui/dialog.js";
-import { errorState } from "../../../shared/ui/empty-state.js";
+import { errorState, loadOrShowError } from "../../../shared/ui/empty-state.js";
 import { debounce } from "../../../shared/ui/format.js";
 import { skeletonRows } from "../../../shared/ui/skeleton.js";
 import { bindTabs } from "../../../shared/ui/tabs.js";
@@ -83,14 +83,11 @@ export const accessView = {
       mount(root.querySelector("#keyResults"), keysTable(list, { q, total: keys.length }));
     };
     const loadKeys = async () => {
-      try {
-        store.invalidate("organizations");
-        keys = (await get("/admin/api-keys")).keys;
-      } catch (error) {
-        if (isCurrent()) mount(root.querySelector("#keyResults"), errorState(error));
-        return;
-      }
-      if (isCurrent()) drawKeys();
+      store.invalidate("organizations");
+      const result = await loadOrShowError(root.querySelector("#keyResults"), isCurrent, () => get("/admin/api-keys"));
+      if (!result) return;
+      keys = result.keys;
+      drawKeys();
     };
     root.querySelector("#keySearch").addEventListener("input", debounce(drawKeys));
     root.querySelector("#keyShowRevoked").addEventListener("change", drawKeys);

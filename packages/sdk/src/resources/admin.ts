@@ -1,20 +1,16 @@
-import type { ApiKeyRecord, Role, UserRecord } from "../types.js";
+import type { AccessGrants, ApiKeyRecord, Role, UserRecord } from "../types.js";
 import { CategoriesApi } from "./categories.js";
+
+type GrantsInput = Partial<AccessGrants>;
 
 export class AdminApi extends CategoriesApi {
   async users(): Promise<UserRecord[]> {
     return (await this.request<{ users: UserRecord[] }>("/api/v1/admin/users")).users;
   }
 
-  async createUser(input: {
-    username: string;
-    password: string;
-    role: Role;
-    displayName?: string;
-    projectIds?: string[];
-    organizationIds?: string[];
-    packageScopes?: string[];
-  }): Promise<UserRecord> {
+  async createUser(
+    input: GrantsInput & { username: string; password: string; role: Role; displayName?: string },
+  ): Promise<UserRecord> {
     return (
       await this.request<{ user: UserRecord }>("/api/v1/admin/users", { method: "POST", body: JSON.stringify(input) })
     ).user;
@@ -22,15 +18,7 @@ export class AdminApi extends CategoriesApi {
 
   async updateUser(
     id: string,
-    input: {
-      displayName?: string;
-      role?: Role;
-      disabled?: boolean;
-      password?: string;
-      projectIds?: string[];
-      organizationIds?: string[];
-      packageScopes?: string[];
-    },
+    input: GrantsInput & { displayName?: string; role?: Role; disabled?: boolean; password?: string },
   ): Promise<UserRecord> {
     return (
       await this.request<{ user: UserRecord }>(`/api/v1/admin/users/${encodeURIComponent(id)}`, {
@@ -55,7 +43,7 @@ export class AdminApi extends CategoriesApi {
   async createApiKey(
     label: string,
     role: string,
-    grants: { projectIds?: string[]; organizationIds?: string[]; packageScopes?: string[] } = {},
+    grants: GrantsInput = {},
     options: { ownerId?: string | null; inherit?: boolean } = {},
   ): Promise<ApiKeyRecord & { token: string }> {
     return (
@@ -66,10 +54,7 @@ export class AdminApi extends CategoriesApi {
     ).key;
   }
 
-  async updateKeyGrants(
-    id: string,
-    grants: { projectIds?: string[]; organizationIds?: string[]; packageScopes?: string[] },
-  ): Promise<void> {
+  async updateKeyGrants(id: string, grants: GrantsInput): Promise<void> {
     await this.request(`/api/v1/admin/api-keys/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(grants),

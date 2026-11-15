@@ -2,21 +2,20 @@ import { invariant } from "@modai/contracts/errors";
 import { parseInput, runSchema, workerClaimSchema } from "@modai/contracts/schemas";
 import type { FastifyInstance } from "fastify";
 import { identityOf } from "../../infrastructure/http/identity-hooks.js";
+import { strictObject } from "../../infrastructure/http/json-schema.js";
 import { composeProjectAgent } from "../agents/project-agent.js";
 import type { Identity } from "../auth/identity.js";
 import type { ModuleOptions } from "../module-options.js";
 import type { Services } from "../services.js";
 
-const leaseBody = {
-  type: "object",
-  required: ["leaseToken"],
-  properties: {
+const leaseBody = strictObject(
+  {
     leaseToken: { type: "string", minLength: 1, maxLength: 200 },
     result: { type: "string", maxLength: 1_000_000 },
     error: { type: "string", maxLength: 1_000_000 },
   },
-  additionalProperties: false,
-};
+  ["leaseToken"],
+);
 
 function runRoutes(app: FastifyInstance, services: Services): void {
   const { authz, projects, runs, audit } = services;

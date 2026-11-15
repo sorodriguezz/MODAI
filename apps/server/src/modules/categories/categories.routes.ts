@@ -1,18 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { identityOf } from "../../infrastructure/http/identity-hooks.js";
+import { strictObject } from "../../infrastructure/http/json-schema.js";
 import type { ModuleOptions } from "../module-options.js";
 
-const createBody = {
-  type: "object",
-  required: ["name"],
-  additionalProperties: false,
-  properties: { name: { type: "string", maxLength: 64 }, description: { type: "string", maxLength: 500 } },
-};
-const updateBody = {
-  type: "object",
-  additionalProperties: false,
-  properties: { description: { type: "string", maxLength: 500 } },
-};
+const descriptionProperty = { type: "string", maxLength: 500 };
+const createBody = strictObject({ name: { type: "string", maxLength: 64 }, description: descriptionProperty }, [
+  "name",
+]);
+const updateBody = strictObject({ description: descriptionProperty });
 
 export async function categoriesRoutes(app: FastifyInstance, { services }: ModuleOptions): Promise<void> {
   const { authz, categories, audit } = services;

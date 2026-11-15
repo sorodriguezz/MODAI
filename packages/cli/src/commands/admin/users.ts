@@ -1,18 +1,20 @@
 import type { Role } from "@modai/sdk";
 import type { Command } from "commander";
 import { serverApi } from "../../services/connection.js";
-import { commaList } from "../../terminal/options.js";
 import type { Print } from "../../terminal/output.js";
+import { type AccessOptions, accessGrants, withAccessOptions } from "./access-options.js";
 
-type Access = { organizations?: string[]; projects?: string[]; scopes?: string[] };
-type CreateOptions = Access & { password: string; name?: string; role: Role };
-type UpdateOptions = Access & { name?: string; role?: Role; disable?: boolean; enable?: boolean; password?: string };
+type CreateOptions = AccessOptions & { password: string; name?: string; role: Role };
+type UpdateOptions = AccessOptions & {
+  name?: string;
+  role?: Role;
+  disable?: boolean;
+  enable?: boolean;
+  password?: string;
+};
 
-const withAccess = (command: Command) =>
-  command
-    .option("--organizations <ids>", "Organizaciones", commaList)
-    .option("--projects <ids>", "Proyectos", commaList)
-    .option("--scopes <namespaces>", "Namespaces", commaList);
+const disabledChange = ({ disable, enable }: UpdateOptions) =>
+  disable ? { disabled: true } : enable ? { disabled: false } : {};
 
 export function registerAdminUsers(admin: Command, print: Print): void {
   admin
@@ -34,7 +36,7 @@ export function registerAdminUsers(admin: Command, print: Print): void {
 }
 
 export function registerAdminCreateUser(admin: Command, print: Print): void {
-  withAccess(
+  withAccessOptions(
     admin
       .command("create-user")
       .description("Crea un usuario del panel")
@@ -48,16 +50,14 @@ export function registerAdminCreateUser(admin: Command, print: Print): void {
       password: options.password,
       displayName: options.name,
       role: options.role,
-      organizationIds: options.organizations,
-      projectIds: options.projects,
-      packageScopes: options.scopes,
+      ...accessGrants(options),
     });
     print(`Usuario creado: ${user.username} (${user.role}, id ${user.id})`);
   });
 }
 
 export function registerAdminUpdateUser(admin: Command, print: Print): void {
-  withAccess(
+  withAccessOptions(
     admin
       .command("update-user")
       .description("Cambia rol, accesos o estado de un usuario (las listas reemplazan las actuales)")
@@ -72,11 +72,9 @@ export function registerAdminUpdateUser(admin: Command, print: Print): void {
       const user = await serverApi().updateUser(id, {
         displayName: options.name,
         role: options.role,
-        organizationIds: options.organizations,
-        projectIds: options.projects,
-        packageScopes: options.scopes,
         password: options.password,
-        ...(options.disable ? { disabled: true } : options.enable ? { disabled: false } : {}),
+        ...accessGrants(options),
+        ...disabledChange(options),
       });
       print(`Usuario actualizado: ${user.username} (${user.role}${user.disabledAt ? ", desactivado" : ""})`);
     });

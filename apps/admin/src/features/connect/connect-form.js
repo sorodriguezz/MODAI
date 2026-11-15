@@ -2,6 +2,7 @@ import { can, state } from "../../app/state.js";
 import { html, mount } from "../../shared/lib/html.js";
 import { icon } from "../../shared/lib/icons.js";
 import { codeBlock } from "../../shared/ui/code-block.js";
+import { dialogFooter } from "../../shared/ui/dialog.js";
 import { commandLines, EDITORS, GOALS, mcpHint, mcpSnippet } from "./connect-commands.js";
 
 const goalStep =
@@ -33,8 +34,7 @@ export const connectLayout = () => html`
             <p class="hint">Tu asistente verá el conocimiento, la memoria, las herramientas autorizadas y el agente activo (<code>modai://agent/active</code>).</p></div>
         </div></section>
         <section data-step="verify" data-title="Verificar"><div class="stack" id="verifyStep"></div></section>
-        <div class="form-error" role="alert" hidden></div>
-        <div class="dialog-actions"><button type="submit" class="btn primary">${icon("check")}Terminar</button></div>
+        ${dialogFooter(html`${icon("check")}Terminar`, { cancel: false })}
       </form>`;
 
 export function addressNote($) {

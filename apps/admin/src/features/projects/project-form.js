@@ -1,7 +1,7 @@
 import { can, store } from "../../app/state.js";
 import { patch, post } from "../../shared/lib/api.js";
 import { html } from "../../shared/lib/html.js";
-import { closeDialog, openDialog } from "../../shared/ui/dialog.js";
+import { closeDialog, dialogFooter, openFormDialog } from "../../shared/ui/dialog.js";
 import { bindForm } from "../../shared/ui/form.js";
 import { toast } from "../../shared/ui/toast.js";
 
@@ -43,7 +43,7 @@ export async function projectForm(project, onSaved) {
   const editing = Boolean(project);
   const organizations = await projectOrganizations();
   const required = !can.admin() && can.manage();
-  const body = openDialog({
+  const { form } = openFormDialog({
     title: editing ? `Editar ${project.name}` : "Nuevo proyecto",
     description:
       "Un proyecto es un sistema o repositorio (por ejemplo una API, una app web o una app móvil): agrupa su memoria, sus ejecuciones y los paquetes que instala.",
@@ -54,12 +54,9 @@ export async function projectForm(project, onSaved) {
       <div class="field"><label for="projectOrg">Organización</label>
         ${organizationSelect(project, organizations, required)}
         <p class="hint">Los proyectos de una organización comparten su memoria de organización y los administra quien administre la organización.</p></div>
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">${editing ? "Guardar" : "Crear proyecto"}</button></div>
+      ${dialogFooter(editing ? "Guardar" : "Crear proyecto")}
     </form>`,
   });
-  const form = body.querySelector("form");
-  form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   bindForm(form, async () => {
     const saved = await saveProject(form, project);
     closeDialog();

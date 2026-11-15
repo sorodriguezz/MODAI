@@ -4,7 +4,7 @@ import { delegate, html, mount } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
 import { describeManifest } from "../../../shared/lib/manifest.js";
 import { codeBlock } from "../../../shared/ui/code-block.js";
-import { closeDialog, openDialog } from "../../../shared/ui/dialog.js";
+import { closeDialog, dialogFooter, openDialog } from "../../../shared/ui/dialog.js";
 import { bindForm, setBusy } from "../../../shared/ui/form.js";
 import { toast, toastError } from "../../../shared/ui/toast.js";
 
@@ -34,8 +34,7 @@ function taskForm() {
     return html`<p class="hint">Tu rol no permite enviar tareas; solicita el rol de publicación.</p>`;
   return html`<form id="taskForm" class="stack" novalidate>
           <div class="field"><label for="agentTask">Tarea para el worker del proyecto</label><textarea id="agentTask" rows="4" required maxlength="50000" placeholder="Describe qué debe hacer el agente…"></textarea><p class="hint">La tarea queda en cola hasta que un worker autorizado la reclame.</p></div>
-          <div class="form-error" role="alert" hidden></div>
-          <div class="dialog-actions"><button type="submit" class="btn primary">${icon("play")}Enviar tarea</button></div>
+          ${dialogFooter(html`${icon("play")}Enviar tarea`, { cancel: false })}
         </form>`;
 }
 

@@ -10,8 +10,7 @@ export interface ColumnTypes {
   blob: ColumnType;
 }
 
-// why: every engine compares and sorts text byte-wise like SQLite, so lookups and ordering stay identical.
-const COLLATION: Record<Exclude<DialectName, "sqlite">, string> = {
+const SQLITE_BYTEWISE_COLLATION: Record<Exclude<DialectName, "sqlite">, string> = {
   postgres: 'collate "C"',
   mysql: "collate utf8mb4_bin",
   mssql: "collate Latin1_General_100_BIN2_UTF8",
@@ -19,7 +18,7 @@ const COLLATION: Record<Exclude<DialectName, "sqlite">, string> = {
 
 export function columnTypes(dialect: DialectName): ColumnTypes {
   if (dialect === "sqlite") return { text: "text", key: () => "text", integer: "integer", blob: "blob" };
-  const collation = COLLATION[dialect];
+  const collation = SQLITE_BYTEWISE_COLLATION[dialect];
   if (dialect === "postgres") {
     const text = sql.raw(`text ${collation}`);
     return { text, key: () => text, integer: "integer", blob: sql.raw("bytea") };

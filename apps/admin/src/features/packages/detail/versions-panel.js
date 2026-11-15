@@ -5,6 +5,7 @@ import { icon } from "../../../shared/lib/icons.js";
 import { confirmDialog, promptDialog } from "../../../shared/ui/dialog.js";
 import { timeTag } from "../../../shared/ui/format.js";
 import { statusBadge } from "../../../shared/ui/labels.js";
+import { actionsColumn, dataTable, optionalColumn } from "../../../shared/ui/table.js";
 
 function removeButton(item) {
   if (item.status !== "yanked")
@@ -32,9 +33,11 @@ function versionRow(item, manage) {
 
 export function versionsPanel(versions) {
   const manage = can.managePackages(versions[0]?.name);
-  return html`<div class="table-wrap"><table class="table">
-    <thead><tr><th scope="col">Versión</th><th scope="col">Estado</th><th scope="col" class="hide-sm">Publicada</th>${manage ? html`<th scope="col"><span class="sr-only">Acciones</span></th>` : ""}</tr></thead>
-    <tbody>${versions.map((item) => versionRow(item, manage))}</tbody></table></div>
+  const columns = ["Versión", "Estado", optionalColumn("Publicada"), manage && actionsColumn()];
+  return html`${dataTable(
+    columns,
+    versions.map((item) => versionRow(item, manage)),
+  )}
     ${manage ? html`<p class="hint">Deprecar avisa a quien instale la versión. Retirar (yank) impide nuevas resoluciones. Solo una versión retirada puede eliminarse definitivamente.</p>` : ""}`;
 }
 

@@ -6,7 +6,7 @@ import { icon } from "../../../shared/lib/icons.js";
 import { bindVersionCheck } from "../../../shared/lib/versions.js";
 import { wizard } from "../../../shared/lib/wizard.js";
 import { bindNamespaceSearch } from "../../../shared/pickers/namespace-field.js";
-import { closeDialog, openDialog } from "../../../shared/ui/dialog.js";
+import { dialogFooter, openDialog } from "../../../shared/ui/dialog.js";
 import { toastError } from "../../../shared/ui/toast.js";
 import { applyKind, createDependencies, dependenciesStep, validateDependencies } from "./dependencies-step.js";
 import { currentManifest, loadStarter, readForm, syncManifest, untouchedStarter } from "./editor-state.js";
@@ -66,8 +66,7 @@ function editorForm(ctx) {
       ${optionsStep(ctx)}
       ${dependenciesStep()}
       ${reviewStep(ctx)}
-      <div class="form-error" role="alert" hidden></div>
-      <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn primary">${icon("package")}Publicar</button></div>
+      ${dialogFooter(html`${icon("package")}Publicar`)}
     </form>`;
 }
 
@@ -183,7 +182,6 @@ export async function openPackageEditor({ base, template = "component", onPublis
   bindTypeStep(ctx);
   bindFormInput(ctx);
   bindUploads(ctx);
-  ctx.form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
   delegate(ctx.form, {
     ...fileActions(ctx),
     regenerate: () => {

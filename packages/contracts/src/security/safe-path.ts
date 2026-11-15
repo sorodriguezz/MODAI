@@ -19,12 +19,16 @@ export function assertSafeRelativePath(value: string, label = "path"): void {
   }
 }
 
+const FIRST_PRINTABLE_CODE = 0x20;
+
+const hasColonOrControlCharacter = (segment: string) =>
+  [...segment].some((char) => char === ":" || char.charCodeAt(0) < FIRST_PRINTABLE_CODE);
+
 export function isReservedPathSegment(segment: string): boolean {
   return (
     !segment ||
     segment === "." ||
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are exactly what this rejects
-    /[:\x00-\x1f]/.test(segment) ||
+    hasColonOrControlCharacter(segment) ||
     /[. ]$/.test(segment) ||
     BLOCKED_SEGMENTS.has(segment.toLowerCase()) ||
     /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment)

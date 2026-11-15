@@ -1,11 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { identityOf } from "../../infrastructure/http/identity-hooks.js";
+import { strictObject } from "../../infrastructure/http/json-schema.js";
 import type { ModuleOptions } from "../module-options.js";
 import type { NamespaceOwner, NamespaceVisibility } from "./namespaces.service.js";
 
 type NamespaceBody = NamespaceOwner & { description?: string; visibility?: NamespaceVisibility };
 
-const namespaceBody = {
+const namespaceProperties = {
   organizationId: { type: ["string", "null"], minLength: 1, maxLength: 200 },
   ownerUserId: { type: ["string", "null"], minLength: 1, maxLength: 200 },
   description: { type: "string", maxLength: 1000 },
@@ -21,12 +22,7 @@ export async function namespacesRoutes(app: FastifyInstance, { services }: Modul
     "/api/v1/namespaces",
     {
       schema: {
-        body: {
-          type: "object",
-          required: ["name"],
-          additionalProperties: false,
-          properties: { name: { type: "string", minLength: 2, maxLength: 65 }, ...namespaceBody },
-        },
+        body: strictObject({ name: { type: "string", minLength: 2, maxLength: 65 }, ...namespaceProperties }, ["name"]),
       },
     },
     async (request, reply) => {
@@ -42,15 +38,11 @@ export async function namespacesRoutes(app: FastifyInstance, { services }: Modul
   app.patch<{
     Params: { name: string };
     Body: NamespaceBody;
-  }>(
-    "/api/v1/namespaces/:name",
-    { schema: { body: { type: "object", additionalProperties: false, properties: namespaceBody } } },
-    async (request) => {
-      const namespace = await namespaces.updateNamespace(identityOf(request), request.params.name, request.body ?? {});
-      await audit.fromRequest(request, "namespace.update", namespace.name, request.body);
-      return { namespace };
-    },
-  );
+  }>("/api/v1/namespaces/:name", { schema: { body: strictObject(namespaceProperties) } }, async (request) => {
+    const namespace = await namespaces.updateNamespace(identityOf(request), request.params.name, request.body ?? {});
+    await audit.fromRequest(request, "namespace.update", namespace.name, request.body);
+    return { namespace };
+  });
   app.delete<{ Params: { name: string } }>("/api/v1/namespaces/:name", async (request, reply) => {
     const namespace = await namespaces.deleteNamespace(identityOf(request), request.params.name);
     await audit.fromRequest(request, "namespace.delete", namespace.name);

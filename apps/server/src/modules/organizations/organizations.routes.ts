@@ -1,22 +1,11 @@
-import { AppError } from "@modai/contracts/errors";
 import type { FastifyInstance } from "fastify";
 import { identityOf } from "../../infrastructure/http/identity-hooks.js";
+import { confirmationBody, requireConfirmation, strictObject } from "../../infrastructure/http/json-schema.js";
 import type { ModuleOptions } from "../module-options.js";
 
-const organizationBody = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    name: { type: "string", minLength: 1, maxLength: 200 },
-    description: { type: "string", maxLength: 1000 },
-  },
-};
-
-const confirmationBody = {
-  type: "object",
-  required: ["confirmation"],
-  properties: { confirmation: { type: "string", maxLength: 200 } },
-  additionalProperties: false,
+const organizationProperties = {
+  name: { type: "string", minLength: 1, maxLength: 200 },
+  description: { type: "string", maxLength: 1000 },
 };
 
 export async function organizationsRoutes(app: FastifyInstance, { services }: ModuleOptions): Promise<void> {
@@ -26,7 +15,7 @@ export async function organizationsRoutes(app: FastifyInstance, { services }: Mo
   }));
   app.post<{ Body: { name: string; description?: string } }>(
     "/api/v1/organizations",
-    { schema: { body: { ...organizationBody, required: ["name"] } } },
+    { schema: { body: strictObject(organizationProperties, ["name"]) } },
     async (request, reply) => {
       const organization = await organizations.createOrganization(identityOf(request), request.body);
       await audit.fromRequest(request, "organization.create", organization.id, { name: organization.name });
@@ -35,7 +24,7 @@ export async function organizationsRoutes(app: FastifyInstance, { services }: Mo
   );
   app.patch<{ Params: { id: string }; Body: { name?: string; description?: string } }>(
     "/api/v1/organizations/:id",
-    { schema: { body: organizationBody } },
+    { schema: { body: strictObject(organizationProperties) } },
     async (request) => {
       const organization = await organizations.updateOrganization(
         identityOf(request),
@@ -51,12 +40,11 @@ export async function organizationsRoutes(app: FastifyInstance, { services }: Mo
     { schema: { body: confirmationBody } },
     async (request, reply) => {
       const current = await organizations.getOrganization(identityOf(request), request.params.id);
-      if (request.body.confirmation !== current.name)
-        throw new AppError(
-          400,
-          "CONFIRMATION_REQUIRED",
-          "Para eliminar la organización, confirma escribiendo su nombre",
-        );
+      requireConfirmation(
+        request.body.confirmation,
+        current.name,
+        "Para eliminar la organización, confirma escribiendo su nombre",
+      );
       await organizations.deleteOrganization(identityOf(request), request.params.id);
       await audit.fromRequest(request, "organization.delete", current.id, { name: current.name });
       return reply.code(204).send();

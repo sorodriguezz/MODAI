@@ -29,6 +29,18 @@ export function openDialog({ title, description, body, size = "md", onClose } = 
   return container;
 }
 
+export function openFormDialog(options) {
+  const body = openDialog(options);
+  return { body, form: body.querySelector("form") };
+}
+
+export function dialogFooter(submitLabel, { tone = "primary", disabled = false, cancel = true } = {}) {
+  const cancelButton = cancel ? html`<button type="button" class="btn ghost" data-dismiss>Cancelar</button>` : "";
+  const submitClass = ["btn", tone].filter(Boolean).join(" ");
+  return html`<div class="form-error" role="alert" hidden></div>
+      <div class="dialog-actions">${cancelButton}<button type="submit" class="${submitClass}" ${disabled ? "disabled" : ""}>${submitLabel}</button></div>`;
+}
+
 export function closeDialog() {
   const dialog = $("dialog");
   if (dialog.open) dialog.close();
@@ -46,8 +58,11 @@ export function closeDialogAndWait() {
 export function initDialog() {
   const dialog = $("dialog");
   dialog.querySelector(".dialog-close").addEventListener("click", closeDialog);
-  // why: a modal only closes from its own buttons, so Escape or a backdrop click never discards what was typed.
-  dialog.addEventListener("cancel", (event) => event.preventDefault());
+  dialog.addEventListener("click", (event) => {
+    if (event.target.closest("[data-dismiss]")) closeDialog();
+  });
+  const keepTypedInputOnEscape = (event) => event.preventDefault();
+  dialog.addEventListener("cancel", keepTypedInputOnEscape);
 }
 
 const typedField = (typed) =>
@@ -55,26 +70,22 @@ const typedField = (typed) =>
     ? html`<div class="field"><label for="confirmTyped">Escribe <code>${typed}</code> para confirmar</label><input id="confirmTyped" autocomplete="off" spellcheck="false" required></div>`
     : "";
 
+const tone = (danger) => (danger ? "danger" : "primary");
+
 export function confirmDialog({ title, message, confirmLabel = "Confirmar", danger = true, typed, action }) {
   return new Promise((resolve) => {
     let done = false;
-    const body = openDialog({
+    const { form } = openFormDialog({
       title,
       size: "sm",
       onClose: () => !done && resolve(false),
       body: html`<form class="stack" novalidate>
         <p class="dialog-message">${message}</p>
         ${typedField(typed)}
-        <div class="form-error" role="alert" hidden></div>
-        <div class="dialog-actions">
-          <button type="button" class="btn ghost" data-dismiss>Cancelar</button>
-          <button type="submit" class="btn ${danger ? "danger" : "primary"}" ${typed ? "disabled" : ""}>${confirmLabel}</button>
-        </div>
+        ${dialogFooter(confirmLabel, { tone: tone(danger), disabled: Boolean(typed) })}
       </form>`,
     });
-    const form = body.querySelector("form");
     const submitButton = form.querySelector('button[type="submit"]');
-    form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
     if (typed) {
       const input = form.querySelector("#confirmTyped");
       input.addEventListener("input", () => {
@@ -110,7 +121,7 @@ export function promptDialog({
 }) {
   return new Promise((resolve) => {
     let done = false;
-    const body = openDialog({
+    const { form } = openFormDialog({
       title,
       size: "sm",
       onClose: () => !done && resolve(null),
@@ -119,12 +130,9 @@ export function promptDialog({
         <div class="field"><label for="promptValue">${label}</label>
           ${promptInput({ multiline, placeholder, value, required })}
         </div>
-        <div class="form-error" role="alert" hidden></div>
-        <div class="dialog-actions"><button type="button" class="btn ghost" data-dismiss>Cancelar</button><button type="submit" class="btn ${danger ? "danger" : "primary"}">${confirmLabel}</button></div>
+        ${dialogFooter(confirmLabel, { tone: tone(danger) })}
       </form>`,
     });
-    const form = body.querySelector("form");
-    form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
     bindForm(form, async () => {
       const result = form.querySelector("#promptValue").value.trim();
       if (required && !result) throw new Error("Este campo es obligatorio.");

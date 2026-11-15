@@ -3,6 +3,7 @@ import { html } from "../../../shared/lib/html.js";
 import { icon } from "../../../shared/lib/icons.js";
 import { timeTag } from "../../../shared/ui/format.js";
 import { initials, roleBadge } from "../../../shared/ui/labels.js";
+import { actionsColumn, dataTable, optionalColumn } from "../../../shared/ui/table.js";
 
 const LAST_ADMIN = "Debe quedar al menos un administrador activo";
 
@@ -46,9 +47,18 @@ function userRow(u, { orgNames, activeAdmins }) {
 }
 
 export function usersTable(list, context) {
-  return html`<div class="table-wrap"><table class="table">
-          <thead><tr><th scope="col">Usuario</th><th scope="col">Rol</th><th scope="col" class="hide-sm">Organizaciones</th><th scope="col" class="hide-sm">Proyectos</th><th scope="col" class="hide-sm">Último acceso</th><th scope="col">Estado</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
-          <tbody>${list.map((u) => userRow(u, context))}</tbody></table></div>`;
+  return dataTable(
+    [
+      "Usuario",
+      "Rol",
+      optionalColumn("Organizaciones"),
+      optionalColumn("Proyectos"),
+      optionalColumn("Último acceso"),
+      "Estado",
+      actionsColumn(),
+    ],
+    list.map((u) => userRow(u, context)),
+  );
 }
 
 export function matchesFilters(u, { q, roleFilter, status }) {
