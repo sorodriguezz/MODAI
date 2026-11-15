@@ -449,7 +449,7 @@ test("bloquea el usuario tras varios intentos fallidos", async () => {
           method: "POST",
           url: "/api/v1/auth/login",
           headers: csrf,
-          payload: { username: "bloqueo", password: "incorrecta-" + i },
+          payload: { username: "bloqueo", password: `incorrecta-${i}` },
         })
       ).statusCode,
       401,

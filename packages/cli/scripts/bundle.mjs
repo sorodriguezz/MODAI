@@ -31,7 +31,7 @@ await build({
     "@modai/core": resolve(root, "../core/src/index.ts"),
     ...Object.fromEntries(
       globSync("**/*.ts", { cwd: resolve(root, "../core/src") }).map((file) => [
-        "@modai/core/" + file.replaceAll("\\", "/").replace(/\.ts$/, ""),
+        `@modai/core/${file.replaceAll("\\", "/").replace(/\.ts$/, "")}`,
         resolve(root, "../core/src", file),
       ]),
     ),
@@ -57,8 +57,8 @@ for (const file of globSync("dist/**/*.d.ts", { cwd: root })) {
     ["@modai/sdk", "sdk/index.js"],
   ]) {
     let destination = relative(dirname(declaration), resolve(root, "dist/internal", target)).replaceAll("\\", "/");
-    if (!destination.startsWith(".")) destination = "./" + destination;
-    content = content.replaceAll('"' + name + '"', '"' + destination + '"');
+    if (!destination.startsWith(".")) destination = `./${destination}`;
+    content = content.replaceAll(`"${name}"`, `"${destination}"`);
   }
   writeFileSync(declaration, content);
 }

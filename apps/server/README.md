@@ -70,8 +70,8 @@ Los clientes usan la dirección pública (`MODAI_PUBLIC_URL`), no `localhost` ni
 | ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `MODAI_API_TOKEN`                              | —                                        | Token de instalación y credencial `admin` de recuperación. Obligatorio con Docker Compose; el servidor necesita este token o un administrador sembrado. |
 | `MODAI_ADMIN_USERNAME`, `MODAI_ADMIN_PASSWORD` | —                                        | Crean el primer administrador al arrancar, solo si todavía no hay usuarios. Una contraseña que no cumple la política impide arrancar.                   |
-| `MODAI_MFA_KEY`                                 | `.mfa-key` en `MODAI_ARTIFACT_DIR`       | Clave de 32 bytes en base64url sin relleno para cifrar TOTP. Las réplicas que comparten base de datos necesitan la misma clave.                         |
-| `MODAI_RATE_LIMIT`                              | `600`                                    | Límite HTTP general por IP y minuto. El inicio de sesión y los cambios de credenciales tienen su propio límite.                                       |
+| `MODAI_MFA_KEY`                                | `.mfa-key` en `MODAI_ARTIFACT_DIR`       | Clave de 32 bytes en base64url sin relleno para cifrar TOTP. Las réplicas que comparten base de datos necesitan la misma clave.                         |
+| `MODAI_RATE_LIMIT`                             | `600`                                    | Límite HTTP general por IP y minuto. El inicio de sesión y los cambios de credenciales tienen su propio límite.                                         |
 | `MODAI_PORT` (o `PORT`)                        | `8787`                                   | Puerto HTTP.                                                                                                                                            |
 | `MODAI_HOST`                                   | `0.0.0.0`                                | Interfaz de escucha del proceso. Con Compose, la IP publicada se fija con `MODAI_BIND_IP` (por defecto `127.0.0.1`).                                    |
 | `MODAI_PUBLIC_URL`                             | —                                        | Origen HTTP(S) sin ruta que el panel muestra a los clientes y que aparece en `/health`. Con `https://` la cookie de sesión se marca `Secure`.           |
@@ -179,22 +179,22 @@ curl -X POST http://localhost:8787/api/v1/resolve \
 
 ### Sesión y usuarios
 
-| Método          | Ruta                           | Uso                                                                                                        |
-| --------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| GET             | `/api/v1/auth/status`          | `setupRequired`, identidad, `permissions` y política de contraseña                                         |
-| POST            | `/api/v1/auth/setup`           | Primer administrador `{ bootstrapToken, username, displayName?, password }`                                |
-| POST            | `/api/v1/auth/login`, `logout` | Iniciar o cerrar sesión. Con MFA, reenvía `{ username, password, code }` tras recibir `401 MFA_REQUIRED`    |
-| GET             | `/api/v1/auth/mfa`             | Estado de MFA y cantidad de códigos de recuperación disponibles                                           |
-| POST            | `/api/v1/auth/mfa/setup`, `confirm` | Iniciar con `{ currentPassword }` y activar con `{ setupToken, code }`                                 |
-| POST            | `/api/v1/auth/mfa/recovery`, `disable` | Renovar códigos o desactivar con `{ currentPassword, code }`                                      |
-| GET             | `/api/v1/auth/me`              | Identidad actual                                                                                           |
-| POST            | `/api/v1/auth/password`        | `{ currentPassword, newPassword }`                                                                         |
-| GET             | `/api/v1/session`              | Identidad, rol, grants y `permissions` de la conexión                                                      |
-| GET/POST        | `/api/v1/admin/users`          | Listar / crear `{ username, displayName?, password, role, projectIds?, organizationIds?, packageScopes? }` |
-| PATCH/DELETE    | `/api/v1/admin/users/:id`      | Editar rol, accesos, `disabled` o `password` / eliminar                                                    |
-| GET/POST/DELETE | `/api/v1/me/api-keys[/:id]`    | Tus API keys; crear solo con sesión del panel                                                              |
-| GET/POST        | `/api/v1/admin/api-keys`       | Keys de quienes administras (`?ownerId=`); crear a nombre de alguien (`ownerId: null` = servicio)          |
-| PATCH/DELETE    | `/api/v1/admin/api-keys/:id`   | Ajustar dueño y accesos / revocar                                                                          |
+| Método          | Ruta                                   | Uso                                                                                                        |
+| --------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| GET             | `/api/v1/auth/status`                  | `setupRequired`, identidad, `permissions` y política de contraseña                                         |
+| POST            | `/api/v1/auth/setup`                   | Primer administrador `{ bootstrapToken, username, displayName?, password }`                                |
+| POST            | `/api/v1/auth/login`, `logout`         | Iniciar o cerrar sesión. Con MFA, reenvía `{ username, password, code }` tras recibir `401 MFA_REQUIRED`   |
+| GET             | `/api/v1/auth/mfa`                     | Estado de MFA y cantidad de códigos de recuperación disponibles                                            |
+| POST            | `/api/v1/auth/mfa/setup`, `confirm`    | Iniciar con `{ currentPassword }` y activar con `{ setupToken, code }`                                     |
+| POST            | `/api/v1/auth/mfa/recovery`, `disable` | Renovar códigos o desactivar con `{ currentPassword, code }`                                               |
+| GET             | `/api/v1/auth/me`                      | Identidad actual                                                                                           |
+| POST            | `/api/v1/auth/password`                | `{ currentPassword, newPassword }`                                                                         |
+| GET             | `/api/v1/session`                      | Identidad, rol, grants y `permissions` de la conexión                                                      |
+| GET/POST        | `/api/v1/admin/users`                  | Listar / crear `{ username, displayName?, password, role, projectIds?, organizationIds?, packageScopes? }` |
+| PATCH/DELETE    | `/api/v1/admin/users/:id`              | Editar rol, accesos, `disabled` o `password` / eliminar                                                    |
+| GET/POST/DELETE | `/api/v1/me/api-keys[/:id]`            | Tus API keys; crear solo con sesión del panel                                                              |
+| GET/POST        | `/api/v1/admin/api-keys`               | Keys de quienes administras (`?ownerId=`); crear a nombre de alguien (`ownerId: null` = servicio)          |
+| PATCH/DELETE    | `/api/v1/admin/api-keys/:id`           | Ajustar dueño y accesos / revocar                                                                          |
 
 ### Organizaciones, namespaces y proyectos
 

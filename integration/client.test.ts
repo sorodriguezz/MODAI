@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { ApiClient } from "@modai/sdk";
 import { createApp } from "../apps/server/src/app.js";
-import { createNamespaces, exampleNamespaces } from "../apps/server/test/support/namespaces.js";
+import { createNamespaces } from "../apps/server/test/support/namespaces.js";
 import { testDatabase } from "../apps/server/test/support/test-database.js";
 import {
   chunkText,

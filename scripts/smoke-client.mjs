@@ -103,7 +103,7 @@ try {
     env: { ...env, MODAI_API_TOKEN: undefined },
     timeout: 30000,
   });
-  login.child.stdin.end(clientToken + "\n");
+  login.child.stdin.end(`${clientToken}\n`);
   assert.match((await login).stdout, /Laptop A/);
   await call(["init", "--project", shared.id]);
   assert.equal(JSON.parse(await call(["--json", "server", "whoami"])).label, "Laptop A");

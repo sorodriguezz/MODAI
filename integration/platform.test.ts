@@ -7,7 +7,6 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { publicKeyFingerprint, sha256, signaturePayload } from "@modai/contracts/security";
 import type { PackageManifest, PublishPackageInput } from "@modai/contracts/types";
@@ -733,7 +732,7 @@ test("rechaza herramientas ausentes, políticas de memoria incompatibles y colis
     await f.api.publish(input("@lib/empty"));
     await f.api.publish(input("@agents/lost", { dependencies: { "@lib/empty": "*" }, ...agent("lost", ["missing"]) }));
     await assert.rejects(() => f.api.composeAgent("p", "@agents/lost"), /CAPABILITY_NOT_FOUND/);
-    const server = (name: string) => ({
+    const server = (_name: string) => ({
       permissions: ["mcp.connect"],
       contributes: { mcpServers: [{ name: "echo", description: "Echo", command: "node", args: ["-e", "0"] }] },
     });

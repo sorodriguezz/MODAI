@@ -225,11 +225,11 @@ test("crea un template desde cero en el editor del panel y publica una versión 
   await expect(dialog.getByRole("heading", { name: "@ui-plantillas/desde-cero" })).toBeVisible();
   const latest = (
     await (
-      await request.get("/api/v1/package?name=" + encodeURIComponent("@ui-plantillas/desde-cero"), { headers: auth })
+      await request.get(`/api/v1/package?name=${encodeURIComponent("@ui-plantillas/desde-cero")}`, { headers: auth })
     ).json()
   ).package;
   expect(latest.version).toBe("1.0.1");
-  const files = (await (await request.get("/api/v1/artifacts/" + latest.artifactId, { headers: auth })).json()).files;
+  const files = (await (await request.get(`/api/v1/artifacts/${latest.artifactId}`, { headers: auth })).json()).files;
   const readme = files.find((f: { path: string }) => f.path === "README.md");
   expect(Buffer.from(readme.content, "base64").toString()).toContain("Versión 2");
 });
@@ -375,7 +375,7 @@ test("las opciones (flags) se crean en el editor: un template con --sdd y un com
   await dialog.locator('[data-feature="sdd"]').check();
   await expect(dialog.locator("#tplUseCommand")).toContainText("--sdd");
   const info = await (
-    await request.get("/api/v1/packages/template?name=" + encodeURIComponent("@ui-plantillas/con-flags"), {
+    await request.get(`/api/v1/packages/template?name=${encodeURIComponent("@ui-plantillas/con-flags")}`, {
       headers: auth,
     })
   ).json();

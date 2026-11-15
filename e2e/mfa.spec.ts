@@ -28,7 +28,7 @@ test("un usuario activa MFA, entra con un código de recuperación y lo desactiv
   await dialog.getByRole("button", { name: "Configurar verificación" }).click();
   await dialog.getByLabel("Contraseña actual", { exact: true }).fill(password);
   await dialog.getByRole("button", { name: "Continuar" }).click();
-  const secret = (await dialog.locator("#mfaSetupSecret").innerText()).trim();
+  const secret = (await dialog.locator("#mfaSetupSecret").textContent()).trim();
   expect(secret).toMatch(/^[A-Z2-7]{32}$/);
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   const bits = [...secret].map((char) => alphabet.indexOf(char).toString(2).padStart(5, "0")).join("");
@@ -36,7 +36,7 @@ test("un usuario activa MFA, entra con un código de recuperación y lo desactiv
   await dialog.getByLabel("Código de la aplicación").fill(totp(key, Math.floor(Date.now() / 30_000)));
   await dialog.getByRole("button", { name: "Activar verificación" }).click();
   await expect(dialog.getByRole("heading", { name: "Guarda tus códigos de recuperación" })).toBeVisible();
-  const codes = (await dialog.locator("#mfaRecoveryCodes").innerText()).trim().split("\n");
+  const codes = (await dialog.locator("#mfaRecoveryCodes").textContent()).trim().split("\n");
   expect(codes).toHaveLength(10);
   await dialog.getByRole("button", { name: "He guardado los códigos" }).click();
   await account();

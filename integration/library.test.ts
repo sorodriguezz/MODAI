@@ -37,7 +37,7 @@ async function call(
 ) {
   const response = await app.inject({
     method,
-    url: "/api/v1" + url,
+    url: `/api/v1${url}`,
     headers,
     ...(payload !== undefined ? { payload: payload as object } : {}),
   });
@@ -103,7 +103,7 @@ test("el servidor previsualiza e importa un .skill respetando el namespace", asy
   assert.equal(preview.body.files.length, 2);
   assert.equal(typeof preview.body.quality.score, "number");
   assert.equal(
-    (await call(admin, "GET", "/package?name=" + encodeURIComponent("@skills/code-review"))).status,
+    (await call(admin, "GET", `/package?name=${encodeURIComponent("@skills/code-review")}`)).status,
     404,
     "dryRun no publica",
   );
@@ -200,7 +200,7 @@ test("los templates son paquetes kind: Template: se publican desde archivos o ZI
     list.map((t: { name: string; version: string; versions: number }) => [t.name, t.version, t.versions]),
     [["@plantillas/nestjs-sdd", "1.1.0", 2]],
   );
-  const latest = (await call(admin, "GET", "/packages/template?name=" + encodeURIComponent("@plantillas/nestjs-sdd")))
+  const latest = (await call(admin, "GET", `/packages/template?name=${encodeURIComponent("@plantillas/nestjs-sdd")}`))
     .body;
   assert.deepEqual(
     latest.files.map((f: { path: string }) => f.path),
@@ -208,11 +208,7 @@ test("los templates son paquetes kind: Template: se publican desde archivos o ZI
     "la carpeta raíz del ZIP se quita",
   );
   const first10 = (
-    await call(
-      admin,
-      "GET",
-      "/packages/template?name=" + encodeURIComponent("@plantillas/nestjs-sdd") + "&version=1.0.0",
-    )
+    await call(admin, "GET", `/packages/template?name=${encodeURIComponent("@plantillas/nestjs-sdd")}&version=1.0.0`)
   ).body;
   assert.deepEqual(
     first10.files.map((f: { path: string }) => f.path),
@@ -221,7 +217,7 @@ test("los templates son paquetes kind: Template: se publican desde archivos o ZI
   );
   const download = await app.inject({
     method: "GET",
-    url: "/api/v1/packages/download?name=" + encodeURIComponent("@plantillas/nestjs-sdd") + "&version=1.0.0",
+    url: `/api/v1/packages/download?name=${encodeURIComponent("@plantillas/nestjs-sdd")}&version=1.0.0`,
     headers: admin,
   });
   assert.equal(download.headers["content-type"], "application/zip");
@@ -246,7 +242,7 @@ test("los templates son paquetes kind: Template: se publican desde archivos o ZI
     200,
   );
   assert.equal(
-    (await call(admin, "GET", "/packages/template?name=" + encodeURIComponent("@plantillas/nestjs-sdd"))).body.package
+    (await call(admin, "GET", `/packages/template?name=${encodeURIComponent("@plantillas/nestjs-sdd")}`)).body.package
       .version,
     "1.0.0",
     "retirada no es la última",
@@ -279,7 +275,7 @@ test("los templates son paquetes kind: Template: se publican desde archivos o ZI
     ["@plantillas/nestjs-sdd"],
   );
   assert.equal(
-    (await call(reader, "GET", "/packages/template?name=" + encodeURIComponent("@privado/interno"))).status,
+    (await call(reader, "GET", `/packages/template?name=${encodeURIComponent("@privado/interno")}`)).status,
     404,
   );
   assert.equal(
@@ -363,16 +359,16 @@ test("el conocimiento manual solo lo escribe quien puede publicar en su namespac
   });
   assert.equal(own.status, 201, JSON.stringify(own.body));
   assert.equal(
-    (await call(scoped, "PATCH", "/knowledge/documents/" + own.body.document.id, { content: "actualizada" })).status,
+    (await call(scoped, "PATCH", `/knowledge/documents/${own.body.document.id}`, { content: "actualizada" })).status,
     200,
   );
   const shared = (
     await call(admin, "POST", "/knowledge/documents", { title: "Política global", content: "todo en UTC" })
   ).body.document.id;
-  assert.equal((await call(scoped, "PATCH", "/knowledge/documents/" + shared, { content: "cambiada" })).status, 403);
-  assert.equal((await call(scoped, "DELETE", "/knowledge/documents/" + shared)).status, 403);
+  assert.equal((await call(scoped, "PATCH", `/knowledge/documents/${shared}`, { content: "cambiada" })).status, 403);
+  assert.equal((await call(scoped, "DELETE", `/knowledge/documents/${shared}`)).status, 403);
   assert.equal(
-    (await call(scoped, "PUT", "/knowledge/documents/" + shared + "/vector", { model: "m", embedding: [1, 0] })).status,
+    (await call(scoped, "PUT", `/knowledge/documents/${shared}/vector`, { model: "m", embedding: [1, 0] })).status,
     403,
   );
   assert.equal(

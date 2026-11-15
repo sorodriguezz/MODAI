@@ -65,7 +65,7 @@
     max-width: 120px;
   }
   .hide-sm {
-    display: none !important;
+    display: none;
   }
   .page-head {
     align-items: stretch;
@@ -101,7 +101,7 @@
   }
   .table td {
     padding: 3px 0;
-    border: 0 !important;
+    border: 0;
   }
   .table td.actions {
     text-align: left;
@@ -157,9 +157,9 @@
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
   }
 }
 

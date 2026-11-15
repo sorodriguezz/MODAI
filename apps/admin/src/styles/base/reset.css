@@ -14,7 +14,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 [hidden] {
-  display: none !important;
+  display: none;
 }
 h1,
 h2,
@@ -104,10 +104,10 @@ hr {
   color: var(--danger);
 }
 .danger-text {
-  color: var(--danger) !important;
+  color: var(--danger);
 }
 .sr-only {
-  position: absolute !important;
+  position: absolute;
   width: 1px;
   height: 1px;
   padding: 0;

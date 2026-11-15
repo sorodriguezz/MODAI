@@ -26,7 +26,6 @@
     "docker:pi": "node scripts/deploy.mjs --pi up -d --build",
     "deploy:fly": "fly deploy . --config deploy/fly/fly.toml --dockerfile deploy/Dockerfile --ha=false",
     "backup:docker": "sh deploy/backup.sh",
-    "version:cli": "node scripts/cli-version.mjs set",
     "check:cli-version": "node scripts/cli-version.mjs check",
     "test:ui": "npm run build:cli && npm run build -w @modai/admin && npm run build -w @modai/server && playwright test",
     "version:set": "node scripts/cli-version.mjs set",

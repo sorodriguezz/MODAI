@@ -31,7 +31,7 @@ async function call(
 ) {
   const response = await app.inject({
     method,
-    url: "/api/v1" + url,
+    url: `/api/v1${url}`,
     headers,
     ...(payload !== undefined ? { payload: payload as object } : {}),
   });
@@ -126,11 +126,11 @@ test("una administración de organización solo ve y gestiona lo suyo", async ()
   );
   assert.equal((await call(orgAdmin, "PATCH", "/projects/pa", { organizationId: orgB })).status, 403);
   assert.equal(
-    (await call(orgAdmin, "PATCH", "/organizations/" + orgA, { description: "Cobros y reembolsos" })).body.organization
+    (await call(orgAdmin, "PATCH", `/organizations/${orgA}`, { description: "Cobros y reembolsos" })).body.organization
       .description,
     "Cobros y reembolsos",
   );
-  assert.equal((await call(orgAdmin, "PATCH", "/organizations/" + orgB, { description: "x" })).status, 404);
+  assert.equal((await call(orgAdmin, "PATCH", `/organizations/${orgB}`, { description: "x" })).status, 404);
 
   assert.equal(
     (await call(orgAdmin, "POST", "/namespaces", { name: "@pagos-front", organizationId: orgA })).status,
@@ -139,7 +139,7 @@ test("una administración de organización solo ve y gestiona lo suyo", async ()
   assert.equal((await call(orgAdmin, "POST", "/namespaces", { name: "@ajeno", organizationId: orgB })).status, 403);
   assert.equal((await call(orgAdmin, "POST", "/namespaces", { name: "@huerfano" })).status, 400);
   assert.equal(
-    (await call(orgAdmin, "PATCH", "/namespaces/" + encodeURIComponent("@facturas"), { description: "x" })).status,
+    (await call(orgAdmin, "PATCH", `/namespaces/${encodeURIComponent("@facturas")}`, { description: "x" })).status,
     404,
   );
   assert.equal((await call(orgAdmin, "POST", "/projects", { id: "pc", name: "Sin organización" })).status, 400);
@@ -212,9 +212,9 @@ test("los permisos que reparte una administración de organización siguen la je
   const visible = (await call(orgAdmin, "GET", "/admin/api-keys")).body.keys.map((k: { label: string }) => k.label);
   assert.ok(visible.includes("ana ci") && visible.includes("jefa pagos"));
   assert.ok(!visible.includes("facturas ci"));
-  assert.equal((await call(orgAdmin, "DELETE", "/admin/api-keys/" + outsider.id)).status, 404);
+  assert.equal((await call(orgAdmin, "DELETE", `/admin/api-keys/${outsider.id}`)).status, 404);
   assert.equal(
-    (await call(orgAdmin, "PATCH", "/admin/api-keys/" + outsider.id, { organizationIds: [orgA] })).status,
+    (await call(orgAdmin, "PATCH", `/admin/api-keys/${outsider.id}`, { organizationIds: [orgA] })).status,
     404,
   );
 
@@ -222,14 +222,14 @@ test("los permisos que reparte una administración de organización siguen la je
     (await call(orgAdmin, "GET", "/admin/users")).body.users.map((u: { username: string }) => u.username),
     ["ana.pagos", "dev.1"],
   );
-  assert.equal((await call(orgAdmin, "PATCH", "/admin/users/" + other.body.user.id, { disabled: true })).status, 404);
-  assert.equal((await call(orgAdmin, "PATCH", "/admin/users/" + created.body.user.id, { role: "admin" })).status, 403);
+  assert.equal((await call(orgAdmin, "PATCH", `/admin/users/${other.body.user.id}`, { disabled: true })).status, 404);
+  assert.equal((await call(orgAdmin, "PATCH", `/admin/users/${created.body.user.id}`, { role: "admin" })).status, 403);
   assert.equal(
-    (await call(orgAdmin, "PATCH", "/admin/users/" + created.body.user.id, { disabled: true })).body.user.disabledAt !==
+    (await call(orgAdmin, "PATCH", `/admin/users/${created.body.user.id}`, { disabled: true })).body.user.disabledAt !==
       undefined,
     true,
   );
-  assert.equal((await call(orgAdmin, "DELETE", "/admin/users/" + created.body.user.id)).status, 204);
+  assert.equal((await call(orgAdmin, "DELETE", `/admin/users/${created.body.user.id}`)).status, 204);
   assert.ok(
     (await call(admin, "GET", "/admin/api-keys")).body.keys.find((k: { label: string }) => k.label === "ana ci")
       .revokedAt,
@@ -298,23 +298,23 @@ test("cada persona crea sus API keys y nunca superan sus permisos, ni siquiera d
     (await call(session, "GET", "/projects")).body.projects.some((p: { id: string }) => p.id === "carla-propio"),
   );
 
-  await call(admin, "PATCH", "/admin/users/" + user.id, { projectIds: [], packageScopes: [] });
+  await call(admin, "PATCH", `/admin/users/${user.id}`, { projectIds: [], packageScopes: [] });
   assert.equal((await call(as(narrow.token), "GET", "/memories?projectId=pa")).status, 403);
   assert.deepEqual((await call(asKey, "GET", "/session")).body.permissions.publish.namespaces, ["@carla.pagos"]);
-  await call(admin, "PATCH", "/admin/users/" + user.id, { role: "reader" });
+  await call(admin, "PATCH", `/admin/users/${user.id}`, { role: "reader" });
   assert.equal(
     (await call(as(worker.token), "GET", "/session")).status,
     401,
     "el rol de la key ya no cabe en el de su dueña",
   );
   assert.equal((await call(as(narrow.token), "GET", "/session")).status, 200);
-  await call(admin, "PATCH", "/admin/users/" + user.id, { disabled: true });
+  await call(admin, "PATCH", `/admin/users/${user.id}`, { disabled: true });
   assert.equal((await call(as(narrow.token), "GET", "/session")).status, 401, "una cuenta desactivada apaga sus keys");
 
-  assert.equal((await call(asKey, "DELETE", "/me/api-keys/" + narrow.id)).status, 401);
-  await call(admin, "PATCH", "/admin/users/" + user.id, { disabled: false, role: "publisher" });
+  assert.equal((await call(asKey, "DELETE", `/me/api-keys/${narrow.id}`)).status, 401);
+  await call(admin, "PATCH", `/admin/users/${user.id}`, { disabled: false, role: "publisher" });
   assert.equal(
-    (await call(asKey, "DELETE", "/me/api-keys/" + narrow.id)).status,
+    (await call(asKey, "DELETE", `/me/api-keys/${narrow.id}`)).status,
     204,
     "la dueña revoca las suyas también desde la CLI",
   );
@@ -332,17 +332,17 @@ test("los namespaces restringidos solo se ven con acceso y publicar exige el nam
   assert.deepEqual(await names(stranger), ["@facturas/emision"]);
   assert.deepEqual(await names(insider), ["@pagos/cobros"]);
   assert.deepEqual(await names(orgAdmin), ["@pagos/cobros"]);
-  assert.equal((await call(stranger, "GET", "/package?name=" + encodeURIComponent("@pagos/cobros"))).status, 404);
+  assert.equal((await call(stranger, "GET", `/package?name=${encodeURIComponent("@pagos/cobros")}`)).status, 404);
   assert.equal(
     (await call(stranger, "POST", "/resolve", { packages: [{ name: "@pagos/cobros", range: "*" }] })).status,
     404,
   );
   assert.equal((await call(stranger, "GET", "/packages/catalog")).body.total, 1);
   assert.equal((await call(stranger, "GET", "/packages/summary")).body.packages, 1);
-  const artifact = (await call(admin, "GET", "/package?name=" + encodeURIComponent("@pagos/cobros"))).body.package
+  const artifact = (await call(admin, "GET", `/package?name=${encodeURIComponent("@pagos/cobros")}`)).body.package
     .artifactId;
-  assert.equal((await call(stranger, "GET", "/artifacts/" + artifact)).status, 404);
-  assert.equal((await call(insider, "GET", "/artifacts/" + artifact)).status, 200);
+  assert.equal((await call(stranger, "GET", `/artifacts/${artifact}`)).status, 404);
+  assert.equal((await call(insider, "GET", `/artifacts/${artifact}`)).status, 200);
   assert.deepEqual(
     (await call(stranger, "GET", "/namespaces")).body.namespaces.map((n: { name: string }) => n.name),
     ["@facturas"],
@@ -397,17 +397,17 @@ test("la administración de una organización depreca y retira paquetes de sus n
 
 test("organizaciones y namespaces con contenido no se eliminan", async () => {
   assert.equal(
-    (await call(admin, "DELETE", "/organizations/" + orgB, { confirmation: "Acme Facturas" })).body.error.code,
+    (await call(admin, "DELETE", `/organizations/${orgB}`, { confirmation: "Acme Facturas" })).body.error.code,
     "ORGANIZATION_NOT_EMPTY",
   );
   assert.equal(
-    (await call(admin, "DELETE", "/namespaces/" + encodeURIComponent("@facturas"))).body.error.code,
+    (await call(admin, "DELETE", `/namespaces/${encodeURIComponent("@facturas")}`)).body.error.code,
     "NAMESPACE_NOT_EMPTY",
   );
-  assert.equal((await call(admin, "DELETE", "/namespaces/" + encodeURIComponent("@pagos-front"))).status, 204);
+  assert.equal((await call(admin, "DELETE", `/namespaces/${encodeURIComponent("@pagos-front")}`)).status, 204);
   const empty = (await call(admin, "POST", "/organizations", { name: "Vacía" })).body.organization.id;
-  assert.equal((await call(admin, "DELETE", "/organizations/" + empty, { confirmation: "otra" })).status, 400);
-  assert.equal((await call(admin, "DELETE", "/organizations/" + empty, { confirmation: "Vacía" })).status, 204);
+  assert.equal((await call(admin, "DELETE", `/organizations/${empty}`, { confirmation: "otra" })).status, 400);
+  assert.equal((await call(admin, "DELETE", `/organizations/${empty}`, { confirmation: "Vacía" })).status, 204);
 });
 
 test("cada paquete pertenece a una organización o a un usuario: el namespace personal y su dueño", async () => {
@@ -431,7 +431,7 @@ test("cada paquete pertenece a una organización o a un usuario: el namespace pe
     "OWNER_REQUIRED",
   );
   assert.equal(
-    (await call(admin, "PATCH", "/namespaces/" + encodeURIComponent("@facturas"), { organizationId: null })).body.error
+    (await call(admin, "PATCH", `/namespaces/${encodeURIComponent("@facturas")}`, { organizationId: null })).body.error
       .code,
     "OWNER_REQUIRED",
     "no se le puede quitar el dueño",
@@ -465,30 +465,30 @@ test("cada paquete pertenece a una organización o a un usuario: el namespace pe
     "la dueña administra sus paquetes",
   );
   assert.equal(
-    (await call(eva, "PATCH", "/namespaces/" + encodeURIComponent("@eva"), { visibility: "restricted" })).body.namespace
+    (await call(eva, "PATCH", `/namespaces/${encodeURIComponent("@eva")}`, { visibility: "restricted" })).body.namespace
       .visibility,
     "restricted",
   );
   assert.equal(
-    (await call(eva, "PATCH", "/namespaces/" + encodeURIComponent("@eva"), { ownerUserId: users[0].id })).body.error
+    (await call(eva, "PATCH", `/namespaces/${encodeURIComponent("@eva")}`, { ownerUserId: users[0].id })).body.error
       .code,
     "OWNER_FORBIDDEN",
   );
   const stranger = as((await key(admin, "otro lector", "reader")).token);
-  assert.equal((await call(stranger, "GET", "/package?name=" + encodeURIComponent("@eva/util"))).status, 404);
-  assert.equal((await call(eva, "GET", "/package?name=" + encodeURIComponent("@eva/util"))).status, 200);
+  assert.equal((await call(stranger, "GET", `/package?name=${encodeURIComponent("@eva/util")}`)).status, 404);
+  assert.equal((await call(eva, "GET", `/package?name=${encodeURIComponent("@eva/util")}`)).status, 200);
 
   assert.equal(
-    (await call(admin, "DELETE", "/admin/users/" + created.id)).body.error.code,
+    (await call(admin, "DELETE", `/admin/users/${created.id}`)).body.error.code,
     "USER_OWNS_PACKAGES",
     "sus paquetes no quedan sin dueño",
   );
   assert.equal(
-    (await call(admin, "PATCH", "/namespaces/" + encodeURIComponent("@eva"), { organizationId: orgA })).body.namespace
+    (await call(admin, "PATCH", `/namespaces/${encodeURIComponent("@eva")}`, { organizationId: orgA })).body.namespace
       .organizationId,
     orgA,
   );
-  assert.equal((await call(admin, "DELETE", "/admin/users/" + created.id)).status, 204);
+  assert.equal((await call(admin, "DELETE", `/admin/users/${created.id}`)).status, 204);
   const after = (await call(admin, "GET", "/namespaces")).body.namespaces as Array<{ name: string }>;
   assert.ok(
     after.some((n) => n.name === "@eva"),

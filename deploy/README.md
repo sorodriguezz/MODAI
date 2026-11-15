@@ -4,18 +4,17 @@ Infraestructura del [servidor MODAI](../apps/server/README.md). Todos los entorn
 
 ## Archivos
 
-| Archivo                                             | Responsabilidad                                                                                        |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `Dockerfile`                                        | Build, pruebas y runtime Node 26.13.0; el contexto es la raíz del repositorio.                         |
-| `Dockerfile.dockerignore`                           | Exclusiones del contexto, incluidos secretos y datos locales (`../.dockerignore` es su copia).         |
-| `compose.yaml`                                      | Servidor, volúmenes persistentes y carga opcional de ejemplos (perfil `examples`).                     |
-| `compose.lan.yaml`, `Caddyfile`                     | HTTPS interno con la CA de Caddy en el puerto 8443.                                                    |
-| `compose.public.yaml`, `Caddyfile.public`           | Dominio público con certificado en los puertos 80/443.                                                 |
-| `compose.raspberry.yaml`                            | Raspberry Pi: reinicio, límite de memoria, heap de Node, logs rotados e imagen opcional ya construida. |
-| `fly/fly.toml`                                      | Fly.io: una máquina, un volumen en `/app/data`, healthcheck y HTTPS.                                   |
-| `railway/railway.json`, `railway/variables.example` | Railway: build con este Dockerfile, healthcheck y variables.                                           |
-| `.env.example`                                      | Plantilla de configuración; cópiala a `deploy/.env` (fuera de Git).                                    |
-| `backup.sh`                                         | Respaldo en caliente de SQLite y artefactos para instalaciones Compose.                                |
+| Archivo                                             | Responsabilidad                                                                                              |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `Dockerfile`                                        | Build, pruebas y runtime Node 26.13.0; el contexto es la raíz y sus exclusiones están en `../.dockerignore`. |
+| `compose.yaml`                                      | Servidor, volúmenes persistentes y carga opcional de ejemplos (perfil `examples`).                           |
+| `compose.lan.yaml`, `Caddyfile`                     | HTTPS interno con la CA de Caddy en el puerto 8443.                                                          |
+| `compose.public.yaml`, `Caddyfile.public`           | Dominio público con certificado en los puertos 80/443.                                                       |
+| `compose.raspberry.yaml`                            | Raspberry Pi: reinicio, límite de memoria, heap de Node, logs rotados e imagen opcional ya construida.       |
+| `fly/fly.toml`                                      | Fly.io: una máquina, un volumen en `/app/data`, healthcheck y HTTPS.                                         |
+| `railway/railway.json`, `railway/variables.example` | Railway: build con este Dockerfile, healthcheck y variables.                                                 |
+| `.env.example`                                      | Plantilla de configuración; cópiala a `deploy/.env` (fuera de Git).                                          |
+| `backup.sh`                                         | Respaldo en caliente de SQLite y artefactos para instalaciones Compose.                                      |
 
 ## Reglas comunes
 

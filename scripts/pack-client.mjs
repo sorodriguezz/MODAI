@@ -6,8 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = resolve(root, "dist/npm");
 mkdirSync(output, { recursive: true });
-for (const file of readdirSync(output))
-  if (/^(modai-(contracts|sdk|cli)|moduleai)-.*\.tgz$/.test(file)) rmSync(resolve(output, file));
+for (const file of readdirSync(output)) if (/^sorodriguez-modai-.*\.tgz$/.test(file)) rmSync(resolve(output, file));
 const npmCli = process.env.npm_execpath;
 const result = spawnSync(
   npmCli ? process.execPath : "npm",

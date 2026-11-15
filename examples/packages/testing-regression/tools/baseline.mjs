@@ -17,7 +17,7 @@ if (input.mode === "save") {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(
     path,
-    JSON.stringify({ savedAt: new Date().toISOString(), tests: Object.fromEntries(current) }, null, 2) + "\n",
+    `${JSON.stringify({ savedAt: new Date().toISOString(), tests: Object.fromEntries(current) }, null, 2)}\n`,
   );
   console.log(JSON.stringify({ saved: relativePath, tests: current.size }));
 } else {
