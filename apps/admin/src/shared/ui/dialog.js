@@ -13,6 +13,7 @@ export function openDialog({ title, description, body, size = "md", onClose } = 
   const container = $("dialogBody");
   mount(container, body);
   dialog.onclose = () => {
+    if (dialog.open) return;
     mount(container, "");
     onClose?.();
     if (returnFocus && document.contains(returnFocus)) returnFocus.focus();

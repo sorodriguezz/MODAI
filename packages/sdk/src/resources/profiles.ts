@@ -5,6 +5,7 @@ import type {
   EffectiveProfile,
   TeamRecord,
 } from "@modai/contracts/types";
+import type { KnowledgeDocument, KnowledgeSearchResult, KnowledgeVectorResult } from "../types.js";
 import { ProjectsApi } from "./projects.js";
 
 const targets = { organization: "organizations", team: "teams", project: "projects" } as const;
@@ -29,13 +30,38 @@ export class ProfilesApi extends ProjectsApi {
       packageNames?: string[];
       limit?: number;
       platform?: string;
+      packageVersions?: EffectiveProfile["packages"];
     },
-  ): Promise<unknown[]> {
+  ): Promise<KnowledgeSearchResult[]> {
     return (
-      await this.request<{ results: unknown[] }>(`/api/v1/projects/${encodeURIComponent(projectId)}/knowledge/search`, {
-        method: "POST",
-        body: JSON.stringify(input),
-      })
+      await this.request<{ results: KnowledgeSearchResult[] }>(
+        `/api/v1/projects/${encodeURIComponent(projectId)}/knowledge/search`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      )
+    ).results;
+  }
+
+  async projectKnowledgeDocument(projectId: string, id: string, platform?: string): Promise<KnowledgeDocument> {
+    const query = platform ? `?platform=${encodeURIComponent(platform)}` : "";
+    return (
+      await this.request<{ document: KnowledgeDocument }>(
+        `/api/v1/projects/${encodeURIComponent(projectId)}/knowledge/context/${encodeURIComponent(id)}${query}`,
+      )
+    ).document;
+  }
+
+  async searchProjectVectors(
+    projectId: string,
+    input: { model: string; embedding: number[]; packageNames?: string[]; limit?: number; platform?: string },
+  ): Promise<KnowledgeVectorResult[]> {
+    return (
+      await this.request<{ results: KnowledgeVectorResult[] }>(
+        `/api/v1/projects/${encodeURIComponent(projectId)}/knowledge/vector-search`,
+        { method: "POST", body: JSON.stringify(input) },
+      )
     ).results;
   }
 

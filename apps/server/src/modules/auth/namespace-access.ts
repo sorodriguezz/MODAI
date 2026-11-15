@@ -38,5 +38,5 @@ export type PackageVisibilityFilter = (db: Executor, column: string) => Expressi
 export function packageVisibilityFilter(dialect: DialectName, actor: Identity): PackageVisibilityFilter | undefined {
   if (allNamespaces(actor)) return undefined;
   return (db, column) =>
-    sql<SqlBool>`(${sql.ref(column)} is null or ${namespaceExpression(dialect, column)} in (${readableNamespaces(db, actor)}))`;
+    sql<SqlBool>`(${sql.ref(column)} is null or ${namespaceExpression(dialect, column)} in ${readableNamespaces(db, actor)})`;
 }

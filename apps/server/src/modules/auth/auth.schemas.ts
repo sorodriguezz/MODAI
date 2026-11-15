@@ -7,6 +7,7 @@ export const grantProperties = {
 };
 const roleProperty = { type: "string", enum: ROLES };
 const passwordProperty = { type: "string", minLength: 1, maxLength: 1024 };
+const factorProperty = { type: "string", minLength: 1, maxLength: 80 };
 
 export const setupBody = {
   type: "object",
@@ -24,7 +25,28 @@ export const loginBody = {
   type: "object",
   required: ["username", "password"],
   additionalProperties: false,
-  properties: { username: { type: "string", maxLength: 200 }, password: passwordProperty },
+  properties: { username: { type: "string", maxLength: 200 }, password: passwordProperty, code: factorProperty },
+};
+
+export const mfaSetupBody = {
+  type: "object",
+  required: ["currentPassword"],
+  additionalProperties: false,
+  properties: { currentPassword: passwordProperty },
+};
+
+export const mfaConfirmBody = {
+  type: "object",
+  required: ["setupToken", "code"],
+  additionalProperties: false,
+  properties: { setupToken: { type: "string", minLength: 1, maxLength: 120 }, code: factorProperty },
+};
+
+export const mfaChangeBody = {
+  type: "object",
+  required: ["currentPassword", "code"],
+  additionalProperties: false,
+  properties: { currentPassword: passwordProperty, code: factorProperty },
 };
 
 export const passwordBody = {

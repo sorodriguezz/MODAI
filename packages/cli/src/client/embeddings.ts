@@ -99,13 +99,14 @@ export async function indexKnowledge(
   config: LocalModelsConfig,
   progress: (s: string) => void = () => {},
   packageName?: string,
+  projectId?: string,
 ) {
   const runtime = await checkedRuntime(config);
   let indexed = 0,
     skipped = 0,
     offset = 0;
   while (true) {
-    const page = await api.knowledgeDocuments(offset);
+    const page = await api.knowledgeDocuments(offset, projectId);
     for (const doc of page.documents) {
       if (packageName && doc.packageName !== packageName) {
         skipped++;
@@ -115,7 +116,7 @@ export async function indexKnowledge(
       if (chunks.length > 1000)
         throw new Error(`Documento demasiado grande: ${doc.title}. Divídelo en documentos más pequeños.`);
       const vectors = await embedChunks(runtime, config, chunks);
-      await api.saveVector(doc.id, vectorSpace(config), centroid(vectors), sourceHash(doc));
+      await api.saveVector(doc.id, vectorSpace(config), centroid(vectors), sourceHash(doc), projectId);
       indexed++;
       progress(`Indexado ${indexed}: ${doc.title} (${chunks.length} fragmentos, cálculo local)`);
     }
@@ -130,11 +131,19 @@ export async function semanticSearch(
   config: LocalModelsConfig,
   query: string,
   packageNames?: string[],
+  project?: { id: string; platform?: string },
 ) {
   if (!query.trim()) throw new Error("La consulta no puede estar vacía");
   if (Array.from(query).length > 1200)
     throw new Error("La consulta semántica admite hasta 1200 caracteres; haz una pregunta más concreta.");
   const runtime = await checkedRuntime(config);
   const [embedding] = await runtime.embed(config.embeddingModel, [prefix(config.embeddingModel, query, true)]);
+  if (project)
+    return api.searchProjectVectors(project.id, {
+      model: vectorSpace(config),
+      embedding,
+      packageNames,
+      platform: project.platform,
+    });
   return api.vectorSearch(vectorSpace(config), embedding, packageNames);
 }

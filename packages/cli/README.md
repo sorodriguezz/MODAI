@@ -315,6 +315,8 @@ modai admin team add-member EQUIPO USUARIO_ID
 
 - Para instalar las asignaciones del perfil, usa `modai init --project PROYECTO --delivery materialized`. En un repo ya vinculado usa `modai sync --delivery materialized`. `modai sync --frozen` detecta cambios del perfil que afecten el lock.
 - Para consultar sin materializar el perfil, usa `modai context search "consulta" --project PROYECTO`, `modai context skill @backend/nestjs --project PROYECTO` o `modai-mcp --project-id PROYECTO`. En un repo vinculado, `modai sync --delivery virtual` deja las dependencias locales como instalación y consulta el perfil central bajo demanda.
+- `modai knowledge add --project PROYECTO --title "Guía interna" --file guia.md` guarda un documento privado. `modai knowledge list --project PROYECTO` lista los documentos privados y `modai context show ID --project PROYECTO` lee un resultado del contexto central por ID.
+- `modai client embed index --project PROYECTO` calcula vectores de los documentos privados y `modai client embed search "consulta" --project PROYECTO` busca en los documentos y el perfil de ese proyecto.
 - `modai admin update-namespace @catalogo --shared` habilita lectura para toda la instancia autenticada. `--internal` limita la visibilidad al ámbito propietario.
 - `modai memory pending --project PROYECTO` y `modai memory review MEMORIA --approve` gestionan propuestas de organización. `modai memory add "preferencia" --project PROYECTO --scope user` guarda una nota privada de una cuenta en el proyecto.
 - `modai project execution-policy set PROYECTO --models modelo-local --capabilities modai_search_knowledge` fija los permisos de futuras tareas. Usa `modai agent worker --project PROYECTO --model modelo-local` con una clave autorizada para ese proyecto.

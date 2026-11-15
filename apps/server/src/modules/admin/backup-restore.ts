@@ -8,8 +8,8 @@ import { namespaceVisibilityFields } from "../namespaces/namespaces.service.js";
 import type { PackagesService } from "../packages/packages.service.js";
 import { PublishersRepository } from "../packages/publishers.repository.js";
 import { UsageRepository } from "../packages/usage.repository.js";
-import { ProjectsRepository } from "../projects/projects.repository.js";
 import { RunsRepository } from "../runs/runs.repository.js";
+import { restoreKnowledge, restoreMemories } from "./backup-context.js";
 import { restoreProfiles } from "./backup-profiles.js";
 import type { ImportResult, Snapshot } from "./backup-snapshot.js";
 
@@ -168,21 +168,6 @@ async function restorePackages(
   return { imported, skipped };
 }
 
-async function restoreMemories(context: DataContext, memory: MemoryService, snapshot: Snapshot): Promise<void> {
-  const projects = new ProjectsRepository(context);
-  for (const item of snapshot.memories ?? []) {
-    const organizationId =
-      item.organizationId ?? (await projects.findById(item.projectId))?.organizationId ?? undefined;
-    if (item.scope === "organization" && !organizationId)
-      throw new AppError(400, "INVALID_BACKUP", "Falta la organización de la memoria");
-    await memory.remember(item, item.createdBy ?? ADMIN, organizationId, {
-      approval: item.approval,
-      reviewedBy: item.reviewedBy,
-      reviewAt: item.reviewAt,
-    });
-  }
-}
-
 async function restoreRuns(context: DataContext, snapshot: Snapshot): Promise<void> {
   const runs = new RunsRepository(context);
   for (const run of snapshot.runs ?? []) {
@@ -223,8 +208,8 @@ export async function restoreSnapshot(
   await ensurePackageNamespaces(context, snapshot);
   const { imported, skipped } = await restorePackages(services.packages, snapshot);
   await restoreProfiles(context, snapshot);
-  for (const item of snapshot.knowledge ?? []) await services.knowledge.add(item);
-  await restoreMemories(context, services.memory, snapshot);
+  const knowledge = await restoreKnowledge(services.knowledge, snapshot);
+  await restoreMemories(context, services.memory, snapshot, ADMIN);
   await restoreRuns(context, snapshot);
   const usage = new UsageRepository(context);
   for (const item of snapshot.installations ?? [])
@@ -240,7 +225,7 @@ export async function restoreSnapshot(
   return {
     packages: imported,
     skipped,
-    knowledge: snapshot.knowledge?.length ?? 0,
+    knowledge,
     memories: snapshot.memories?.length ?? 0,
     installations: snapshot.installations?.length ?? 0,
   };

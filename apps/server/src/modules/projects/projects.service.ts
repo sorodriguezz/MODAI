@@ -116,14 +116,7 @@ export class ProjectsService {
     const isCreator = createdBy === actor.id || createdBy === actor.personalOwnerId;
     if (actor.role !== "admin" && !managesIt && (actor.role === "reader" || !isCreator))
       throw new AppError(403, "FORBIDDEN", "Solo la administración o quien creó el proyecto puede eliminarlo");
-    const busy = await this.projects.liveRuns(id, new Date().toISOString());
-    if (busy > 0)
-      throw new AppError(
-        409,
-        "PROJECT_BUSY",
-        `Hay ${busy} ejecución(es) en curso en este proyecto; cancélalas o espera a que terminen`,
-      );
-    return { project, ...(await this.projects.deleteCascade(id)) };
+    return { project, ...(await this.projects.deleteCascade(id, project.organizationId ?? null)) };
   }
 
   async listProjects(identity: Identity | undefined): Promise<ProjectRecord[]> {

@@ -2,11 +2,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import { serverApi } from "../../services/connection.js";
+import { profileConnection } from "../../services/profile.js";
 import { group } from "../../terminal/help-sections.js";
 import { commaList } from "../../terminal/options.js";
 import type { Print } from "../../terminal/output.js";
 
-type DocumentOptions = { title?: string; file?: string; content?: string; tags?: string[] };
+type DocumentOptions = { title?: string; file?: string; content?: string; tags?: string[]; project?: string };
+const PROJECT_OPTION = ["--project <id>", "Documentos privados del proyecto indicado"] as const;
+const apiFor = (project?: string) => (project ? profileConnection(project).api : serverApi());
 const contentOf = (options: DocumentOptions) =>
   options.file ? readFileSync(resolve(options.file), "utf8") : options.content;
 
@@ -16,17 +19,18 @@ function registerKnowledgeRead(knowledge: Command, print: Print): void {
     .alias("ls")
     .description("Documentos de conocimiento (manuales y de paquetes)")
     .option("--manual", "Solo los creados a mano (editables)")
-    .action(async (options: { manual?: boolean }) => {
-      const api = serverApi(),
+    .option(...PROJECT_OPTION)
+    .action(async (options: { manual?: boolean; project?: string }) => {
+      const api = apiFor(options.project),
         documents = [];
       for (let offset: number | null = 0; offset !== null; ) {
-        const page = await api.knowledgeDocuments(offset);
+        const page = await api.knowledgeDocuments(offset, options.project);
         documents.push(...page.documents);
         offset = page.nextOffset;
       }
       print(
         documents
-          .filter((doc) => !options.manual || !doc.packageName)
+          .filter((doc) => !options.manual || !doc.packageVersion)
           .map((doc) => ({ id: doc.id, title: doc.title, package: doc.packageName ?? "manual" })),
       );
     });
@@ -34,7 +38,9 @@ function registerKnowledgeRead(knowledge: Command, print: Print): void {
     .command("show")
     .description("Muestra un documento")
     .argument("<id>")
-    .action(async (id: string) => {
+    .option(...PROJECT_OPTION)
+    .action(async (id: string, options: { project?: string }) => {
+      if (options.project) return print(await apiFor(options.project).knowledgeDocument(id, options.project));
       const api = serverApi();
       for (let offset: number | null = 0; offset !== null; ) {
         const page = await api.knowledgeDocuments(offset);
@@ -48,7 +54,12 @@ function registerKnowledgeRead(knowledge: Command, print: Print): void {
     .command("search")
     .description("Busca en el conocimiento compartido")
     .argument("<query>")
-    .action(async (query: string) => print(await serverApi().searchKnowledge(query)));
+    .option("--project <id>", "Busca en los documentos y perfil del proyecto")
+    .action(async (query: string, options: { project?: string }) => {
+      if (!options.project) return print(await serverApi().searchKnowledge(query));
+      const { api, id, platform } = profileConnection(options.project);
+      return print(await api.searchProjectKnowledge(id, { query, platform }));
+    });
 }
 
 function registerKnowledgeWrite(knowledge: Command, print: Print): void {
@@ -59,10 +70,14 @@ function registerKnowledgeWrite(knowledge: Command, print: Print): void {
     .option("--file <path>", "Archivo con el contenido")
     .option("--content <text>", "Contenido en línea")
     .option("--tags <tags>", "Etiquetas separadas por comas", commaList)
+    .option(...PROJECT_OPTION)
     .action(async (options: DocumentOptions & { title: string }) => {
       const content = contentOf(options);
       if (!content) throw new Error("Indica --file o --content");
-      const document = await serverApi().createKnowledge({ title: options.title, content, tags: options.tags });
+      const document = await apiFor(options.project).createKnowledge(
+        { title: options.title, content, tags: options.tags },
+        options.project,
+      );
       print(`Documento creado: ${document.id}`);
     });
   knowledge
@@ -73,8 +88,13 @@ function registerKnowledgeWrite(knowledge: Command, print: Print): void {
     .option("--file <path>")
     .option("--content <text>")
     .option("--tags <tags>", "Etiquetas separadas por comas", commaList)
+    .option(...PROJECT_OPTION)
     .action(async (id: string, options: DocumentOptions) => {
-      await serverApi().updateKnowledge(id, { title: options.title, content: contentOf(options), tags: options.tags });
+      await apiFor(options.project).updateKnowledge(
+        id,
+        { title: options.title, content: contentOf(options), tags: options.tags },
+        options.project,
+      );
       print(`Documento actualizado: ${id}`);
     });
   knowledge
@@ -82,8 +102,9 @@ function registerKnowledgeWrite(knowledge: Command, print: Print): void {
     .alias("rm")
     .description("Elimina un documento manual")
     .argument("<id>")
-    .action(async (id: string) => {
-      await serverApi().deleteKnowledge(id);
+    .option(...PROJECT_OPTION)
+    .action(async (id: string, options: { project?: string }) => {
+      await apiFor(options.project).deleteKnowledge(id, options.project);
       print(`Documento eliminado: ${id}`);
     });
 }

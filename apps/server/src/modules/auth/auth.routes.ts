@@ -8,6 +8,8 @@ import { identityOf, sessionTokenOf } from "../../infrastructure/http/identity-h
 import type { ModuleOptions } from "../module-options.js";
 import { loginBody, passwordBody, setupBody } from "./auth.schemas.js";
 import { type Identity, MIN_PASSWORD_LENGTH } from "./identity.js";
+import { authRateLimit } from "./login-throttle.js";
+import { mfaRoutes } from "./mfa.routes.js";
 import { permissionsOf } from "./permissions.js";
 
 const publicIdentity = (identity: Identity) => ({
@@ -22,9 +24,14 @@ const publicIdentity = (identity: Identity) => ({
 
 const sessionMeta = (request: FastifyRequest) => ({ userAgent: request.headers["user-agent"], ip: request.ip });
 
-const loginLimit = (options: ModuleOptions) => ({
-  rateLimit: { max: options.config.loginRateLimitMax ?? 10, timeWindow: "1 minute" },
-});
+const loginLimit = (options: ModuleOptions) => authRateLimit(options.config.loginRateLimitMax);
+
+const loginErrors = {
+  LOGIN_LOCKED: "Demasiados intentos fallidos. Espera unos minutos antes de volver a intentarlo.",
+  INVALID_CREDENTIALS: "Usuario o contraseña incorrectos",
+  MFA_REQUIRED: "Introduce el código de tu aplicación de autenticación o un código de recuperación",
+  INVALID_MFA: "El código es incorrecto, venció o ya fue utilizado",
+};
 
 const failDelay = (options: ModuleOptions) => {
   const base = options.config.loginDelayMs;
@@ -98,33 +105,32 @@ function setupRoute(app: FastifyInstance, options: ModuleOptions): void {
 function loginRoute(app: FastifyInstance, options: ModuleOptions): void {
   const { users, sessions, audit } = options.services;
   const publicUrl = options.config.publicUrl;
-  app.post<{ Body: { username: string; password: string } }>(
+  app.post<{ Body: { username: string; password: string; code?: string } }>(
     "/api/v1/auth/login",
     { config: loginLimit(options), schema: { body: loginBody } },
     async (request, reply) => {
       assertCsrf(request, publicUrl);
+      reply.header("Cache-Control", "no-store");
       const attempted = String(request.body.username ?? "")
         .trim()
         .toLowerCase()
         .slice(0, 64);
-      const result = await users.verifyLogin(request.body.username, request.body.password, request.ip);
-      if (!result.user) {
-        await failDelay(options);
-        await audit.record(attempted || "anonymous", "auth.login-failed", `user:${attempted}`, {
-          ip: request.ip,
-          locked: result.locked,
-        });
-        if (result.locked)
-          throw new AppError(
-            429,
-            "LOGIN_LOCKED",
-            "Demasiados intentos fallidos. Espera unos minutos antes de volver a intentarlo.",
-          );
-        throw new AppError(401, "INVALID_CREDENTIALS", "Usuario o contraseña incorrectos");
+      const { username, password, code } = request.body;
+      const result = await users.verifyLogin(username, password, code, request.ip);
+      if ("error" in result) {
+        const locked = result.error === "LOGIN_LOCKED";
+        if (result.error !== "MFA_REQUIRED") {
+          await failDelay(options);
+          await audit.record(attempted || "anonymous", "auth.login-failed", `user:${attempted}`, {
+            ip: request.ip,
+            locked,
+          });
+        }
+        throw new AppError(locked ? 429 : 401, result.error, loginErrors[result.error]);
       }
+      const session = await sessions.create(result.user.id, sessionMeta(request), result);
       const previous = readCookie(request, SESSION_COOKIE);
       if (previous) await sessions.delete(previous);
-      const session = await sessions.create(result.user.id, sessionMeta(request));
       setSessionCookie(reply, request, session.token, session.maxAgeSeconds, publicUrl);
       await audit.record(result.user.username, "auth.login", `user:${result.user.username}`, { ip: request.ip });
       return { user: await users.getUser(result.user.id), expiresAt: session.expiresAt };
@@ -169,4 +175,5 @@ export async function authRoutes(app: FastifyInstance, options: ModuleOptions): 
   setupRoute(app, options);
   loginRoute(app, options);
   accountRoutes(app, options);
+  mfaRoutes(app, options);
 }

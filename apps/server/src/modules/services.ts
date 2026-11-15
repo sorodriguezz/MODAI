@@ -7,6 +7,8 @@ import { MetricsService } from "./admin/metrics.service.js";
 import { AgentsService } from "./agents/agents.service.js";
 import { ApiKeysService } from "./auth/api-keys.service.js";
 import { AuthorizationService } from "./auth/authorization.service.js";
+import { MfaService } from "./auth/mfa.service.js";
+import { loadMfaKey } from "./auth/mfa-key.js";
 import { SessionsService } from "./auth/sessions.service.js";
 import { UsersService } from "./auth/users.service.js";
 import { CategoriesService } from "./categories/categories.service.js";
@@ -29,12 +31,14 @@ export interface ServiceOptions {
   workerLeaseMs?: number;
   sessionIdleMs?: number;
   sessionMaxMs?: number;
+  mfaKey?: string;
 }
 
 export interface Services {
   database: Database;
   authz: AuthorizationService;
   users: UsersService;
+  mfa: MfaService;
   sessions: SessionsService;
   apiKeys: ApiKeysService;
   organizations: OrganizationsService;
@@ -66,10 +70,12 @@ export function createServices(database: Database, options: ServiceOptions): Ser
   const memory = new MemoryService(database);
   const projects = new ProjectsService(database, authz, organizations);
   const teams = new TeamsService(database, authz, organizations);
+  const mfa = new MfaService(database, loadMfaKey(options.artifactDirectory, options.mfaKey));
   return {
     database,
     authz,
-    users: new UsersService(database),
+    users: new UsersService(database, mfa),
+    mfa,
     sessions: new SessionsService(database, { idleMs: options.sessionIdleMs, absoluteMs: options.sessionMaxMs }),
     apiKeys: new ApiKeysService(database, authz, options.apiToken),
     organizations,

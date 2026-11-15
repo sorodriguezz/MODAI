@@ -41,6 +41,24 @@ function namespaceSharing(dialect: DialectName): Migration {
   };
 }
 
+function projectKnowledge(dialect: DialectName): Migration {
+  return {
+    async up(db) {
+      await db.schema
+        .alterTable("knowledge_documents")
+        .addColumn("project_id", columnTypes(dialect).key(200), (col) =>
+          col.references("projects.id").onDelete("cascade"),
+        )
+        .execute();
+      await db.schema
+        .createIndex("idx_knowledge_project")
+        .on("knowledge_documents")
+        .columns(["project_id", "updated_at", "id"])
+        .execute();
+    },
+  };
+}
+
 export async function migrateToLatest(db: Kysely<Schema>, dialect: DialectName): Promise<void> {
   const migrator = new Migrator({
     db,
@@ -51,6 +69,15 @@ export async function migrateToLatest(db: Kysely<Schema>, dialect: DialectName):
         "0003-effective-profiles": { up: (db) => createProfileTables(db, columnTypes(dialect)) },
         "0004-execution-scope": { up: (db) => createExecutionTables(db, columnTypes(dialect), dialect) },
         "0005-memory-governance": { up: (db) => addMemoryGovernance(db, columnTypes(dialect)) },
+        "0006-project-knowledge": projectKnowledge(dialect),
+        "0007-user-mfa": {
+          async up(db) {
+            const types = columnTypes(dialect);
+            await db.schema.alterTable("users").addColumn("mfa_secret", types.key(160)).execute();
+            await db.schema.alterTable("users").addColumn("mfa_last_step", types.integer).execute();
+            await db.schema.alterTable("users").addColumn("mfa_recovery_json", types.text).execute();
+          },
+        },
       }),
     },
   });

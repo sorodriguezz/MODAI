@@ -4,6 +4,7 @@ import { sha256 } from "@modai/contracts/security";
 import type { AgentBundle, ClaimedRun, RunRecord, WorkerCapabilities } from "@modai/contracts/types";
 import { type DataContext, withTransaction } from "../../infrastructure/database/database.js";
 import type { PackageVisibilityFilter } from "../auth/namespace-access.js";
+import { ProjectsRepository } from "../projects/projects.repository.js";
 import { RunsRepository, toRun } from "./runs.repository.js";
 
 export class RunsService {
@@ -19,6 +20,14 @@ export class RunsService {
   submit(bundle: AgentBundle, task: string, actorId: string, idempotencyKey?: string): Promise<RunRecord> {
     return withTransaction(this.context, async (trx) => {
       const runs = new RunsRepository(trx);
+      const project = await new ProjectsRepository(trx).lock(bundle.projectId);
+      invariant(project, 404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
+      invariant(
+        project.organizationId === (bundle.organizationId ?? null),
+        409,
+        "PROJECT_CHANGED",
+        "La organización del proyecto cambió",
+      );
       const old = idempotencyKey ? await runs.findByIdempotency(bundle.projectId, actorId, idempotencyKey) : undefined;
       if (old) {
         invariant(
@@ -66,10 +75,19 @@ export class RunsService {
     options?: {
       visible?: PackageVisibilityFilter;
       worker?: WorkerCapabilities;
+      organizationId?: string | null;
     },
   ): Promise<ClaimedRun | undefined> {
     return withTransaction(this.context, async (trx) => {
       const runs = new RunsRepository(trx);
+      const project = await new ProjectsRepository(trx).lock(projectId);
+      if (!project) return undefined;
+      invariant(
+        options?.organizationId === undefined || project.organizationId === options.organizationId,
+        409,
+        "PROJECT_CHANGED",
+        "La organización del proyecto cambió",
+      );
       const now = new Date().toISOString();
       await runs.expireLeases(projectId, now);
       const id = await this.nextCompatible(runs, projectId, options?.visible, options?.worker);

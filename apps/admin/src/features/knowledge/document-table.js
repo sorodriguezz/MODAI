@@ -5,6 +5,7 @@ import { emptyState } from "../../shared/ui/empty-state.js";
 import { timeTag } from "../../shared/ui/format.js";
 
 function originCell(d) {
+  if (d.projectId) return html`<span class="badge tone-info">Proyecto</span>`;
   if (!d.packageName) return html`<span class="badge tone-info">Todo el servidor</span>`;
   return html`<span class="badge">${d.packageName}</span>${d.packageVersion ? "" : html` <span class="muted small">manual</span>`}`;
 }
@@ -15,7 +16,7 @@ const documentRow = (d) => html`<tr>
               <td>${timeTag(d.updatedAt || d.createdAt)}</td></tr>`;
 
 export function matchesDocument(d, q, origin) {
-  if (origin && (origin === "manual") === Boolean(d.packageName)) return false;
+  if (origin && (origin === "manual") === Boolean(d.packageVersion)) return false;
   return !q || `${d.title} ${d.content} ${(d.tags || []).join(" ")}`.toLocaleLowerCase().includes(q);
 }
 
@@ -24,12 +25,13 @@ export function documentMeta(list, documents) {
   return `${list.length} de ${documents.length} documentos${capped}`;
 }
 
-export function documentTable(list, total) {
+export function documentTable(list, total, project) {
   if (list.length)
     return html`<div class="table-wrap"><table class="table">
             <thead><tr><th scope="col">Documento</th><th scope="col" class="hide-sm">Origen</th><th scope="col">Actualizado</th></tr></thead>
             <tbody>${list.map(documentRow)}</tbody></table></div>`;
   if (total) return emptyState({ iconName: "search", title: "Sin coincidencias", text: "Prueba con otras palabras." });
+  if (project) return emptyState({ iconName: "book", title: "El proyecto aún no tiene documentos privados" });
   return emptyState({
     iconName: "book",
     title: "Aún no hay conocimiento",

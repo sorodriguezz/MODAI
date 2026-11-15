@@ -2,7 +2,20 @@ export interface KnowledgeDocument {
   id: string;
   title: string;
   content: string;
-  packageName?: string;
+  projectId?: string | null;
+  packageName?: string | null;
+  packageVersion?: string | null;
+  tags: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface KnowledgeSearchResult extends KnowledgeDocument {
+  rank: number;
+}
+
+export interface KnowledgeVectorResult extends KnowledgeDocument {
+  score: number;
 }
 
 export type Role = "reader" | "publisher" | "worker" | "org-admin" | "admin";

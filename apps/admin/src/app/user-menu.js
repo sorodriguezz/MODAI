@@ -1,10 +1,12 @@
 import { openChangePassword } from "../features/account/change-password.js";
+import { openAccountMfa } from "../features/account/mfa.js";
 import { $ } from "../shared/lib/html.js";
 import { navigate } from "./router.js";
 import { logout } from "./session.js";
 
 const ACTIONS = {
   password: () => openChangePassword(),
+  mfa: () => openAccountMfa(),
   connect: () => navigate("connect"),
   keys: () => navigate("my-keys"),
   logout: () => logout(),

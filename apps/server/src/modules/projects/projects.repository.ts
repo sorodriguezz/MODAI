@@ -1,5 +1,5 @@
 import { invariant } from "@modai/contracts/errors";
-import type { Insertable } from "kysely";
+import { type Insertable, sql } from "kysely";
 import { type DataContext, withTransaction } from "../../infrastructure/database/database.js";
 import type { ProjectsTable } from "../../infrastructure/database/schema.js";
 import { affectedRows, toNumber } from "../../infrastructure/database/sql-helpers.js";
@@ -15,6 +15,26 @@ export interface ProjectRow {
 
 export class ProjectsRepository {
   constructor(private readonly context: DataContext) {}
+
+  async lock(id: string): Promise<{ organizationId: string | null } | undefined> {
+    const { db, dialect } = this.context;
+    const query = db.selectFrom("projects").select("organization_id as organizationId").where("id", "=", id);
+    if (dialect === "sqlite") {
+      await db
+        .updateTable("projects")
+        .set((eb) => ({ name: eb.ref("name") }))
+        .where("id", "=", id)
+        .execute();
+      return query.executeTakeFirst();
+    }
+    if (dialect === "mssql")
+      return (
+        await sql<{
+          organizationId: string | null;
+        }>`select organization_id as organizationId from projects with (updlock, rowlock) where id = ${id}`.execute(db)
+      ).rows[0];
+    return query.forUpdate().executeTakeFirst();
+  }
 
   findById(id: string): Promise<ProjectRow | undefined> {
     return this.context.db
@@ -70,6 +90,7 @@ export class ProjectsRepository {
       const related = [
         "runs",
         "memories",
+        "knowledge_documents",
         "project_installations",
         "capability_bindings",
         "project_execution_policies",
@@ -84,14 +105,14 @@ export class ProjectsRepository {
           !existing,
           409,
           "PROJECT_HAS_CONTEXT",
-          "Solo se pueden transferir proyectos sin memoria, tareas, instalaciones ni políticas",
+          "Solo se pueden transferir proyectos sin memoria, documentos, tareas, instalaciones ni políticas",
         );
       }
       await removeGrant(trx, "project_ids_json", id);
     });
   }
 
-  async liveRuns(id: string, now: string): Promise<number> {
+  private async liveRuns(id: string, now: string): Promise<number> {
     const row = await this.context.db
       .selectFrom("runs")
       .select((eb) => eb.fn.countAll().as("n"))
@@ -102,8 +123,25 @@ export class ProjectsRepository {
     return toNumber(row?.n);
   }
 
-  deleteCascade(id: string): Promise<{ memories: number; runs: number }> {
-    return withTransaction(this.context, async ({ db, dialect }) => {
+  deleteCascade(id: string, organizationId: string | null): Promise<{ memories: number; runs: number }> {
+    return withTransaction(this.context, async (trx) => {
+      const { db, dialect } = trx;
+      const projects = new ProjectsRepository(trx);
+      const locked = await projects.lock(id);
+      invariant(locked, 404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
+      invariant(
+        locked.organizationId === organizationId,
+        409,
+        "PROJECT_CHANGED",
+        "La organización del proyecto cambió",
+      );
+      const busy = await projects.liveRuns(id, new Date().toISOString());
+      invariant(
+        busy === 0,
+        409,
+        "PROJECT_BUSY",
+        `Hay ${busy} ejecución(es) en curso en este proyecto; cancélalas o espera a que terminen`,
+      );
       const memories = await db
         .deleteFrom("memories")
         .where("project_id", "=", id)

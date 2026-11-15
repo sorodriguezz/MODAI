@@ -239,10 +239,17 @@ test("una administración de organización ve Deprecar y Retirar solo en sus nam
     await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Pagos" } })).json()
   ).organization;
   await request.post("/api/v1/namespaces", { headers: auth, data: { name: "@ui-pagos", organizationId: org.id } });
-  await ensureNamespace(request, "@ui-otro");
+  const other = (
+    await (await request.post("/api/v1/organizations", { headers: auth, data: { name: "UI Otro equipo" } })).json()
+  ).organization;
+  const shared = await request.post("/api/v1/namespaces", {
+    headers: auth,
+    data: { name: "@ui-otro", organizationId: other.id, visibility: "shared" },
+  });
+  expect(shared.status(), await shared.text()).toBe(201);
   for (const name of ["@ui-pagos/cobro", "@ui-otro/cosa"]) {
     const content = "# Guía\n";
-    await request.post("/api/v1/packages", {
+    const published = await request.post("/api/v1/packages", {
       headers: auth,
       data: {
         manifest: {
@@ -264,6 +271,7 @@ test("una administración de organización ve Deprecar y Retirar solo en sus nam
         ],
       },
     });
+    expect(published.status(), await published.text()).toBe(201);
   }
   await request.post("/api/v1/admin/users", {
     headers: auth,
@@ -279,9 +287,12 @@ test("una administración de organización ve Deprecar y Retirar solo en sus nam
   await dialog.getByRole("tab", { name: /Versiones/ }).click();
   await expect(dialog.getByRole("button", { name: "Deprecar" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Retirar" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Cerrar" }).first().click();
   await page.goto("/admin#/packages?name=@ui-otro/cosa");
+  await expect(dialog.getByRole("heading", { name: "@ui-otro/cosa" })).toBeVisible();
   await dialog.getByRole("tab", { name: /Versiones/ }).click();
   await expect(dialog.getByRole("button", { name: "Deprecar" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Retirar" })).toHaveCount(0);
 });
 
 test("un modal solo se cierra con sus botones: ni el fondo ni Escape descartan lo escrito, y la página de atrás no se desplaza", async ({
@@ -434,7 +445,7 @@ test("la administración gestiona categorías y el editor ofrece solo las regist
   await expect(page.locator("#catResults")).not.toContainText("observabilidad");
 });
 
-test("el conocimiento manual se guarda para todo el servidor o para un namespace", async ({ page, request }) => {
+test("el conocimiento manual se guarda para el servidor, un namespace o un proyecto", async ({ page, request }) => {
   await ensureNamespace(request, "@ui-docs");
   await login(page);
   await page.goto("/admin#/knowledge");
@@ -454,6 +465,24 @@ test("el conocimiento manual se guarda para todo el servidor o para un namespace
   expect(docs.find((doc: { title: string }) => doc.title === "Guía de despliegue del equipo").packageName).toBe(
     "@ui-docs/guias",
   );
+
+  const project = await request.post("/api/v1/projects", {
+    headers: auth,
+    data: { id: "proyecto-documentos-ui", name: "Documentos privados UI" },
+  });
+  expect(project.ok()).toBeTruthy();
+  await page.reload();
+  await page.locator("#docProject").selectOption("proyecto-documentos-ui");
+  await page.getByRole("button", { name: "Nuevo documento" }).click();
+  await expect(dialog).toContainText("Documentos privados UI");
+  await dialog.getByLabel("Título").fill("Guía privada desde el panel");
+  await dialog.getByLabel("Contenido (Markdown)").fill("Procedimiento interno");
+  await dialog.getByRole("button", { name: "Guardar documento" }).click();
+  await expect(page.locator("#docResults")).toContainText("Guía privada desde el panel");
+  await expect(page.locator("#docResults")).not.toContainText("Todo el servidor");
+  await page.locator("#docProject").selectOption("");
+  await expect(page.locator("#docResults")).toContainText("@ui-docs/guias");
+  await expect(page.locator("#docResults")).not.toContainText("Guía privada desde el panel");
 });
 
 test("cada namespace muestra su dueño y al crearlo se elige una organización o un usuario", async ({
@@ -470,7 +499,7 @@ test("cada namespace muestra su dueño y al crearlo se elige una organización o
   await dialog.getByLabel("Nombre").fill("@ui-personal");
   await dialog.getByRole("button", { name: "Crear namespace" }).click();
   await expect(dialog.locator(".form-error")).toBeVisible();
-  await dialog.getByLabel("Dueño").selectOption({ label: UI.username });
+  await dialog.getByRole("combobox", { name: "Dueño", exact: true }).selectOption({ label: UI.username });
   await dialog.getByRole("button", { name: "Crear namespace" }).click();
   await expect(page.getByRole("row", { name: /@ui-personal/ })).toContainText(UI.username);
 

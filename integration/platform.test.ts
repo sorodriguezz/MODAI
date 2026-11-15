@@ -22,6 +22,7 @@ import { RunsService } from "../apps/server/src/modules/runs/runs.service.js";
 import { createNamespaces, exampleNamespaces } from "../apps/server/test/support/namespaces.js";
 import { openTestDatabase, testDatabase } from "../apps/server/test/support/test-database.js";
 import { activateAgent, deactivateAgent, loadActivation } from "../packages/cli/src/agents/activation.js";
+import { invokeBuiltin } from "../packages/cli/src/agents/builtin-tools.js";
 import { CapabilityHost } from "../packages/cli/src/agents/capabilities.js";
 import { executeAgent } from "../packages/cli/src/agents/runtime.js";
 import { workOnce } from "../packages/cli/src/agents/worker.js";
@@ -196,10 +197,118 @@ test("el perfil central conserva versiones y separa la entrega virtual y materia
       arguments: { packageName: standard, skill: "transporte" },
     });
     assert.match(JSON.stringify(skill), /nombres compartidos/);
+    const document = await f.api.createKnowledge(
+      { title: "Privado", content: "Convenio exclusivo del proyecto" },
+      projectId,
+    );
+    const found = await client.callTool({
+      name: "modai_search_project_knowledge",
+      arguments: { query: "exclusivo" },
+    });
+    assert.match(JSON.stringify(found), new RegExp(document.id));
+    const read = await client.callTool({ name: "modai_read_project_knowledge", arguments: { id: document.id } });
+    assert.match(JSON.stringify(read), /Convenio exclusivo/);
+    const added = await cli(
+      "knowledge",
+      "add",
+      "--project",
+      projectId,
+      "--title",
+      "Otra guía",
+      "--content",
+      "Guía CLI",
+    );
+    assert.match(added.stdout, /Documento creado/);
+    assert.equal((await f.api.knowledgeDocuments(0, projectId)).documents.length, 2);
     assert.equal(existsSync(join(f.root, "modai.yaml")), false);
   } finally {
     await client.close();
   }
+});
+
+test("el conocimiento privado respeta el proyecto y el agente consulta las versiones de su perfil congelado", async (t) => {
+  const f = await fixture();
+  t.after(f.close);
+  const a = await f.api.createOrganization("Alfa");
+  const b = await f.api.createOrganization("Beta");
+  await f.api.createProject({ id: "alfa", name: "Alfa", organizationId: a.id });
+  await f.api.createProject({ id: "beta", name: "Beta", organizationId: b.id });
+  const client = async (label: string, role: string, projectId: string) =>
+    new ApiClient(f.server, (await f.api.createApiKey(label, role, { projectIds: [projectId] })).token);
+  const publisher = await client("Alfa autor", "publisher", "alfa");
+  const reader = await client("Alfa lector", "reader", "alfa");
+  const outsider = await client("Beta autor", "publisher", "beta");
+  const worker = await client("Alfa worker", "worker", "alfa");
+  const target = { scope: "project" as const, id: "alfa" };
+  const manual = await publisher.createKnowledge(
+    { title: "Convenio interno", content: "Convenio reservado del equipo" },
+    "alfa",
+  );
+  await publisher.saveVector(manual.id, "test-model", [1, 0], undefined, "alfa");
+  assert.equal((await reader.knowledgeDocument(manual.id, "alfa")).projectId, "alfa");
+  assert.equal((await reader.searchProjectKnowledge("alfa", { query: "convenio" }))[0]?.id, manual.id);
+  assert.equal(
+    (await reader.searchProjectVectors("alfa", { model: "test-model", embedding: [1, 0] }))[0]?.id,
+    manual.id,
+  );
+  assert.deepEqual(await f.api.searchKnowledge("convenio"), []);
+  assert.deepEqual(await f.api.vectorSearch("test-model", [1, 0]), []);
+  await assert.rejects(f.api.knowledgeDocument(manual.id), /KNOWLEDGE_NOT_FOUND/);
+  await assert.rejects(outsider.knowledgeDocument(manual.id, "alfa"), /PROJECT_FORBIDDEN/);
+  await assert.rejects(outsider.knowledgeDocument(manual.id, "beta"), /KNOWLEDGE_NOT_FOUND/);
+  await assert.rejects(reader.updateKnowledge(manual.id, { title: "Cambio" }, "alfa"), /FORBIDDEN/);
+  await assert.rejects(outsider.deleteKnowledge(manual.id, "beta"), /KNOWLEDGE_NOT_FOUND/);
+  await assert.rejects(
+    publisher.createKnowledge(
+      {
+        title: "Ámbito ambiguo",
+        content: "Fixture",
+        packageName: "@lib/no-aplica",
+      },
+      "alfa",
+    ),
+    /INVALID_KNOWLEDGE_SCOPE/,
+  );
+  await assert.rejects(f.api.updateProject("alfa", { organizationId: b.id }), /PROJECT_HAS_CONTEXT/);
+
+  const name = "@lib/convenio";
+  const guide = (version: string, text: string) => {
+    const data = input(
+      name,
+      { contributes: { knowledge: [{ title: "Convenio", path: "guia.md" }] } },
+      { "guia.md": text },
+    );
+    data.manifest.metadata.version = version;
+    return data;
+  };
+  await f.api.publish(guide("1.0.0", "Convenio anterior"));
+  await f.api.publish(guide("2.0.0", "Convenio nuevo"));
+  await f.api.setBinding(target, { packageName: name, range: "1.0.0" });
+  const agent = "@agents/consultor";
+  await f.api.publish(
+    input(agent, {
+      contributes: {
+        agents: [{ name: "consultor", instructions: "Consulta las guías", capabilities: ["modai_search_knowledge"] }],
+      },
+    }),
+  );
+  const run = await publisher.submitRun({ projectId: "alfa", name: agent, task: "Revisar convenio" });
+  assert.ok(!run.bundle.packages.some((item) => item.name === name));
+  await f.api.setBinding(target, { packageName: name, range: "2.0.0" });
+  const claimed = await worker.claimRun("alfa");
+  assert.equal(claimed?.run.id, run.id);
+  const results = await invokeBuiltin(worker, claimed!.run.bundle, run.id, "modai_search_knowledge", {
+    query: "convenio",
+  });
+  assert.match(JSON.stringify(results), /Convenio anterior/);
+  assert.match(JSON.stringify(results), /Convenio reservado/);
+  assert.doesNotMatch(JSON.stringify(results), /Convenio nuevo/);
+  assert.match(JSON.stringify(await reader.searchProjectKnowledge("alfa", { query: "convenio" })), /Convenio nuevo/);
+  assert.deepEqual(await reader.searchProjectKnowledge("alfa", { query: "reservado", packageNames: [name] }), []);
+  await publisher.updateKnowledge(manual.id, { content: "Convenio revisado" }, "alfa");
+  assert.deepEqual(await reader.searchProjectVectors("alfa", { model: "test-model", embedding: [1, 0] }), []);
+  await publisher.deleteKnowledge(manual.id, "alfa");
+  await assert.rejects(reader.knowledgeDocument(manual.id, "alfa"), /KNOWLEDGE_NOT_FOUND/);
 });
 
 test("la autorización precede a la búsqueda, la composición y el reclamo de tareas", async (t) => {
@@ -736,6 +845,87 @@ test("worker procesa cola, congela versiones y rechaza finalizar con un lease vi
   }
 });
 
+test("la cola atiende envíos simultáneos y varios workers después de reiniciar el servidor", async (t) => {
+  const f = await fixture({ workerLeaseMs: 60_000 });
+  let restarted: Awaited<ReturnType<typeof createApp>> | undefined;
+  t.after(async () => {
+    await restarted?.close();
+    await f.close();
+  });
+  await publishExamples(f.api);
+  const org = await f.api.createOrganization("Cola transferida");
+  const transferred = "workers-transferred";
+  await f.api.createProject({ id: transferred, name: "Cola transferible" });
+  const beforeTransfer = await f.api.composeAgent(transferred, "@agents/backend-reviewer");
+  await f.api.updateProject(transferred, { organizationId: org.id });
+  const ownershipDatabase = await openTestDatabase(join(f.root, "db.sqlite"));
+  try {
+    const queue = new RunsService(ownershipDatabase);
+    await assert.rejects(
+      queue.submit(beforeTransfer, "Solicitud anterior a la transferencia", "previous"),
+      /La organización del proyecto cambió/,
+    );
+    await assert.rejects(
+      queue.claim(transferred, "previous", { organizationId: null }),
+      /La organización del proyecto cambió/,
+    );
+  } finally {
+    await ownershipDatabase.close();
+  }
+  const projectId = "workers";
+  await f.api.createProject({ id: projectId, name: "Workers" });
+  const tokens = await Promise.all(
+    Array.from({ length: 8 }, (_, index) =>
+      f.api.createApiKey(`worker-${index}`, "worker", { projectIds: [projectId] }),
+    ),
+  );
+  const task = { projectId, name: "@agents/backend-reviewer", task: "Verificar la cola" };
+  const repeated = await Promise.all(
+    Array.from({ length: 12 }, () => f.api.submitRun({ ...task, idempotencyKey: "same-run" })),
+  );
+  assert.equal(new Set(repeated.map((item) => item.id)).size, 1);
+  const staleWorker = new ApiClient(f.server, tokens[0].token);
+  const before = await staleWorker.claimRun(projectId);
+  assert.equal(before?.run.id, repeated[0].id);
+  const additional = await Promise.all(
+    Array.from({ length: 15 }, (_, index) => f.api.submitRun({ ...task, task: `Trabajo ${index}` })),
+  );
+
+  await f.app.close();
+  const database = await openTestDatabase(join(f.root, "db.sqlite"));
+  await database.db
+    .updateTable("runs")
+    .set({ lease_expires_at: "2000-01-01" })
+    .where("id", "=", before!.run.id)
+    .execute();
+  await database.close();
+  restarted = await createApp({
+    ...(await testDatabase(join(f.root, "db.sqlite"))),
+    artifactDirectory: join(f.root, "artifacts"),
+    apiToken: admin,
+    logger: false,
+  });
+  await restarted.listen({ host: "127.0.0.1", port: 0 });
+  const server = `http://127.0.0.1:${(restarted.server.address() as AddressInfo).port}`;
+  const workers = tokens.map(({ token }) => new ApiClient(server, token));
+  await assert.rejects(workers[0].finishRun(before!.run.id, before!.leaseToken, { result: "Vencido" }), /LEASE_LOST/);
+  const complete = () =>
+    Promise.all(
+      workers.map(async (worker) => {
+        const claimed = await worker.claimRun(projectId);
+        assert.ok(claimed, "cada worker debe obtener un trabajo mientras haya suficientes disponibles");
+        return worker.finishRun(claimed.run.id, claimed.leaseToken, { result: "Completado" });
+      }),
+    );
+  const completed = [...(await complete()), ...(await complete())];
+  assert.deepEqual(
+    new Set(completed.map((item) => item.id)),
+    new Set([before!.run.id, ...additional.map((item) => item.id)]),
+  );
+  assert.equal(completed.find((item) => item.id === before!.run.id)?.attempts, 2);
+  assert.equal(await workers[0].claimRun(projectId), null);
+});
+
 test("MCP descubre herramientas de un proceso aprobado y aplica la política del agente activo", async () => {
   const f = await fixture();
   let client: Client | undefined;
@@ -836,6 +1026,7 @@ test("restaura proyectos, organización, memorias y tareas sin credenciales ni l
     await publishExamples(source.api);
     const org = await source.api.createOrganization("equipo");
     await source.api.createProject({ id: "restore", name: "Restore", organizationId: org.id });
+    await source.api.createKnowledge({ title: "Guía privada", content: "Documento de restauración" }, "restore");
     await source.api.remember({ projectId: "restore", content: "decisión compartida", scope: "organization" });
     await source.api.remember({
       projectId: "restore",
@@ -852,8 +1043,11 @@ test("restaura proyectos, organización, memorias y tareas sin credenciales ni l
     const snapshot = (await source.api.exportBackup()) as Record<string, unknown>;
     assert.ok(!JSON.stringify(snapshot).includes(admin));
     assert.equal(snapshot.apiKeys, undefined);
+    assert.equal((snapshot.knowledge as unknown[]).length, 0);
     await target.api.importBackup(snapshot);
     assert.equal((await target.api.projects())[0].id, "restore");
+    assert.equal((await target.api.knowledgeDocuments(0, "restore")).documents[0]?.title, "Guía privada");
+    assert.deepEqual(await target.api.searchKnowledge("restauración"), []);
     assert.equal((await target.api.recall("restore", "decisión", { includeOrganization: true })).length, 1);
     assert.equal((await target.api.recall("restore", "sesión", { sessionId: "session" })).length, 1);
     const restored = await target.api.run(run.id);

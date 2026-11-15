@@ -9,6 +9,7 @@ import { debounce } from "../../shared/ui/format.js";
 import { skeletonRows } from "../../shared/ui/skeleton.js";
 import { toast } from "../../shared/ui/toast.js";
 import { projectForm } from "./project-form.js";
+import { openProjectProfile } from "./project-profile.js";
 import { matchesProject, organizationOptions, projectTable } from "./project-table.js";
 
 function headerActions() {
@@ -19,7 +20,7 @@ async function deleteProject(project, reload) {
   let result;
   const confirmed = await confirmDialog({
     title: "Eliminar proyecto",
-    message: html`Se eliminará <b>${project.name}</b> junto con su memoria de proyecto y sesión, sus ejecuciones y el registro de paquetes instalados. Se quitará también de los accesos de usuarios y API keys. La memoria de organización se conserva. <b>No se puede deshacer.</b>`,
+    message: html`Se eliminará <b>${project.name}</b> junto con su conocimiento privado, su memoria de proyecto y sesión, sus ejecuciones y el registro de paquetes instalados. Se quitará también de los accesos de usuarios y API keys. La memoria de organización se conserva. <b>No se puede deshacer.</b>`,
     confirmLabel: "Eliminar proyecto",
     typed: project.id,
     action: async () => {
@@ -47,6 +48,10 @@ function projectHandlers(ctx) {
     edit: (button) => {
       const project = find(button);
       if (project) projectForm(project, saved);
+    },
+    profile: (button) => {
+      const project = find(button);
+      if (project) openProjectProfile(project);
     },
     delete: async (button) => {
       const project = find(button);

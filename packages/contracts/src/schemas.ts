@@ -66,20 +66,40 @@ export const workerClaimSchema = z
     mcp: z.array(capabilityName).max(100).optional(),
   })
   .strict();
-export const profileKnowledgeSchema = z
+const knowledgeSearchFilters = z.object({
+  packageNames: z.array(packageNameSchema.max(214)).max(200).optional(),
+  platform: profilePlatformSchema,
+  packageVersions: z
+    .array(z.object({ name: packageNameSchema.max(214), version: semverSchema, artifactId: z.uuid() }).strict())
+    .max(400)
+    .optional(),
+});
+
+export const profileKnowledgeSchema = knowledgeSearchFilters
+  .extend({
+    query: z.string().min(1).max(2000),
+    limit: z.number().int().min(1).max(50).optional(),
+  })
+  .strict();
+export const profileVectorSchema = knowledgeSearchFilters
+  .omit({ packageVersions: true })
+  .extend({
+    model: modelName,
+    embedding: z.array(z.number()).min(1).max(8192),
+    limit: z.number().int().min(1).max(50).optional(),
+  })
+  .strict();
+export const knowledgeQuerySchema = z
   .object({
     query: z.string().min(1).max(2000),
     limit: z.number().int().min(1).max(50).optional(),
     packageNames: z.array(packageNameSchema.max(214)).max(200).optional(),
-    platform: profilePlatformSchema,
+    packageVersions: z
+      .array(z.object({ name: packageNameSchema.max(214), version: semverSchema }).strict())
+      .max(200)
+      .optional(),
   })
   .strict();
-export const knowledgeQuerySchema = profileKnowledgeSchema.omit({ platform: true }).extend({
-  packageVersions: z
-    .array(z.object({ name: packageNameSchema.max(214), version: semverSchema }).strict())
-    .max(200)
-    .optional(),
-});
 export const keySchema = z
   .object({
     label: z.string().min(1).max(200),

@@ -70,12 +70,26 @@ export async function exportSnapshot(context: DataContext, packages: PackagesSer
     schemaVersion: 1,
     exportedAt: new Date().toISOString(),
     packages: await exportPackages(packages),
-    knowledge: knowledge.map((item) => ({
-      packageName: item.packageName as string | undefined,
-      title: item.title,
-      content: item.content,
-      tags: JSON.parse(item.tagsJson) as string[],
-    })),
+    knowledge: knowledge
+      .filter((item) => item.projectId === null)
+      .map((item) => ({
+        packageName: item.packageName ?? undefined,
+        title: item.title,
+        content: item.content,
+        tags: JSON.parse(item.tagsJson) as string[],
+      })),
+    projectKnowledge: knowledge.flatMap((item) =>
+      item.projectId === null
+        ? []
+        : [
+            {
+              projectId: item.projectId,
+              title: item.title,
+              content: item.content,
+              tags: JSON.parse(item.tagsJson) as string[],
+            },
+          ],
+    ),
     memories: memories.map((item) => ({
       projectId: item.projectId,
       scope: item.scope,

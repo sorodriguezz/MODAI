@@ -55,13 +55,17 @@ function workerRoutes(app: FastifyInstance, { authz, projects, runs, audit }: Se
       "PROJECT_FORBIDDEN",
       "El worker requiere una asignación explícita al proyecto",
     );
-    await projects.requireProject(actor, id, true);
+    return projects.requireProject(actor, id, true);
   };
   app.post("/api/v1/worker/claim", async (request) => {
     const actor = authz.require(identityOf(request), "worker");
     const { projectId, ...worker } = parseInput(workerClaimSchema, request.body);
-    await requireWorkerProject(actor, projectId);
-    const claimed = await runs.claim(projectId, actor.id, { visible: authz.packageVisibility(actor), worker });
+    const project = await requireWorkerProject(actor, projectId);
+    const claimed = await runs.claim(projectId, actor.id, {
+      visible: authz.packageVisibility(actor),
+      worker,
+      organizationId: project.organizationId ?? null,
+    });
     if (claimed) await audit.fromRequest(request, "run.claim", claimed.run.id);
     return { claimed: claimed ?? null };
   });

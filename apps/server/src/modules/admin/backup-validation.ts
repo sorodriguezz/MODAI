@@ -106,6 +106,16 @@ export async function validateSnapshot(context: DataContext, snapshot: Snapshot)
   for (const item of snapshot.projects ?? [])
     parseInput(projectSchema, { id: item.id, name: item.name, organizationId: item.organizationId ?? undefined });
   const knownProjects = new Set((snapshot.projects ?? []).map((item) => item.id));
+  for (const item of snapshot.projectKnowledge ?? [])
+    invariant(
+      typeof item.projectId === "string" &&
+        item.projectId.length > 0 &&
+        item.projectId.length <= 200 &&
+        (knownProjects.has(item.projectId) || (await projectExists(context, item.projectId))),
+      400,
+      "INVALID_BACKUP",
+      "El documento apunta a un proyecto ausente",
+    );
   for (const item of snapshot.installations ?? []) {
     assertInstallationShape(item);
     invariant(

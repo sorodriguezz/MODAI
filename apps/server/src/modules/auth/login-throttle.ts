@@ -2,6 +2,8 @@ const WINDOW_MS = 15 * 60_000;
 const MAX_FAILURES = 5;
 const MAX_ENTRIES = 10_000;
 
+export const authRateLimit = (max = 10) => ({ rateLimit: { max, timeWindow: "1 minute" } });
+
 interface Failure {
   count: number;
   first: number;

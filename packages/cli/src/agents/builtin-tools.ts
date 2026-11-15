@@ -40,6 +40,14 @@ export async function invokeBuiltin(
   input: Record<string, unknown>,
 ): Promise<unknown> {
   if (name === "modai_search_knowledge") {
+    if (bundle.knowledgeScope === "project") {
+      const pins = new Map(bundle.effectiveProfile?.packages.map((item) => [item.name, item]));
+      for (const { name, version, artifactId } of bundle.packages) pins.set(name, { name, version, artifactId });
+      return api.searchProjectKnowledge(bundle.projectId, {
+        query: queryOf(input),
+        packageVersions: [...pins.values()],
+      });
+    }
     const versions = bundle.packages.map(({ name, version }) => ({ name, version }));
     return api.searchKnowledge(
       queryOf(input),

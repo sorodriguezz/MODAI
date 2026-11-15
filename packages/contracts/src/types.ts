@@ -110,6 +110,7 @@ export interface AgentBundle {
   projectId: string;
   organizationId?: string;
   effectiveProfile?: EffectiveProfile;
+  knowledgeScope?: "project";
   executionPolicy?: ExecutionPolicy;
   agent: { name: string; version: string; definition: AgentDefinition };
   packages: PackageRecord[];

@@ -73,6 +73,18 @@ export function remoteProfileTools(
       },
       call: (input) => readSkill(input.packageName as string, input.skill as string | undefined),
     },
+    {
+      name: "modai_read_project_knowledge",
+      description: "Lee un documento por ID de la búsqueda del proyecto.",
+      readOnly: true,
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string", minLength: 1, maxLength: 100 } },
+        required: ["id"],
+        additionalProperties: false,
+      },
+      call: (input) => api.projectKnowledgeDocument(id, input.id as string, platform),
+    },
   ];
 }
 

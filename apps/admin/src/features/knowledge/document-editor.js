@@ -65,17 +65,23 @@ function bindScope(form) {
   return packageName;
 }
 
-export async function documentEditor(documentRecord, onSaved) {
+export async function documentEditor(documentRecord, onSaved, project) {
   const editing = Boolean(documentRecord);
-  const scopes = await scopeOptions(editing);
+  const scopes = project ? [] : await scopeOptions(editing);
   const body = openDialog({
     title: editing ? "Editar documento" : "Nuevo documento",
-    description: "Conocimiento que los agentes encuentran con búsqueda. Quién lo ve depende de dónde lo guardes.",
+    description: project
+      ? `Visible para quienes tienen acceso a «${project.name}».`
+      : "Conocimiento que los agentes encuentran con búsqueda. Quién lo ve depende de dónde lo guardes.",
     size: "lg",
     body: html`<form class="stack" novalidate>
-      <div class="field-row">
+      ${
+        project
+          ? ""
+          : html`<div class="field-row">
         ${scopeFields(editing, scopes, initialScope(documentRecord, scopes))}
-      </div>
+      </div>`
+      }
       <div class="field"><label for="docTitle">Título</label><input id="docTitle" required maxlength="300" value="${documentRecord?.title || ""}"></div>
       <div class="field"><label for="docTags">Etiquetas</label><input id="docTags" value="${(documentRecord?.tags || []).join(", ")}" placeholder="arquitectura, convenciones"><p class="hint">Separadas por comas.</p></div>
       <div class="field"><label for="docContent">Contenido (Markdown)</label><textarea id="docContent" class="mono" rows="14" required>${documentRecord?.content || ""}</textarea></div>
@@ -85,17 +91,18 @@ export async function documentEditor(documentRecord, onSaved) {
   });
   const form = body.querySelector("form");
   form.querySelector("[data-dismiss]").addEventListener("click", closeDialog);
-  if (!editing) bindComboSearch(form, "docScope", scopes);
-  const packageName = bindScope(form);
+  if (!editing && !project) bindComboSearch(form, "docScope", scopes);
+  const packageName = project ? () => "" : bindScope(form);
+  const path = project ? `/projects/${encodeURIComponent(project.id)}/knowledge/documents` : "/knowledge/documents";
   bindForm(form, async () => {
-    if (!editing && !form.docScope.value) throw new Error("Elige dónde guardar el documento.");
+    if (!project && !editing && !form.docScope.value) throw new Error("Elige dónde guardar el documento.");
     const payload = {
       title: form.docTitle.value.trim(),
       content: form.docContent.value,
       tags: csv(form.docTags.value),
     };
-    if (editing) await patch(`/knowledge/documents/${encodeURIComponent(documentRecord.id)}`, payload);
-    else await post("/knowledge/documents", { ...payload, ...(packageName() ? { packageName: packageName() } : {}) });
+    if (editing) await patch(`${path}/${encodeURIComponent(documentRecord.id)}`, payload);
+    else await post(path, { ...payload, ...(packageName() ? { packageName: packageName() } : {}) });
     closeDialog();
     toast(editing ? "Documento actualizado" : "Documento creado");
     await onSaved();

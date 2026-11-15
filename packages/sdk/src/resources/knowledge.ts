@@ -1,41 +1,66 @@
-import type { KnowledgeDocument } from "../types.js";
+import type { KnowledgeDocument, KnowledgeSearchResult, KnowledgeVectorResult } from "../types.js";
 import { TemplatesApi } from "./templates.js";
+
+function documentsPath(projectId?: string): string {
+  const prefix = projectId === undefined ? "/api/v1" : `/api/v1/projects/${encodeURIComponent(projectId)}`;
+  return `${prefix}/knowledge/documents`;
+}
+
+function documentPath(id: string, projectId?: string): string {
+  return `${documentsPath(projectId)}/${encodeURIComponent(id)}`;
+}
 
 export class KnowledgeApi extends TemplatesApi {
   async searchKnowledge(
     query: string,
     packageNames?: string[],
     packageVersions?: Array<{ name: string; version: string }>,
-  ): Promise<unknown[]> {
-    const response = await this.request<{ results: unknown[] }>("/api/v1/knowledge/search", {
+  ): Promise<KnowledgeSearchResult[]> {
+    const response = await this.request<{ results: KnowledgeSearchResult[] }>("/api/v1/knowledge/search", {
       method: "POST",
       body: JSON.stringify({ query, packageNames, packageVersions }),
     });
     return response.results;
   }
 
-  async knowledgeDocuments(offset = 0): Promise<{ documents: KnowledgeDocument[]; nextOffset: number | null }> {
-    return this.request(`/api/v1/knowledge/documents?limit=100&offset=${offset}`);
+  async knowledgeDocuments(
+    offset = 0,
+    projectId?: string,
+  ): Promise<{ documents: KnowledgeDocument[]; nextOffset: number | null }> {
+    return this.request(`${documentsPath(projectId)}?limit=100&offset=${offset}`);
   }
 
-  async saveVector(id: string, model: string, embedding: number[], sourceHash?: string): Promise<void> {
-    await this.request(`/api/v1/knowledge/documents/${encodeURIComponent(id)}/vector`, {
+  async knowledgeDocument(id: string, projectId?: string): Promise<KnowledgeDocument> {
+    return (await this.request<{ document: KnowledgeDocument }>(documentPath(id, projectId))).document;
+  }
+
+  async saveVector(
+    id: string,
+    model: string,
+    embedding: number[],
+    sourceHash?: string,
+    projectId?: string,
+  ): Promise<void> {
+    await this.request(`${documentPath(id, projectId)}/vector`, {
       method: "PUT",
       body: JSON.stringify({ model, embedding, sourceHash }),
     });
   }
 
-  async vectorSearch(model: string, embedding: number[], packageNames?: string[]): Promise<unknown[]> {
-    const data = await this.request<{ results: unknown[] }>("/api/v1/knowledge/vector-search", {
+  async vectorSearch(model: string, embedding: number[], packageNames?: string[]): Promise<KnowledgeVectorResult[]> {
+    const data = await this.request<{ results: KnowledgeVectorResult[] }>("/api/v1/knowledge/vector-search", {
       method: "POST",
       body: JSON.stringify({ model, embedding, packageNames }),
     });
     return data.results;
   }
 
-  async createKnowledge(input: { title: string; content: string; tags?: string[] }): Promise<KnowledgeDocument> {
+  async createKnowledge(
+    input: { title: string; content: string; tags?: string[]; packageName?: string },
+    projectId?: string,
+  ): Promise<KnowledgeDocument> {
     return (
-      await this.request<{ document: KnowledgeDocument }>("/api/v1/knowledge/documents", {
+      await this.request<{ document: KnowledgeDocument }>(documentsPath(projectId), {
         method: "POST",
         body: JSON.stringify(input),
       })
@@ -45,16 +70,17 @@ export class KnowledgeApi extends TemplatesApi {
   async updateKnowledge(
     id: string,
     input: { title?: string; content?: string; tags?: string[] },
+    projectId?: string,
   ): Promise<KnowledgeDocument> {
     return (
-      await this.request<{ document: KnowledgeDocument }>(`/api/v1/knowledge/documents/${encodeURIComponent(id)}`, {
+      await this.request<{ document: KnowledgeDocument }>(documentPath(id, projectId), {
         method: "PATCH",
         body: JSON.stringify(input),
       })
     ).document;
   }
 
-  async deleteKnowledge(id: string): Promise<void> {
-    await this.request(`/api/v1/knowledge/documents/${encodeURIComponent(id)}`, { method: "DELETE" });
+  async deleteKnowledge(id: string, projectId?: string): Promise<void> {
+    await this.request(documentPath(id, projectId), { method: "DELETE" });
   }
 }

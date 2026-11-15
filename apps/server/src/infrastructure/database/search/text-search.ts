@@ -5,6 +5,7 @@ import type { Schema } from "../schema.js";
 
 export interface KnowledgeHit {
   id: string;
+  projectId: string | null;
   packageName: string | null;
   packageVersion: string | null;
   title: string;
@@ -62,6 +63,7 @@ export type TextSearch = KnowledgeSearch & MemorySearch;
 
 export const KNOWLEDGE_COLUMNS = [
   "knowledge_documents.id",
+  "knowledge_documents.project_id as projectId",
   "knowledge_documents.package_name as packageName",
   "knowledge_documents.package_version as packageVersion",
   "knowledge_documents.title",

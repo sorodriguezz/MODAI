@@ -21,12 +21,18 @@ export interface AppOptions {
   sessionMaxMs?: number;
   loginRateLimitMax?: number;
   loginDelayMs?: number;
+  mfaKey?: string;
 }
 
 function parseTrustProxy(value: string | undefined): boolean | number | string {
   if (!value || value === "false") return false;
   if (value === "true") return true;
   return /^\d+$/.test(value) ? Number(value) : value;
+}
+
+function parseRateLimit(value: string | undefined): number | undefined {
+  const limit = Number(value);
+  return Number.isSafeInteger(limit) && limit > 0 ? limit : undefined;
 }
 
 export function optionsFromEnvironment(env: NodeJS.ProcessEnv = process.env): AppOptions {
@@ -36,10 +42,12 @@ export function optionsFromEnvironment(env: NodeJS.ProcessEnv = process.env): Ap
     databasePath: resolve(env.MODAI_DATABASE_PATH ?? resolve(runtimeDirectory, "data/modularai.db")),
     artifactDirectory: resolve(env.MODAI_ARTIFACT_DIR ?? resolve(runtimeDirectory, "artifacts")),
     apiToken: env.MODAI_API_TOKEN,
+    mfaKey: env.MODAI_MFA_KEY || undefined,
     publicUrl: env.MODAI_PUBLIC_URL,
     trustProxy: parseTrustProxy(env.MODAI_TRUST_PROXY),
     signaturePolicy: signaturePolicySchema.parse(env.MODAI_SIGNATURE_POLICY ?? "optional"),
     maxArtifactStorageBytes: Number(env.MODAI_ARTIFACT_QUOTA_BYTES ?? 1024 * 1024 * 1024),
-    ...(Number(env.MODAI_LOGIN_RATE_LIMIT) > 0 ? { loginRateLimitMax: Number(env.MODAI_LOGIN_RATE_LIMIT) } : {}),
+    rateLimitMax: parseRateLimit(env.MODAI_RATE_LIMIT),
+    loginRateLimitMax: parseRateLimit(env.MODAI_LOGIN_RATE_LIMIT),
   };
 }

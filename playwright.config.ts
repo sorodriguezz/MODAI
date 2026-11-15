@@ -32,6 +32,7 @@ export default defineConfig({
       MODAI_API_TOKEN: UI.token,
       MODAI_ADMIN_USERNAME: UI.username,
       MODAI_ADMIN_PASSWORD: UI.password,
+      MODAI_RATE_LIMIT: "3000",
       MODAI_LOGIN_RATE_LIMIT: "1000",
       MODAI_DATABASE_PATH: join(data, "modai.db"),
       MODAI_ARTIFACT_DIR: join(data, "artifacts"),

@@ -48,7 +48,14 @@ function registerContextShow(context: Command, print: Print): void {
     .command("show")
     .description("Muestra un fragmento de conocimiento por ID")
     .argument("<id>")
-    .action((id: string) => {
+    .option("--project <id>", "Lee desde el perfil central de este proyecto")
+    .action(async (id: string, options: { project?: string }) => {
+      const context = currentProject()?.file.context;
+      if (options.project || context?.delivery === "virtual") {
+        const target = profileConnection(options.project, context);
+        print(await target.api.projectKnowledgeDocument(target.id, id, target.platform));
+        return;
+      }
       const chunk = readKnowledgeChunk(loadContextIndex(requireProject()), id);
       if (!chunk) throw new Error(`Fragmento no encontrado: ${id}`);
       print(chunk);

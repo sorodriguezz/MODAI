@@ -1,5 +1,5 @@
 {
-  "version": "0.13.0",
+  "version": "0.14.0",
   "type": "module",
   "engines": {
     "node": ">=26.13.0 <27"
@@ -45,9 +45,9 @@
     "./sdk": "./dist/sdk.js"
   },
   "devDependencies": {
-    "@modai/contracts": "0.13.0",
-    "@modai/core": "0.13.0",
-    "@modai/sdk": "0.13.0",
+    "@modai/contracts": "0.14.0",
+    "@modai/core": "0.14.0",
+    "@modai/sdk": "0.14.0",
     "esbuild": "^0.28.2"
   }
 }

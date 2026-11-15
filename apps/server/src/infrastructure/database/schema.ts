@@ -1,3 +1,7 @@
+import type { UsersTable } from "./user-schema.js";
+
+export type { UsersTable } from "./user-schema.js";
+
 export interface PackagesTable {
   name: string;
   version: string;
@@ -22,6 +26,7 @@ export interface ArtifactsTable {
 
 export interface KnowledgeDocumentsTable {
   id: string;
+  project_id: string | null;
   package_name: string | null;
   package_version: string | null;
   title: string;
@@ -138,21 +143,6 @@ export interface ProjectInstallationsTable {
   version: string;
   direct: number;
   reported_at: string;
-}
-
-export interface UsersTable {
-  id: string;
-  username: string;
-  display_name: string;
-  password_hash: string;
-  role: string;
-  project_ids_json: string;
-  organization_ids_json: string;
-  package_scopes_json: string;
-  created_at: string;
-  updated_at: string;
-  last_login_at: string | null;
-  disabled_at: string | null;
 }
 
 export interface SessionsTable {

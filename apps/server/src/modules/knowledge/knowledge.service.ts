@@ -3,12 +3,13 @@ import { AppError, invariant } from "@modai/contracts/errors";
 import { type DataContext, withTransaction } from "../../infrastructure/database/database.js";
 import { textSearchFor } from "../../infrastructure/database/search/search-engine.js";
 import { searchTerms } from "../../infrastructure/database/search/text-search.js";
+import { affectedRows } from "../../infrastructure/database/sql-helpers.js";
 import type { PackageVisibilityFilter } from "../auth/namespace-access.js";
 import { assertContentBudget } from "./content-budget.js";
 import { KnowledgeRepository } from "./knowledge.repository.js";
 import { rankInWorker } from "./vector-search.js";
 
-type KnowledgeInput = { title: string; content: string; tags?: string[]; packageName?: string };
+type KnowledgeInput = { title: string; content: string; tags?: string[]; packageName?: string; projectId?: string };
 
 const withTags = <T extends { tagsJson: string }>(item: T): Omit<T, "tagsJson"> & { tags: string[] } => ({
   ...item,
@@ -27,29 +28,38 @@ export class KnowledgeService {
     return new KnowledgeService(context);
   }
 
-  async owner(id: string): Promise<string | null> {
-    const doc = await this.knowledge.find(id);
+  async find(id: string, projectId?: string) {
+    const doc = await this.knowledge.find(id, projectId);
     if (!doc) throw new AppError(404, "KNOWLEDGE_NOT_FOUND", "Documento no encontrado");
-    return doc.package_name;
+    return doc;
   }
 
-  find(id: string) {
-    return this.knowledge.find(id);
+  async get(id: string, visible: PackageVisibilityFilter) {
+    const document = await this.knowledge.document(id, visible);
+    if (!document) throw new AppError(404, "KNOWLEDGE_NOT_FOUND", "Documento no encontrado");
+    return withTags(document);
   }
 
-  async add(input: KnowledgeInput): Promise<Record<string, unknown>> {
+  async add(input: KnowledgeInput, projectOrganizationId?: string | null) {
     invariant(
       input?.title?.trim() && input?.content?.trim(),
       400,
       "INVALID_KNOWLEDGE",
       "title y content son obligatorios",
     );
+    invariant(
+      !input.projectId || !input.packageName,
+      400,
+      "INVALID_KNOWLEDGE_SCOPE",
+      "Un documento de proyecto se guarda sin paquete",
+    );
     const id = randomUUID();
     const now = new Date().toISOString();
     await assertContentBudget(this.context, input.content);
     const tags = input.tags ?? [];
-    await this.knowledge.insert({
+    const document = {
       id,
+      project_id: input.projectId ?? null,
       package_name: input.packageName ?? null,
       package_version: null,
       title: input.title.trim(),
@@ -57,8 +67,21 @@ export class KnowledgeService {
       tags_json: JSON.stringify(tags),
       created_at: now,
       updated_at: now,
-    });
-    return { id, ...input, tags, createdAt: now };
+    };
+    if (input.projectId && projectOrganizationId !== undefined) {
+      const projectId = input.projectId;
+      await withTransaction(this.context, async (trx) => {
+        const project = await trx.db
+          .updateTable("projects")
+          .set((eb) => ({ name: eb.ref("name") }))
+          .where("id", "=", projectId)
+          .where("organization_id", projectOrganizationId === null ? "is" : "=", projectOrganizationId)
+          .executeTakeFirst();
+        invariant(affectedRows(project), 409, "PROJECT_CHANGED", "El proyecto cambió antes de guardar el documento");
+        await new KnowledgeRepository(trx).insert(document);
+      });
+    } else await this.knowledge.insert(document);
+    return { id, ...input, title: input.title.trim(), tags, createdAt: now };
   }
 
   async list(limit = 100, offset = 0, visible?: PackageVisibilityFilter) {
@@ -70,9 +93,8 @@ export class KnowledgeService {
     return rows.map(withTags);
   }
 
-  async update(id: string, input: { title?: string; content?: string; tags?: string[] }) {
-    const existing = await this.knowledge.find(id);
-    if (!existing) throw new AppError(404, "KNOWLEDGE_NOT_FOUND", `Documento no encontrado: ${id}`);
+  async update(id: string, input: { title?: string; content?: string; tags?: string[] }, projectId?: string) {
+    const existing = await this.find(id, projectId);
     invariant(
       !existing.package_version,
       409,
@@ -87,12 +109,11 @@ export class KnowledgeService {
     await withTransaction(this.context, (trx) =>
       new KnowledgeRepository(trx).update(id, { title, content, tags_json: JSON.stringify(tags), updated_at: now }),
     );
-    return { id, title, content, tags, updatedAt: now };
+    return { id, title, content, tags, updatedAt: now, projectId };
   }
 
-  async delete(id: string): Promise<void> {
-    const existing = await this.knowledge.find(id);
-    if (!existing) throw new AppError(404, "KNOWLEDGE_NOT_FOUND", `Documento no encontrado: ${id}`);
+  async delete(id: string, projectId?: string): Promise<void> {
+    const existing = await this.find(id, projectId);
     invariant(
       !existing.package_version,
       409,

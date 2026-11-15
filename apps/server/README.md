@@ -70,6 +70,8 @@ Los clientes usan la dirección pública (`MODAI_PUBLIC_URL`), no `localhost` ni
 | ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `MODAI_API_TOKEN`                              | —                                        | Token de instalación y credencial `admin` de recuperación. Obligatorio con Docker Compose; el servidor necesita este token o un administrador sembrado. |
 | `MODAI_ADMIN_USERNAME`, `MODAI_ADMIN_PASSWORD` | —                                        | Crean el primer administrador al arrancar, solo si todavía no hay usuarios. Una contraseña que no cumple la política impide arrancar.                   |
+| `MODAI_MFA_KEY`                                 | `.mfa-key` en `MODAI_ARTIFACT_DIR`       | Clave de 32 bytes en base64url sin relleno para cifrar TOTP. Las réplicas que comparten base de datos necesitan la misma clave.                         |
+| `MODAI_RATE_LIMIT`                              | `600`                                    | Límite HTTP general por IP y minuto. El inicio de sesión y los cambios de credenciales tienen su propio límite.                                       |
 | `MODAI_PORT` (o `PORT`)                        | `8787`                                   | Puerto HTTP.                                                                                                                                            |
 | `MODAI_HOST`                                   | `0.0.0.0`                                | Interfaz de escucha del proceso. Con Compose, la IP publicada se fija con `MODAI_BIND_IP` (por defecto `127.0.0.1`).                                    |
 | `MODAI_PUBLIC_URL`                             | —                                        | Origen HTTP(S) sin ruta que el panel muestra a los clientes y que aparece en `/health`. Con `https://` la cookie de sesión se marca `Secure`.           |
@@ -128,29 +130,34 @@ MODAI_TEST_DATABASE_URL=postgres://postgres:clave@127.0.0.1:5432/postgres npm te
 
 Las migraciones se aplican al iniciar. Los namespaces existentes con visibilidad `internal` pasan a usar el ámbito de su propietario. Para conservar un catálogo de instancia, cambia sus namespaces a `shared` explícitamente.
 
+- En **Proyectos → Perfil**, cada usuario ve las asignaciones y versiones que aplica su cuenta. Quienes administran el proyecto pueden editar sus asignaciones y las de los ámbitos que gestionan, además de crear equipos y gestionar sus integrantes.
 - `GET /api/v1/projects/:id/effective-profile` resuelve las asignaciones del proyecto, su organización y los equipos de la identidad. Devuelve versiones, IDs de artefacto y el digest del perfil.
 - Las rutas `/api/v1/{organizations|teams|projects}/:id/bindings` administran asignaciones. El proyecto puede especializar una asignación opcional de su organización o equipo con el mismo `slot`, un motivo y una fecha de revisión. Las asignaciones obligatorias incompatibles producen un error.
-- `POST /api/v1/projects/:id/knowledge/search` busca en las versiones del perfil vigente. La búsqueda y los candidatos vectoriales del catálogo aplican los permisos en la base de datos.
+- `/api/v1/projects/:id/knowledge/documents` gestiona documentos privados del proyecto. Sus miembros autorizados pueden leerlos. Escribir requiere rol de publicación y acceso al proyecto.
+- `POST /api/v1/projects/:id/knowledge/search` y `/knowledge/vector-search` bajo el mismo proyecto buscan en sus documentos y en las versiones del perfil vigente. Los agentes consultan las versiones fijadas en su bundle, incluidas las guías opcionales del perfil. El conocimiento privado y el de catálogo se exportan en secciones distintas del respaldo.
 - `/api/v1/projects/:id/execution-policy` admite listas de modelos locales y capacidades. Las tareas conservan una copia de la política y del perfil. Los workers necesitan un proyecto explícito en su credencial y acceso a los paquetes de la tarea.
 - Los workers extraen temporalmente los artefactos MCP verificados que requiere la ejecución. Las aprobaciones locales de procesos y variables de entorno siguen aplicándose.
-- Las transferencias de proyectos entre organizaciones requieren que el proyecto esté vacío de memoria, ejecuciones, instalaciones y políticas. Al transferir un proyecto o namespace se retiran sus asignaciones de acceso anteriores.
+- Las transferencias de proyectos entre organizaciones requieren que el proyecto esté vacío de documentos, memoria, ejecuciones, instalaciones y políticas. Al transferir un proyecto o namespace se retiran sus asignaciones de acceso anteriores.
 
 ## Seguridad
 
 - **Firmas.** `MODAI_SIGNATURE_POLICY=signed` exige firma y comprueba integridad, pero acepta cualquier clave, incluida una recién generada: **solo `trusted` garantiza quién publica** (publicadores registrados con `modai admin trust-publisher public.pem`). Una firma válida acredita autoría, no inocuidad.
 - **Contraseñas** con `scrypt` (N=2^15, r=8, p=1), sal por usuario y comparación en tiempo constante; mínimo 10 caracteres. Tras 5 intentos fallidos en 15 minutos el usuario queda bloqueado 15 minutos (por usuario y dirección).
+- **Verificación en dos pasos.** En el menú de cuenta del panel, abre **Verificación en dos pasos**, confirma tu contraseña y vincula una app autenticadora con la clave que se muestra. Guarda los diez códigos de recuperación de un solo uso. Para generar otros o desactivar MFA necesitas la contraseña actual y un código válido. Los cambios cierran las demás sesiones. El acceso con API key funciona de forma independiente.
 - **Sesiones**: token aleatorio de 256 bits del que solo se guarda el hash; caducan tras 12 horas sin actividad y, como máximo, a los 7 días. Cookie `modai_session` `HttpOnly; SameSite=Strict`, `Secure` con HTTPS.
 - **CSRF**: toda escritura con cookie exige `x-modai-csrf: 1`; si llega `Origin`, debe coincidir con el host o con `MODAI_PUBLIC_URL`. CORS está deshabilitado. Con cabecera Bearer se ignora la cookie.
 - **Límites**: entradas de 1 MiB, artefactos de 25 MiB decodificados, backups de 1 GiB. `/health` solo revela la versión de Node con credencial.
 - El servidor no ejecuta código de paquetes ni modelos. Siempre debe quedar al menos un administrador activo.
 
-Para recuperar el acceso del único administrador:
+Para restablecer la contraseña del único administrador, usa el token de instalación. La cuenta conserva su segundo factor. Si se pierde la aplicación autenticadora, usa un código de recuperación para entrar y volver a configurarla.
 
 ```bash
 curl -s -H "Authorization: Bearer $MODAI_API_TOKEN" https://TU_SERVIDOR/api/v1/admin/users
 curl -s -X PATCH -H "Authorization: Bearer $MODAI_API_TOKEN" -H "content-type: application/json" \
   -d '{"password":"nueva contraseña larga"}' https://TU_SERVIDOR/api/v1/admin/users/ID_DEL_USUARIO
 ```
+
+Para mover una instalación que conserva sus usuarios, conserva la clave `MODAI_MFA_KEY` o el archivo `.mfa-key` junto con la base de datos y los artefactos. El respaldo lógico del panel omite credenciales. El respaldo físico de SQLite guarda también la carpeta de artefactos.
 
 ## API
 
@@ -176,7 +183,10 @@ curl -X POST http://localhost:8787/api/v1/resolve \
 | --------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | GET             | `/api/v1/auth/status`          | `setupRequired`, identidad, `permissions` y política de contraseña                                         |
 | POST            | `/api/v1/auth/setup`           | Primer administrador `{ bootstrapToken, username, displayName?, password }`                                |
-| POST            | `/api/v1/auth/login`, `logout` | Iniciar o cerrar sesión                                                                                    |
+| POST            | `/api/v1/auth/login`, `logout` | Iniciar o cerrar sesión. Con MFA, reenvía `{ username, password, code }` tras recibir `401 MFA_REQUIRED`    |
+| GET             | `/api/v1/auth/mfa`             | Estado de MFA y cantidad de códigos de recuperación disponibles                                           |
+| POST            | `/api/v1/auth/mfa/setup`, `confirm` | Iniciar con `{ currentPassword }` y activar con `{ setupToken, code }`                                 |
+| POST            | `/api/v1/auth/mfa/recovery`, `disable` | Renovar códigos o desactivar con `{ currentPassword, code }`                                      |
 | GET             | `/api/v1/auth/me`              | Identidad actual                                                                                           |
 | POST            | `/api/v1/auth/password`        | `{ currentPassword, newPassword }`                                                                         |
 | GET             | `/api/v1/session`              | Identidad, rol, grants y `permissions` de la conexión                                                      |

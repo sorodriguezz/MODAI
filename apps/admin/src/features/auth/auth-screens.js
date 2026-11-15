@@ -3,6 +3,7 @@ import { post } from "../../shared/lib/api.js";
 import { $, html, mount } from "../../shared/lib/html.js";
 import { icon } from "../../shared/lib/icons.js";
 import { bindForm } from "../../shared/ui/form.js";
+import { factorField } from "../../shared/ui/mfa-code.js";
 import { bindStrength, passwordField, strengthMeter } from "../../shared/ui/password.js";
 
 function themeSwitcher() {
@@ -57,13 +58,16 @@ export function renderLogin({ onSuccess, notice }) {
     </div>
     ${notice ? html`<div class="callout tone-info" role="status">${icon("info")}<span>${notice}</span></div>` : ""}
     <form id="loginForm" class="stack" novalidate>
-      <div class="field">
+      <div id="loginCredentials" class="stack"><div class="field">
         <label for="loginUsername">Usuario</label>
         <input id="loginUsername" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required maxlength="64" autofocus>
       </div>
-      ${passwordField({ id: "loginPassword", label: "Contraseña", autocomplete: "current-password" })}
+      ${passwordField({ id: "loginPassword", label: "Contraseña", autocomplete: "current-password" })}</div>
+      ${factorField("loginCode", { hidden: true })}
+      <p id="loginCodeHint" class="hint" hidden>Usa un código de tu app autenticadora o uno de tus códigos de recuperación.</p>
       <div class="form-error" role="alert" hidden></div>
       <button class="btn primary block large" type="submit"><span class="btn-label">Entrar</span></button>
+      <button class="btn ghost block" id="loginBack" type="button" hidden>Volver al usuario y contraseña</button>
     </form>
     <details class="auth-help">
       <summary>¿No puedes entrar?</summary>
@@ -73,19 +77,45 @@ export function renderLogin({ onSuccess, notice }) {
   );
   bindTheme(root);
   const form = root.querySelector("#loginForm");
+  const code = form.loginCode;
+  const back = form.querySelector("#loginBack");
+  const showFactor = (visible) => {
+    form.querySelector("#loginCredentials").hidden = visible;
+    form.querySelector("#loginCodeHint").hidden = !visible;
+    code.parentElement.hidden = !visible;
+    code.disabled = !visible;
+    code.required = visible;
+    back.hidden = !visible;
+    form.querySelector(".btn-label").textContent = visible ? "Verificar y entrar" : "Entrar";
+    code.value = "";
+    requestAnimationFrame(() => (visible ? code : form.loginPassword).focus());
+  };
+  back.addEventListener("click", () => {
+    form.loginPassword.value = "";
+    form.querySelector(".form-error").hidden = true;
+    showFactor(false);
+  });
   bindForm(form, async () => {
     let user;
     try {
       ({ user } = await post("/auth/login", {
         username: form.loginUsername.value.trim(),
         password: form.loginPassword.value,
+        ...(!code.disabled && { code: code.value.trim() }),
       }));
     } catch (error) {
+      if (error.code === "MFA_REQUIRED") return showFactor(true);
+      if (!code.disabled && ["INVALID_MFA", "LOGIN_CHANGED"].includes(error.code)) {
+        code.value = "";
+        requestAnimationFrame(() => code.focus());
+        throw error;
+      }
       form.loginPassword.value = "";
-      requestAnimationFrame(() => form.loginPassword.focus());
+      showFactor(false);
       throw error;
     }
     form.loginPassword.value = "";
+    code.value = "";
     await onSuccess(user);
   });
   requestAnimationFrame(() => form.loginUsername.focus());

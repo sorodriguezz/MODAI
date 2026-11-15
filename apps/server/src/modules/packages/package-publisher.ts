@@ -92,6 +92,7 @@ async function writeRows(
     const content = Buffer.from(byPath.get(rule.path)!.content, "base64").toString("utf8");
     await packages.insertKnowledge({
       id: randomUUID(),
+      project_id: null,
       package_name: identity.name,
       package_version: identity.version,
       title: rule.title,

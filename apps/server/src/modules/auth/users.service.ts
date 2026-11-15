@@ -14,10 +14,12 @@ import {
   type UserUpdate,
 } from "./identity.js";
 import { LoginThrottle } from "./login-throttle.js";
+import type { MfaService } from "./mfa.service.js";
 import { assertPassword, decoyPasswordHash, hashPassword, normalizeUsername, verifyPassword } from "./passwords.js";
 import { SessionsRepository } from "./sessions.repository.js";
 import { assertUserUpdateAllowed, userChanges } from "./user-changes.js";
 import { toUser, UsersRepository } from "./users.repository.js";
+import type { VerifiedUser } from "./verified-user.js";
 
 const SETUP_DONE = "El servidor ya tiene usuarios. Inicia sesión.";
 
@@ -26,7 +28,10 @@ export class UsersService {
   private readonly sessions: SessionsRepository;
   private readonly throttle = new LoginThrottle();
 
-  constructor(private readonly context: DataContext) {
+  constructor(
+    private readonly context: DataContext,
+    private readonly mfa: MfaService,
+  ) {
     this.users = new UsersRepository(context);
     this.sessions = new SessionsRepository(context);
   }
@@ -175,8 +180,9 @@ export class UsersService {
   async verifyLogin(
     usernameInput: unknown,
     password: unknown,
+    code: string | undefined,
     address = "",
-  ): Promise<{ user?: UserRecord; locked: boolean }> {
+  ): Promise<VerifiedUser | { error: "LOGIN_LOCKED" | "INVALID_CREDENTIALS" | "MFA_REQUIRED" | "INVALID_MFA" }> {
     const username = typeof usernameInput === "string" ? usernameInput.trim().toLowerCase().slice(0, 64) : "";
     const pass = typeof password === "string" ? password.slice(0, MAX_PASSWORD_LENGTH) : "";
     const key = `${username}\u0000${address}`;
@@ -184,12 +190,25 @@ export class UsersService {
     const locked = this.throttle.isLocked(key, now);
     const row = username ? await this.users.findByUsername(username) : undefined;
     const valid = await verifyPassword(pass, row?.password_hash ?? (await decoyPasswordHash()));
-    if (locked) return { locked: true };
+    if (locked) return { error: "LOGIN_LOCKED" };
     if (!row || !valid || row.disabled_at || !pass) {
       this.throttle.fail(key, now);
-      return { locked: false };
+      return { error: "INVALID_CREDENTIALS" };
+    }
+    if (row.mfa_secret) {
+      const factorKey = `mfa:${row.id}`;
+      if (this.throttle.isLocked(factorKey, now)) return { error: "LOGIN_LOCKED" };
+      if (!code) return { error: "MFA_REQUIRED" };
+      const proof = this.mfa.verify(row, code);
+      if (!proof) {
+        this.throttle.fail(factorKey, now);
+        return { error: "INVALID_MFA" };
+      }
+      this.throttle.clear(factorKey);
+      this.throttle.clear(key);
+      return { user: row, proof };
     }
     this.throttle.clear(key);
-    return { user: toUser(row), locked: false };
+    return { user: row };
   }
 }

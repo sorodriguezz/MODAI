@@ -1,5 +1,12 @@
 # Cambios
 
+## 0.14.0
+
+- **Conocimiento por proyecto.** El panel, la CLI, MCP y el SDK consultan documentos privados del proyecto y los paquetes de su perfil efectivo. Los agentes encolados conservan las versiones fijadas al preparar la tarea.
+- **Verificación en dos pasos.** Cada usuario puede vincular una aplicación autenticadora (TOTP), guardar códigos de recuperación de un solo uso y administrarlos desde su cuenta en el panel.
+- **Perfiles y equipos en el panel.** Consulta el perfil efectivo de tu cuenta y administra asignaciones de proyecto, organización y equipo según tus permisos.
+- **Cola de workers.** Las solicitudes concurrentes respetan la idempotencia y la cuota del proyecto. El servidor conserva la cola y recupera los trabajos con un lease vencido después de reiniciar.
+
 ## 0.13.0
 
 - **Perfiles efectivos por proyecto.** Las asignaciones de organización, equipo y proyecto fijan versiones y artefactos. Las asignaciones obligatorias en conflicto detienen la resolución. Una excepción sobre una asignación opcional requiere justificación, aprobación y fecha de revisión.

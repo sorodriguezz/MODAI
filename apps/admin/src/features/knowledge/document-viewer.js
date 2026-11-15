@@ -20,11 +20,13 @@ const editActions = (editable) =>
     ? html`<div class="dialog-actions"><button type="button" class="btn ghost danger-text" data-action="delete">${icon("trash")}Eliminar</button><button type="button" class="btn primary" data-action="edit">${icon("edit")}Editar</button></div>`
     : "";
 
-export function documentViewer(documentRecord, onChange) {
-  const editable = !documentRecord.packageVersion && can.writeKnowledge(documentRecord.packageName);
+export function documentViewer(documentRecord, onChange, project) {
+  const editable =
+    !documentRecord.packageVersion && (project ? can.createProject() : can.writeKnowledge(documentRecord.packageName));
+  const path = project ? `/projects/${encodeURIComponent(project.id)}/knowledge/documents` : "/knowledge/documents";
   const body = openDialog({
     title: documentRecord.title,
-    description: origin(documentRecord),
+    description: project ? `Documento del proyecto ${project.name}` : origin(documentRecord),
     size: "lg",
     body: html`
       ${tagList(documentRecord.tags || [])}
@@ -33,13 +35,13 @@ export function documentViewer(documentRecord, onChange) {
       ${editActions(editable)}`,
   });
   delegate(body, {
-    edit: () => documentEditor(documentRecord, onChange),
+    edit: () => documentEditor(documentRecord, onChange, project),
     delete: () =>
       confirmDialog({
         title: "Eliminar documento",
         message: `«${documentRecord.title}» dejará de estar disponible para los agentes.`,
         confirmLabel: "Eliminar",
-        action: () => del(`/knowledge/documents/${encodeURIComponent(documentRecord.id)}`),
+        action: () => del(`${path}/${encodeURIComponent(documentRecord.id)}`),
       }).then(async (ok) => {
         if (!ok) return;
         toast("Documento eliminado");

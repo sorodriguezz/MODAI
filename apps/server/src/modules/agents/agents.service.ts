@@ -113,7 +113,7 @@ export class AgentsService {
       manifestFormat: "published" as const,
       projectId,
       ...(profile?.organizationId ? { organizationId: profile.organizationId } : {}),
-      ...(profile ? { effectiveProfile: profile } : {}),
+      ...(profile ? { effectiveProfile: profile, knowledgeScope: "project" as const } : {}),
       ...(policy ? { executionPolicy: policy } : {}),
       agent: { name: root.name, version: root.version, definition },
       packages: selection.packages,

@@ -12,6 +12,7 @@ function organizationCell(p) {
 function rowActions(p) {
   const id = encodeURIComponent(p.id);
   return html`<td class="actions">
+              <button type="button" class="btn small ghost" data-action="profile" data-id="${p.id}">${icon("layers", 16)}Perfil</button>
               <a class="btn small ghost" href="#/memories?projectId=${id}">${icon("brain", 16)}Memoria</a>
               <a class="btn small ghost" href="#/runs?projectId=${id}">${icon("play", 16)}Ejecuciones</a>
               ${can.manageKeys() ? html`<a class="btn small ghost" href="#/connect?projectId=${id}">${icon("link", 16)}Dar acceso</a>` : ""}

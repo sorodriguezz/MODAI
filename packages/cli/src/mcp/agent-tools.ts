@@ -9,7 +9,15 @@ import { serverClient, serverProject } from "../services/server-project.js";
 import { installationPolicy } from "../services/trust.js";
 import type { GatewayTool } from "./context-tools.js";
 
-const GENERIC_TOOLS = ["modai_remember", "modai_recall", "modai_search_knowledge"];
+const GENERIC_TOOLS = new Set([
+  "modai_remember",
+  "modai_recall",
+  "modai_search_knowledge",
+  "modai_read_knowledge",
+  "modai_search_project_knowledge",
+  "modai_read_project_knowledge",
+  "modai_profile_skill",
+]);
 
 export interface ActiveAgent {
   host?: CapabilityHost;
@@ -31,7 +39,7 @@ export async function startActiveAgent(project: V1Project, tools: GatewayTool[])
   await host.start();
   // why: an active agent exposes only its selected capabilities, so generic memory/search cannot bypass its policy
   for (let index = tools.length - 1; index >= 0; index--)
-    if (GENERIC_TOOLS.includes(tools[index].name)) tools.splice(index, 1);
+    if (GENERIC_TOOLS.has(tools[index].name)) tools.splice(index, 1);
   return { host, instructions, servers };
 }
 

@@ -4,6 +4,19 @@ import type { KnowledgeDocumentsTable } from "../../infrastructure/database/sche
 import { limitRows } from "../../infrastructure/database/sql-helpers.js";
 import { upsert } from "../../infrastructure/database/upsert.js";
 import type { PackageVisibilityFilter } from "../auth/namespace-access.js";
+import { catalogKnowledge, projectKnowledge } from "./knowledge-scope.js";
+
+const DOCUMENT_COLUMNS = [
+  "id",
+  "project_id as projectId",
+  "package_name as packageName",
+  "package_version as packageVersion",
+  "title",
+  "content",
+  "tags_json as tagsJson",
+  "created_at as createdAt",
+  "updated_at as updatedAt",
+] as const;
 
 export class KnowledgeRepository {
   constructor(private readonly context: DataContext) {}
@@ -15,27 +28,20 @@ export class KnowledgeRepository {
   list(limit: number, offset: number, visible?: PackageVisibilityFilter) {
     let query = this.context.db
       .selectFrom("knowledge_documents")
-      .select([
-        "id",
-        "package_name as packageName",
-        "package_version as packageVersion",
-        "title",
-        "content",
-        "tags_json as tagsJson",
-        "created_at as createdAt",
-        "updated_at as updatedAt",
-      ])
+      .select(DOCUMENT_COLUMNS)
       .orderBy("updated_at", "desc")
       .orderBy("id");
-    if (visible) query = query.where(visible(this.context.db, "package_name"));
+    if (visible) query = query.where(visible(this.context.db, "knowledge_documents.package_name"));
     return limitRows(query, this.context.dialect, limit, offset).execute();
   }
 
-  find(id: string) {
+  find(id: string, projectId?: string) {
+    const scope = projectId ? projectKnowledge(projectId) : catalogKnowledge();
     return this.context.db
       .selectFrom("knowledge_documents")
-      .select(["id", "package_name", "package_version", "title", "content", "tags_json"])
+      .select(["id", "project_id", "package_name", "package_version", "title", "content", "tags_json"])
       .where("id", "=", id)
+      .where(scope(this.context.db, "knowledge_documents.package_name"))
       .executeTakeFirst();
   }
 
@@ -51,7 +57,7 @@ export class KnowledgeRepository {
   exportManual() {
     return this.context.db
       .selectFrom("knowledge_documents")
-      .select(["package_name as packageName", "title", "content", "tags_json as tagsJson"])
+      .select(["project_id as projectId", "package_name as packageName", "title", "content", "tags_json as tagsJson"])
       .where("package_version", "is", null)
       .execute();
   }
@@ -76,28 +82,18 @@ export class KnowledgeRepository {
   ) {
     let query = this.context.db
       .selectFrom("knowledge_vectors as v")
-      .innerJoin("knowledge_documents as k", "k.id", "v.document_id")
+      .innerJoin("knowledge_documents", "knowledge_documents.id", "v.document_id")
       .select(["v.document_id as id", "v.embedding_blob as vector"])
       .where("v.model", "=", model)
       .where("v.dimensions", "=", dimensions);
-    if (packageNames?.length) query = query.where("k.package_name", "in", packageNames);
-    if (visible) query = query.where(visible(this.context.db, "k.package_name"));
+    if (packageNames?.length) query = query.where("knowledge_documents.package_name", "in", packageNames);
+    if (visible) query = query.where(visible(this.context.db, "knowledge_documents.package_name"));
     return limitRows(query, this.context.dialect, limit).execute();
   }
 
   document(id: string, visible?: PackageVisibilityFilter) {
-    let query = this.context.db
-      .selectFrom("knowledge_documents")
-      .select([
-        "id",
-        "package_name as packageName",
-        "package_version as packageVersion",
-        "title",
-        "content",
-        "tags_json as tagsJson",
-      ])
-      .where("id", "=", id);
-    if (visible) query = query.where(visible(this.context.db, "package_name"));
+    let query = this.context.db.selectFrom("knowledge_documents").select(DOCUMENT_COLUMNS).where("id", "=", id);
+    if (visible) query = query.where(visible(this.context.db, "knowledge_documents.package_name"));
     return query.executeTakeFirst();
   }
 }

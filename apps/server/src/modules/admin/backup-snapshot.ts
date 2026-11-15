@@ -11,6 +11,7 @@ export interface Snapshot {
   exportedAt: string;
   packages: Array<PublishPackageInput & { artifactId?: string; status?: string; deprecatedMessage?: string }>;
   knowledge: Array<{ title: string; content: string; tags: string[]; packageName?: string }>;
+  projectKnowledge?: Array<{ projectId: string; title: string; content: string; tags: string[] }>;
   memories: Array<{
     projectId: string;
     scope: string;

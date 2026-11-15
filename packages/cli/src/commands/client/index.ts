@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { indexKnowledge, loadLocalModels, semanticSearch } from "../../client/embeddings.js";
 import { projectOrServerApi } from "../../services/connection.js";
+import { profileConnection } from "../../services/profile.js";
 import type { Print } from "../../terminal/output.js";
 import { registerClientBenchmark, registerClientDoctor } from "./diagnostics.js";
 import { registerClientSetup } from "./setup.js";
@@ -15,17 +16,34 @@ function registerClientEmbed(client: Command, print: Print): void {
     .command("index")
     .description("Calcula y sube los vectores de los documentos de conocimiento")
     .option("--package <name>", "Indexar solo los documentos de este paquete")
-    .action(async (o: { package?: string }) =>
+    .option("--project <id>", "Indexar los documentos privados del proyecto")
+    .action(async (options: { package?: string; project?: string }) => {
+      if (options.package && options.project) throw new Error("Elige --package o --project");
+      const api = options.project ? profileConnection(options.project).api : projectOrServerApi();
       print(
-        await indexKnowledge(projectOrServerApi(), loadLocalModels(), (s) => process.stderr.write(`${s}\n`), o.package),
-      ),
-    );
+        await indexKnowledge(
+          api,
+          loadLocalModels(),
+          (line) => process.stderr.write(`${line}\n`),
+          options.package,
+          options.project,
+        ),
+      );
+    });
   embed
     .command("search")
     .description("Búsqueda semántica con el modelo local")
     .argument("<query>")
-    .action(async (query: string) => {
-      const results = await semanticSearch(projectOrServerApi(), loadLocalModels(), query);
+    .option("--project <id>", "Busca en el conocimiento y las versiones del proyecto")
+    .action(async (query: string, options: { project?: string }) => {
+      const project = options.project ? profileConnection(options.project) : undefined;
+      const results = await semanticSearch(
+        project?.api ?? projectOrServerApi(),
+        loadLocalModels(),
+        query,
+        undefined,
+        project,
+      );
       print({
         results,
         ...(!results.length

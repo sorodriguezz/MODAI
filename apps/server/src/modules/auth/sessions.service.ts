@@ -1,9 +1,11 @@
 import { randomBytes } from "node:crypto";
+import { invariant } from "@modai/contracts/errors";
 import { sha256 } from "@modai/contracts/security";
-import type { DataContext } from "../../infrastructure/database/database.js";
+import { type DataContext, withTransaction } from "../../infrastructure/database/database.js";
 import { type Identity, userIdentity } from "./identity.js";
 import { SessionsRepository } from "./sessions.repository.js";
 import { toUser, UsersRepository } from "./users.repository.js";
+import { updateVerifiedUser, type VerifiedUser } from "./verified-user.js";
 
 export interface SessionOptions {
   idleMs?: number;
@@ -21,33 +23,43 @@ export class SessionsService {
   private readonly idleMs: number;
   private readonly absoluteMs: number;
   private readonly sessions: SessionsRepository;
-  private readonly users: UsersRepository;
 
-  constructor(context: DataContext, options: SessionOptions = {}) {
+  constructor(
+    private readonly context: DataContext,
+    options: SessionOptions = {},
+  ) {
     this.idleMs = options.idleMs ?? 12 * 3_600_000;
     this.absoluteMs = options.absoluteMs ?? 7 * 86_400_000;
     this.sessions = new SessionsRepository(context);
-    this.users = new UsersRepository(context);
   }
 
-  async create(userId: string, meta: { userAgent?: string; ip?: string } = {}): Promise<CreatedSession> {
+  async create(
+    userId: string,
+    meta: { userAgent?: string; ip?: string } = {},
+    verified?: VerifiedUser,
+  ): Promise<CreatedSession> {
     const token = randomBytes(32).toString("base64url"),
       now = Date.now();
     const expiresAt = new Date(Math.min(now + this.idleMs, now + this.absoluteMs)).toISOString();
     const absoluteExpiresAt = new Date(now + this.absoluteMs).toISOString(),
       iso = new Date(now).toISOString();
     await this.sessions.deleteExpired(iso);
-    await this.sessions.insert({
-      token_hash: sha256(token),
-      user_id: userId,
-      created_at: iso,
-      last_seen_at: iso,
-      expires_at: expiresAt,
-      absolute_expires_at: absoluteExpiresAt,
-      user_agent: meta.userAgent?.slice(0, 300) ?? null,
-      ip: meta.ip?.slice(0, 100) ?? null,
+    await withTransaction(this.context, async (trx) => {
+      if (verified) {
+        const changed = await updateVerifiedUser(trx, verified, { last_login_at: iso });
+        invariant(changed, 401, "LOGIN_CHANGED", "La cuenta o el código cambiaron. Vuelve a iniciar sesión.");
+      } else await new UsersRepository(trx).setLastLogin(userId, iso);
+      await new SessionsRepository(trx).insert({
+        token_hash: sha256(token),
+        user_id: userId,
+        created_at: iso,
+        last_seen_at: iso,
+        expires_at: expiresAt,
+        absolute_expires_at: absoluteExpiresAt,
+        user_agent: meta.userAgent?.slice(0, 300) ?? null,
+        ip: meta.ip?.slice(0, 100) ?? null,
+      });
     });
-    await this.users.setLastLogin(userId, iso);
     return { token, expiresAt, absoluteExpiresAt, maxAgeSeconds: Math.floor(this.absoluteMs / 1000) };
   }
 
