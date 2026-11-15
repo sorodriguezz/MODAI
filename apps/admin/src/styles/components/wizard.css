@@ -67,9 +67,6 @@
 .wizard section[data-step] {
   min-height: 180px;
 }
-.wizard section[hidden] {
-  display: none;
-}
 .definition-grid.review dd {
   overflow-wrap: anywhere;
 }
